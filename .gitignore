@@ -1,0 +1,34 @@
+__pycache__/
+*.pyc
+data/*.db
+data/*.json
+data/*.log
+data/*.pid
+data/tun-start.sh
+data/proxy-backup.json
+.DS_Store
+dev-logs/
+
+# Local / runtime (ignored — stash will not include these; that is intentional)
+# Use copies outside data/ or backup tools if you need to save config.json.
+
+# Build outputs (see build-macos.sh / dev-macos.sh)
+V2Open.app/
+V2Open-Dev.app/
+*.dSYM/
+
+# Editor-local
+.cursor/
+
+# Legacy stacks (removed — do not re-add)
+.dart_tool/
+.flutter-plugins-dependencies
+.pub/
+desktop/
+web/
+v2open/
+macos/
+native/gui/
+binaries/linux/
+binaries/windows/
+bin/

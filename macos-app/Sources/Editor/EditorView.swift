@@ -1,0 +1,150 @@
+import SwiftUI
+
+struct EditorView: View {
+    @EnvironmentObject var model: Model
+
+    private var proto: String { model.draft["protocol"] as? String ?? "vless" }
+    private var isProxy: Bool { ["vless", "vmess", "trojan"].contains(proto) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            BackTitle(title: model.t("manual"))
+            ZStack(alignment: .bottom) {
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 16) {
+                        EditorSection(title: model.t("protocol")) {
+                            ProtocolChipPicker(value: proto) { model.draft["protocol"] = $0 }
+                        }
+                        EditorSection(title: model.t("server")) {
+                            serverFields
+                        }
+                        if hasCredentials {
+                            EditorSection(title: model.t("identity")) {
+                                credentialFields
+                            }
+                        }
+                        if isProxy {
+                            EditorSection(title: model.t("transport")) {
+                                transportFields
+                            }
+                            EditorSection(title: model.t("security")) {
+                                securityFields
+                            }
+                        }
+                    }
+                    .padding(.horizontal, PageLayout.horizontal)
+                    .padding(.top, 12)
+                    .padding(.bottom, 92 + PageLayout.tabBarClearance)
+                }
+                .scrollIndicators(.hidden)
+
+                VStack(spacing: 0) {
+                    LinearGradient(colors: [C.bgGradientBottom.opacity(0), C.bgGradientBottom], startPoint: .top, endPoint: .bottom)
+                        .frame(height: 18)
+                    SheetActionButton(title: model.t("save"), primary: true, icon: "checkmark") {
+                        _ = model.call("save_profile", ["profile": model.draft])
+                        model.refresh()
+                        model.pop()
+                    }
+                    .padding(.horizontal, PageLayout.horizontal)
+                    .padding(.bottom, 16 + PageLayout.tabBarClearance)
+                    .background(C.bgGradientBottom)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private var serverFields: some View {
+        edit("remark", model.fa ? "نام" : "Name", latin: false, icon: "textformat")
+        if proto == "dnstt" || proto == "masterdns" {
+            edit("domain", "Domain", latin: true, icon: "globe")
+            edit("dns_server", proto == "masterdns" ? "Resolver" : "DNS", latin: true, icon: "server.rack")
+        } else {
+            edit("address", model.fa ? "آدرس" : "Address", latin: true, icon: "network")
+            edit("port", model.fa ? "پورت" : "Port", latin: true, icon: "number")
+        }
+    }
+
+    @ViewBuilder private var credentialFields: some View {
+        if proto == "vless" || proto == "vmess" {
+            edit("uuid", "UUID", latin: true, icon: "key.fill")
+            edit("flow", "Flow", latin: true, icon: "wind")
+        }
+        if ["trojan", "shadowsocks", "hysteria2", "ssh", "socks", "http", "ping"].contains(proto) {
+            edit("password", "Password", latin: true, secure: true, icon: "lock.fill")
+        }
+        if proto == "shadowsocks" {
+            edit("method", "Method", latin: true, icon: "lock.rotation")
+        }
+        if proto == "shadowsocksr" {
+            edit("method", "Method", latin: true, icon: "lock.rotation")
+            edit("password", "Password", latin: true, secure: true, icon: "lock.fill")
+            edit("ssr_protocol", "Protocol", latin: true, icon: "point.3.connected.trianglepath.dotted")
+            edit("obfs", "Obfs", latin: true, icon: "eye.slash")
+        }
+        if proto == "dnstt" {
+            edit("pubkey", "Public key", latin: true, icon: "key.fill")
+        }
+        if proto == "masterdns" {
+            edit("key", "Key", latin: true, icon: "key.fill")
+            edit("encryption_method", "Encryption 0-5", latin: true, icon: "lock.rotation")
+        }
+        if proto == "wireguard" {
+            edit("private_key", "Private key", latin: true, secure: true, icon: "key.fill")
+            edit("peer_public_key", "Public key", latin: true, icon: "key")
+            edit("local_address", "Local address", latin: true, icon: "internaldrive")
+        }
+    }
+
+    @ViewBuilder private var transportFields: some View {
+        SoftSelect(
+            title: model.t("network"),
+            value: model.draft["network"] as? String ?? "tcp",
+            options: ["tcp", "ws", "grpc", "h2", "httpupgrade", "xhttp", "quic"].map { ($0, $0) },
+            wide: true,
+            icon: "antenna.radiowaves.left.and.right"
+        ) { model.draft["network"] = $0 }
+        SoftSelect(
+            title: "TLS",
+            value: model.draft["tls"] as? String ?? "none",
+            options: ["none", "tls", "reality"].map { ($0, $0) },
+            wide: true,
+            icon: "checkmark.shield"
+        ) { model.draft["tls"] = $0 }
+        if (model.draft["network"] as? String) == "xhttp" {
+            SoftSelect(
+                title: "Mode",
+                value: model.draft["mode"] as? String ?? "auto",
+                options: ["auto", "packet-up", "stream-up", "stream-one"].map { ($0, $0) },
+                wide: true
+            ) { model.draft["mode"] = $0 }
+        }
+        edit("host", "Host", latin: true, icon: "globe")
+        edit("path", "Path", latin: true, icon: "slash.forward")
+    }
+
+    @ViewBuilder private var securityFields: some View {
+        edit("sni", "SNI", latin: true, icon: "text.alignleft")
+        edit("fp", "Fingerprint", latin: true, icon: "touchid")
+        edit("pbk", "Reality public key", latin: true, icon: "key")
+        edit("sid", "Short ID", latin: true, icon: "number")
+    }
+
+    private var hasCredentials: Bool {
+        ["vless", "vmess", "trojan", "shadowsocks", "shadowsocksr", "hysteria2", "ssh", "socks", "http", "ping", "dnstt", "masterdns", "wireguard"].contains(proto)
+    }
+
+    func edit(_ key: String, _ title: String, latin: Bool, secure: Bool = false, icon: String? = nil) -> some View {
+        V2Field(
+            label: title,
+            placeholder: title,
+            text: Binding(
+                get: { "\(model.draft[key] ?? "")" },
+                set: { model.draft[key] = key == "port" ? (Int($0) ?? 0) : $0 }
+            ),
+            latin: latin,
+            secure: secure,
+            icon: icon
+        )
+    }
+}

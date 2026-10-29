@@ -16,6 +16,7 @@ How to edit this file: [docs/versioning.md](docs/versioning.md).
 
 ### Changed
 
+- README: UI screenshots, project links (docs, contributing, issues, releases), and donation addresses aligned with [DinonowDev/LazyDisk](https://github.com/DinonowDev/LazyDisk).
 - App icon replaced with a dimensional cyan tunnel mark, plus matching lime and violet alternates, shipped as the bundle `.icns`.
 - `v2core` crate version aligned with the app marketing version (`1.1.0`).
 

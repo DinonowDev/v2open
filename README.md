@@ -14,8 +14,25 @@ V2Open is **not** a VPN service. It does not sell bandwidth and does not operate
 | **Source** | [github.com/DinonowDev/v2open](https://github.com/DinonowDev/v2open) |
 | **License** | MIT ([LICENSE](LICENSE); third-party: [NOTICE](NOTICE)) |
 | **Author** | Amirhossein Rezaei |
+| **Contributing** | [CONTRIBUTING.md](CONTRIBUTING.md) · [CONTRIBUTING.fa.md](CONTRIBUTING.fa.md) |
+| **Documentation** | [docs/README.md](docs/README.md) · [User guide](docs/user-guide.md) |
+| **Changelog** | [CHANGELOG.md](CHANGELOG.md) |
+| **Issues & releases** | [Issues](https://github.com/DinonowDev/v2open/issues) · [Releases](https://github.com/DinonowDev/v2open/releases) |
+| **Security** | [SECURITY.md](SECURITY.md) · [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) |
 
 Persian overview: [README.fa.md](README.fa.md)
+
+---
+
+## Screenshots
+
+| Home | Configs |
+| --- | --- |
+| ![Home — connect, stats, Smart Connect](docs/screenshots/home.png) | ![Configs — groups, subscriptions, ping](docs/screenshots/configs.png) |
+
+| Speed test | Settings |
+| --- | --- |
+| ![Speed test — gauge and HTTP mode](docs/screenshots/speed-test.png) | ![Settings — routing, DNS, tunnel, proxy](docs/screenshots/settings.png) |
 
 ---
 
@@ -127,6 +144,21 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Short ver
 2. Keep the change focused. Update docs, locales, tests, and changelog in the same PR.
 3. If the change is user-facing, bump the version and build according to SemVer.
 4. Open a PR against `main` using the template. Do not merge your own PR without review when another reviewer is available.
+
+Full workflow, branch naming, and review expectations: **[CONTRIBUTING.md](CONTRIBUTING.md)**. Documentation index: **[docs/README.md](docs/README.md)**.
+
+---
+
+## Support the project
+
+V2Open is free and open source. If you find it useful, consider supporting development (same wallets as other [DinonowDev](https://github.com/DinonowDev) projects):
+
+| Network | Address |
+| --- | --- |
+| **TRON (TRC-20)** | `TAcW3UvfPF95Higtyjo133rAAx51Ru8VhB` |
+| **Polygon** | `0xF8Ebe674D471cBc5fF9924bE85829090364F4318` |
+| **Ethereum** | `0xF8Ebe674D471cBc5fF9924bE85829090364F4318` |
+| **Bitcoin** | `0xF8Ebe674D471cBc5fF9924bE85829090364F4318` |
 
 ---
 

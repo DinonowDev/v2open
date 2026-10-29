@@ -3379,8 +3379,7 @@ fn download_parallel(transfer: &ureq::Agent, url: &str, report: bool, n: usize) 
         let url = url.to_string();
         let total = total.clone();
         handles.push(thread::spawn(move || {
-            let (bytes, _) = download_from_url(&agent, &url, false);
-            total.fetch_add(bytes, std::sync::atomic::Ordering::Relaxed);
+            stream_download(&agent, &url, report, Some(total), began);
         }));
     }
     for handle in handles {
@@ -3395,12 +3394,29 @@ fn download_parallel(transfer: &ureq::Agent, url: &str, report: bool, n: usize) 
     (bytes, rate_bps(bytes, began.elapsed().max(Duration::from_millis(1))))
 }
 
-fn download_from_url(transfer: &ureq::Agent, url: &str, report: bool) -> (u64, u64) {
-    let began = Instant::now();
+fn touch_live_progress(report: bool, bytes: u64, elapsed: Duration) {
+    if !report {
+        return;
+    }
+    let live = rate_bps(bytes, elapsed.max(Duration::from_millis(1)));
+    speed_touch(true, |p| {
+        p.bytes = bytes;
+        p.live_bps = live;
+        p.download_bps = live as i64;
+    });
+}
+
+fn stream_download(
+    transfer: &ureq::Agent,
+    url: &str,
+    report: bool,
+    shared_total: Option<std::sync::Arc<std::sync::atomic::AtomicU64>>,
+    began: Instant,
+) -> u64 {
     let limit = Duration::from_secs(SPEED_DOWNLOAD_SECS);
     let mut bytes = 0u64;
     let Ok(response) = transfer.get(url).call() else {
-        return (0, 0);
+        return 0;
     };
     let mut reader = response.into_reader();
     let mut buf = [0u8; 32 * 1024];
@@ -3409,16 +3425,22 @@ fn download_from_url(transfer: &ureq::Agent, url: &str, report: bool) -> (u64, u
             Ok(0) | Err(_) => break,
             Ok(n) => {
                 bytes += n as u64;
-                let elapsed = began.elapsed();
-                let live = rate_bps(bytes, elapsed);
-                speed_touch(report, |p| {
-                    p.bytes = bytes;
-                    p.live_bps = live;
-                    p.download_bps = live as i64;
-                });
+                if let Some(ref shared) = shared_total {
+                    shared.fetch_add(n as u64, std::sync::atomic::Ordering::Relaxed);
+                    let aggregate = shared.load(std::sync::atomic::Ordering::Relaxed);
+                    touch_live_progress(report, aggregate, began.elapsed());
+                } else {
+                    touch_live_progress(report, bytes, began.elapsed());
+                }
             }
         }
     }
+    bytes
+}
+
+fn download_from_url(transfer: &ureq::Agent, url: &str, report: bool) -> (u64, u64) {
+    let began = Instant::now();
+    let bytes = stream_download(transfer, url, report, None, began);
     (bytes, rate_bps(bytes, began.elapsed().max(Duration::from_millis(1))))
 }
 

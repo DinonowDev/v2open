@@ -10,8 +10,25 @@ V2Open سرویس VPN نمی‌فروشد و سرورهای کانفیگ شما 
 | **پلتفرم** | macOS ۱۳ به بالا |
 | **منبع** | [github.com/DinonowDev/v2open](https://github.com/DinonowDev/v2open) |
 | **توسعه‌دهنده** | امیرحسین رضایی |
+| **مشارکت** | [CONTRIBUTING.fa.md](CONTRIBUTING.fa.md) · [CONTRIBUTING.md](CONTRIBUTING.md) |
+| **مستندات** | [docs/README.md](docs/README.md) · [راهنمای کاربر](docs/user-guide.md) |
+| **تاریخچه** | [CHANGELOG.md](CHANGELOG.md) |
+| **باگ و انتشار** | [Issues](https://github.com/DinonowDev/v2open/issues) · [Releases](https://github.com/DinonowDev/v2open/releases) |
+| **امنیت** | [SECURITY.md](SECURITY.md) · [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) |
 
 سند انگلیسی پروژه: [README.md](README.md)
+
+---
+
+## نمونه رابط کاربری
+
+| صفحهٔ اصلی | کانفیگ‌ها |
+| --- | --- |
+| ![صفحهٔ اصلی — اتصال، آمار، Smart Connect](docs/screenshots/home.png) | ![کانفیگ‌ها — گروه‌ها، اشتراک، پینگ](docs/screenshots/configs.png) |
+
+| تست سرعت | تنظیمات |
+| --- | --- |
+| ![تست سرعت — گیج و حالت HTTP](docs/screenshots/speed-test.png) | ![تنظیمات — روتینگ، DNS، تونل، پروکسی](docs/screenshots/settings.png) |
 
 ---
 
@@ -51,7 +68,20 @@ V2Open سرویس VPN نمی‌فروشد و سرورهای کانفیگ شما 
 3. اگر تغییر برای کاربر دیده می‌شود، نسخه را طبق SemVer بالا ببرید.
 4. PR را روی `main` باز کنید و چک‌لیست قالب را پر کنید.
 
-ایندکس کامل اسناد: [docs/README.md](docs/README.md)
+جزئیات کامل: **[CONTRIBUTING.fa.md](CONTRIBUTING.fa.md)**. فهرست اسناد: **[docs/README.md](docs/README.md)** · [user-guide.md](docs/user-guide.md).
+
+---
+
+## حمایت از پروژه
+
+V2Open رایگان و متن‌باز است. اگر برایتان مفید بود، می‌توانید از توسعه حمایت کنید (همان کیف‌پول‌های پروژه‌های [DinonowDev](https://github.com/DinonowDev)، از جمله [LazyDisk](https://github.com/DinonowDev/LazyDisk)):
+
+| شبکه | آدرس |
+| --- | --- |
+| **TRON (TRC-20)** | `TAcW3UvfPF95Higtyjo133rAAx51Ru8VhB` |
+| **Polygon** | `0xF8Ebe674D471cBc5fF9924bE85829090364F4318` |
+| **Ethereum** | `0xF8Ebe674D471cBc5fF9924bE85829090364F4318` |
+| **Bitcoin** | `0xF8Ebe674D471cBc5fF9924bE85829090364F4318` |
 
 ---
 

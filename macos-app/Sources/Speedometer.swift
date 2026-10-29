@@ -6,16 +6,17 @@ struct SpeedTestGoGauge: View {
     @EnvironmentObject var model: Model
     var mbps: Double
     var idle: Bool
+    var showGoButton: Bool
     var phase: SpeedGaugePhase
-    var animateLive: Bool
     var running: Bool
     var tested: Bool
+    var themeLight: Bool
+    var progressTick: Int
     var unit: String
     var caption: String = ""
     var onGo: () -> Void
 
     var body: some View {
-        let _ = (animateLive, tested)
         VStack(spacing: 10) {
             ZStack {
                 SpeedometerChart(
@@ -23,40 +24,64 @@ struct SpeedTestGoGauge: View {
                     idle: idle,
                     running: running,
                     phase: phase,
-                    goTitle: model.t("speedGo"),
+                    themeLight: themeLight,
+                    progressTick: progressTick,
                     unit: unit
                 )
                 .opacity(idle ? 0 : 1)
-                .allowsHitTesting(!idle)
+                .allowsHitTesting(!idle && tested && !running)
 
                 SpeedGoButton(title: model.t("speedGo"), action: onGo)
                     .compositingGroup()
-                    .opacity(idle ? 1 : 0)
-                    .scaleEffect(idle ? 1 : 1.22, anchor: .center)
-                    .allowsHitTesting(idle)
+                    .opacity(showGoButton ? 1 : 0)
+                    .scaleEffect(showGoButton ? 1 : 1.22, anchor: .center)
+                    .allowsHitTesting(showGoButton)
+
+                if tested && !running && !idle {
+                    Button(action: onGo) {
+                        Color.clear
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
             }
             .frame(height: 220)
             .frame(maxWidth: .infinity)
 
-            Mix(
-                text: captionText,
-                size: 13,
-                weight: .semibold,
-                color: running && !idle
-                    ? (phase == .upload ? C.speedUp : C.speedDown)
-                    : C.muted
-            )
-            .opacity(idle || running ? 1 : 0)
+            Group {
+                if tested && !running {
+                    Button(action: onGo) {
+                        Mix(
+                            text: caption,
+                            size: 13,
+                            weight: .semibold,
+                            color: C.cyan
+                        )
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Mix(
+                        text: captionText,
+                        size: 13,
+                        weight: .semibold,
+                        color: running && !idle
+                            ? (phase == .upload ? C.speedUp : C.speedDown)
+                            : C.muted
+                    )
+                }
+            }
+            .opacity(showGoButton || running || tested ? 1 : 0)
             .frame(height: 18)
         }
         .frame(height: 260)
         .frame(maxWidth: .infinity)
         .animation(.timingCurve(0.22, 1.0, 0.36, 1.0, duration: 0.46), value: idle)
+        .animation(.timingCurve(0.22, 1.0, 0.36, 1.0, duration: 0.46), value: showGoButton)
     }
 
     private var captionText: String {
         if !caption.isEmpty { return caption }
-        if idle { return tested ? model.t("speedRetry") : model.t("runSpeed") }
+        if showGoButton { return tested ? model.t("speedRetry") : model.t("runSpeed") }
         return model.t("testing")
     }
 }
@@ -141,7 +166,8 @@ private struct SpeedometerChart: NSViewRepresentable {
     var idle: Bool
     var running: Bool
     var phase: SpeedGaugePhase
-    var goTitle: String
+    var themeLight: Bool
+    var progressTick: Int
     var unit: String
 
     func makeCoordinator() -> Coordinator {
@@ -150,6 +176,7 @@ private struct SpeedometerChart: NSViewRepresentable {
 
     func makeNSView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
+        config.userContentController.add(context.coordinator, name: "gaugeReady")
         let web = WKWebView(frame: .zero, configuration: config)
         web.navigationDelegate = context.coordinator
         web.setValue(false, forKey: "drawsBackground")
@@ -164,33 +191,52 @@ private struct SpeedometerChart: NSViewRepresentable {
     }
 
     func updateNSView(_ web: WKWebView, context: Context) {
+        let _ = progressTick
         context.coordinator.push(
             mbps: mbps,
             idle: idle,
             running: running,
             phase: phase,
-            goTitle: goTitle,
+            themeLight: themeLight,
             unit: unit
         )
     }
 
-    final class Coordinator: NSObject, WKNavigationDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         weak var web: WKWebView?
         private var ready = false
         private var pending: String?
 
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            guard message.name == "gaugeReady" else { return }
+            markReady()
+        }
+
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            markReady()
+        }
+
+        private func markReady() {
+            guard !ready else { return }
             ready = true
-            if let pending {
-                webView.evaluateJavaScript(pending, completionHandler: nil)
+            if let pending, let web {
+                web.evaluateJavaScript(pending, completionHandler: nil)
                 self.pending = nil
             }
         }
 
-        func push(mbps: Double, idle: Bool, running: Bool, phase: SpeedGaugePhase, goTitle: String, unit: String) {
+        func push(
+            mbps: Double,
+            idle: Bool,
+            running: Bool,
+            phase: SpeedGaugePhase,
+            themeLight: Bool,
+            unit: String
+        ) {
             let phaseName: String
             switch phase {
             case .upload: phaseName = "upload"
+            case .finished: phaseName = "finished"
             default: phaseName = "download"
             }
             let json: [String: Any] = [
@@ -198,14 +244,14 @@ private struct SpeedometerChart: NSViewRepresentable {
                 "idle": idle,
                 "running": running,
                 "phase": phaseName,
-                "go": goTitle,
+                "light": themeLight,
                 "unit": unit,
             ]
             guard let data = try? JSONSerialization.data(withJSONObject: json),
                   let body = String(data: data, encoding: .utf8) else { return }
             let js = "window.gaugeSet && window.gaugeSet(\(body))"
-            if ready {
-                web?.evaluateJavaScript(js, completionHandler: nil)
+            if ready, let web {
+                web.evaluateJavaScript(js, completionHandler: nil)
             } else {
                 pending = js
             }

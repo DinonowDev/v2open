@@ -16,6 +16,7 @@ struct SpeedTestView: View {
     @State private var exitCountry = ""
     @State private var countryCode = ""
     @State private var vpnActive = false
+    @State private var progressTick = 0
     @AppStorage("speedUseMegabit") private var useMegabit = true
 
     private var warn: Color { Color(red: 1, green: 0.62, blue: 0.38) }
@@ -61,9 +62,12 @@ struct SpeedTestView: View {
         return .idle
     }
 
+    private var gaugeChartVisible: Bool {
+        running || (tested && gaugeMbps > 0)
+    }
+
     var body: some View {
-        let _ = themeLight
-        let gaugeIdle = !running
+        let gaugeIdle = !gaugeChartVisible
 
         VStack(alignment: .leading, spacing: 0) {
             PageHeader(title: model.t("speed")) {
@@ -111,14 +115,16 @@ struct SpeedTestView: View {
             SpeedTestGoGauge(
                 mbps: gaugeMbps,
                 idle: gaugeIdle,
+                showGoButton: !running && !tested,
                 phase: gaugePhase,
-                animateLive: running,
                 running: running,
                 tested: tested,
+                themeLight: themeLight,
+                progressTick: progressTick,
                 unit: rateUnit,
-                caption: gaugeIdle
-                    ? (tested ? model.t("speedRetry") : model.t("runSpeed"))
-                    : speedRunningLabel,
+                caption: running
+                    ? speedRunningLabel
+                    : (tested ? model.t("speedRetry") : model.t("runSpeed")),
                 onGo: { runSpeedTest() }
             )
             .padding(.top, 4)
@@ -403,7 +409,9 @@ struct SpeedTestView: View {
     func applySpeedProgress(_ data: [String: Any]) {
         let phase = data["phase"] as? String ?? testPhase
         testPhase = phase
-        liveBps = jsonInt(data["live_bps"])
+        let liveRaw = jsonUInt(data["live_bps"])
+        liveBps = liveRaw > UInt64(Int.max) ? Int.max : Int(liveRaw)
+        progressTick &+= 1
         let down = jsonInt(data["download_bps"])
         let up = jsonInt(data["upload_bps"])
         if down > 0 || phase == "upload" || phase == "done" {

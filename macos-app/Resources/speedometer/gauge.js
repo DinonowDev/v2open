@@ -16,7 +16,7 @@
     idle: true,
     running: false,
     phase: "download",
-    go: "GO",
+    light: false,
     unit: "Mbps",
   };
 
@@ -54,7 +54,24 @@
   }
 
   function accent() {
-    return state.phase === "upload" ? "#A78BF0" : "#22D3EE";
+    if (state.phase === "upload") return "#A78BF0";
+    if (state.phase === "finished") return "#34D399";
+    return "#22D3EE";
+  }
+
+  function palette() {
+    if (state.light) {
+      return {
+        tick: "rgba(38, 45, 54, 0.72)",
+        value: "rgba(15, 23, 42, 0.94)",
+        track: "#C8D0DC",
+      };
+    }
+    return {
+      tick: "rgba(232, 238, 247, 0.88)",
+      value: "#FFFFFF",
+      track: "#2A3344",
+    };
   }
 
   function angleOf(t) {
@@ -77,6 +94,7 @@
   }
 
   function labelGraphics() {
+    const colors = palette();
     const { cx, cy, labelR } = gaugeLayout();
     return STOPS.map(([mbps, t], i) => {
       const place = LABEL_INSET + t * (1 - LABEL_INSET * 2);
@@ -90,7 +108,7 @@
         zlevel: 1,
         style: {
           text: formatTick(mbps),
-          fill: "rgba(232,238,247,0.88)",
+          fill: colors.tick,
           font: "600 11px Inter, -apple-system, sans-serif",
           align: "center",
           verticalAlign: "middle",
@@ -102,14 +120,15 @@
 
   function optionForSize() {
     const color = accent();
+    const colors = palette();
     const axis = state.idle ? 0 : mbpsToAxis(state.mbps);
-    const showValue = !state.idle && (state.mbps > 0 || !state.running);
-    const waiting = state.running && state.mbps <= 0;
+    const showTitle = !state.idle;
+    const waiting = state.running && state.mbps <= 0 && state.phase !== "finished";
 
     return {
       animation: true,
-      animationDuration: 200,
-      animationDurationUpdate: 140,
+      animationDuration: 220,
+      animationDurationUpdate: 120,
       animationEasing: "cubicOut",
       animationEasingUpdate: "cubicOut",
       graphic: labelGraphics(),
@@ -123,16 +142,16 @@
           min: 0,
           max: 100,
           splitNumber: 8,
-          silent: false,
+          silent: true,
           axisLine: {
             roundCap: true,
             lineStyle: {
               width: 14,
-              color: [[1, "#2A3344"]],
+              color: [[1, colors.track]],
             },
           },
           progress: {
-            show: !state.idle && axis > 0.15,
+            show: !state.idle && axis > 0.05,
             roundCap: true,
             width: 14,
             itemStyle: { color },
@@ -145,8 +164,8 @@
             offsetCenter: [0, 0],
             itemStyle: {
               color: new echarts.graphic.LinearGradient(0, 1, 0, 0, [
-                { offset: 0, color: "rgba(255,255,255,0.18)" },
-                { offset: 1, color: "rgba(255,255,255,0.95)" },
+                { offset: 0, color: state.light ? "rgba(15,23,42,0.35)" : "rgba(255,255,255,0.18)" },
+                { offset: 1, color: state.light ? "rgba(15,23,42,0.92)" : "rgba(255,255,255,0.95)" },
               ]),
             },
           },
@@ -154,13 +173,13 @@
             show: !state.idle,
             showAbove: true,
             size: 8,
-            itemStyle: { color: "rgba(255,255,255,0.9)" },
+            itemStyle: { color: state.light ? "rgba(15,23,42,0.85)" : "rgba(255,255,255,0.9)" },
           },
           axisTick: { show: false },
           splitLine: { show: false },
           axisLabel: { show: false },
           title: {
-            show: showValue,
+            show: showTitle,
             offsetCenter: [0, "48%"],
             color,
             fontSize: 11,
@@ -169,14 +188,14 @@
           },
           detail: {
             show: !state.idle,
-            valueAnimation: false,
+            valueAnimation: true,
             offsetCenter: [0, "32%"],
             formatter: () => {
               if (waiting) return "···";
               return formatValue(state.mbps);
             },
-            color: "#fff",
-            fontSize: 18,
+            color: colors.value,
+            fontSize: 22,
             fontWeight: 700,
             fontFamily: "Inter, -apple-system, sans-serif",
           },
@@ -190,7 +209,7 @@
   }
 
   function render() {
-    chart.setOption(optionForSize(), { notMerge: true });
+    chart.setOption(optionForSize(), { notMerge: false, lazyUpdate: false });
   }
 
   window.gaugeSet = function gaugeSet(next) {
@@ -204,4 +223,8 @@
   });
 
   render();
+
+  if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.gaugeReady) {
+    window.webkit.messageHandlers.gaugeReady.postMessage("ready");
+  }
 })();

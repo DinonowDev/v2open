@@ -23,7 +23,7 @@ final class HairlineScroller: NSScroller {
             width: width,
             height: max(knob.height - 4, 12)
         )
-        NSColor.white.withAlphaComponent(0.32).setFill()
+        C.scrollerKnob.setFill()
         NSBezierPath(roundedRect: body, xRadius: width / 2, yRadius: width / 2).fill()
     }
 }
@@ -48,7 +48,7 @@ enum HairlineScrollbars {
     private static func configure(_ scroll: NSScrollView) {
         scroll.scrollerStyle = .overlay
         scroll.autohidesScrollers = true
-        scroll.scrollerKnobStyle = .light
+        scroll.scrollerKnobStyle = C.light ? .dark : .light
         scroll.hasHorizontalScroller = false
         scroll.horizontalScroller?.alphaValue = 0
         scroll.horizontalScroller?.isHidden = true
@@ -61,7 +61,7 @@ enum HairlineScrollbars {
             let mini = HairlineScroller()
             mini.controlSize = .mini
             mini.scrollerStyle = .overlay
-            mini.knobStyle = .light
+            mini.knobStyle = C.light ? .dark : .light
             if let current = scroll.verticalScroller {
                 mini.floatValue = current.floatValue
                 mini.knobProportion = current.knobProportion
@@ -70,7 +70,7 @@ enum HairlineScrollbars {
         }
         scroll.hasVerticalScroller = true
         scroll.verticalScroller?.scrollerStyle = .overlay
-        scroll.verticalScroller?.knobStyle = .light
+        scroll.verticalScroller?.knobStyle = C.light ? .dark : .light
         scroll.verticalScroller?.controlSize = .mini
         scroll.verticalScroller?.alphaValue = 1
         reclaimGutter(scroll)
@@ -115,7 +115,7 @@ struct HairlineScrollInstaller: NSViewRepresentable {
 }
 
 struct WindowChrome: NSViewRepresentable {
-    var glassy: Bool
+    var light: Bool
 
     func makeNSView(context: Context) -> NSView { HairlineScrollHost() }
 
@@ -127,14 +127,20 @@ struct WindowChrome: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
+        C.apply(light: light)
+        let appearance = NSAppearance(named: light ? .aqua : .darkAqua)
+        nsView.window?.appearance = appearance
+        nsView.window?.backgroundColor = C.windowBackground
         DispatchQueue.main.async {
+            C.apply(light: light)
             guard let window = nsView.window else { return }
             window.title = "V2Open"
             window.titlebarAppearsTransparent = true
             window.titleVisibility = .hidden
             window.styleMask.insert(.fullSizeContentView)
             window.isOpaque = true
-            window.backgroundColor = NSColor(calibratedRed: 0.059, green: 0.09, blue: 0.165, alpha: 1)
+            window.appearance = appearance
+            window.backgroundColor = C.windowBackground
             window.hasShadow = true
             window.isMovableByWindowBackground = true
             let fixed = NSSize(width: AppFrame.width, height: AppFrame.height)

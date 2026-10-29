@@ -90,7 +90,7 @@ private struct SpeedGoButton: View {
                 Circle()
                     .stroke(
                         LinearGradient(
-                            colors: [Color.white.opacity(0.18), C.line],
+                            colors: [C.hairline, C.line],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ),
@@ -107,10 +107,7 @@ private struct SpeedGoButton: View {
                 Circle()
                     .fill(
                         RadialGradient(
-                            colors: [
-                                Color(red: 0.13, green: 0.18, blue: 0.26),
-                                Color(red: 0.05, green: 0.08, blue: 0.14)
-                            ],
+                            colors: [C.powerOffTop, C.powerOffBottom],
                             center: .center,
                             startRadius: 6,
                             endRadius: 58
@@ -121,14 +118,14 @@ private struct SpeedGoButton: View {
                         Circle()
                             .fill(
                                 LinearGradient(
-                                    colors: [Color.white.opacity(0.14), Color.clear],
+                                    colors: [C.overlay.opacity(0.14), Color.clear],
                                     startPoint: .top,
                                     endPoint: .center
                                 )
                             )
                     )
                     .overlay(
-                        Circle().stroke(Color.white.opacity(0.12), lineWidth: 1)
+                        Circle().stroke(C.overlay.opacity(0.12), lineWidth: 1)
                     )
                 Mix(text: title, size: 26, weight: .bold)
             }

@@ -133,7 +133,7 @@ struct HomeStatsGrid: View {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .fill(
                         LinearGradient(
-                            colors: [Color.white.opacity(C.glassy ? 0.08 : 0.04), Color.clear],
+                            colors: [C.shine, Color.clear],
                             startPoint: .top,
                             endPoint: .bottom
                         )
@@ -154,6 +154,7 @@ struct HomeStatsGrid: View {
 }
 
 struct HomeStatTile: View {
+    @Environment(\.themeLight) private var themeLight
     var icon: String
     var title: String
     var value: String
@@ -167,6 +168,7 @@ struct HomeStatTile: View {
     }
 
     var body: some View {
+        let _ = themeLight
         VStack(spacing: 6) {
             Capsule()
                 .fill(accent)
@@ -175,7 +177,7 @@ struct HomeStatTile: View {
                 Text(metric.number)
                     .font(.custom("Inter", size: 17).weight(.bold))
                     .monospacedDigit()
-                    .foregroundStyle(.white)
+                    .foregroundStyle(C.text)
                     .lineLimit(1)
                     .minimumScaleFactor(0.65)
                 if let unit = metric.unit {
@@ -231,14 +233,16 @@ struct ConnectionStatusPill: View {
 }
 
 struct ConnectionTimer: View {
+    @Environment(\.themeLight) private var themeLight
     var since: Date?
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
+            let _ = themeLight
             let elapsed = since.map { context.date.timeIntervalSince($0) } ?? 0
             Text(formatElapsed(elapsed))
                 .font(.custom("Inter", size: 34).weight(.bold))
                 .monospacedDigit()
-                .foregroundStyle(.white)
+                .foregroundStyle(C.text)
         }
     }
 
@@ -253,6 +257,7 @@ struct ConnectionTimer: View {
 
 struct PowerConnectButton: View {
     @EnvironmentObject var model: Model
+    @Environment(\.themeLight) private var themeLight
     var connected: Bool
     var connecting: Bool
     var compact = false
@@ -293,7 +298,7 @@ struct PowerConnectButton: View {
                             RadialGradient(
                                 colors: connected
                                     ? [C.accent, C.accentDeep]
-                                    : [Color(red: 0.14, green: 0.19, blue: 0.28), Color(red: 0.08, green: 0.11, blue: 0.17)],
+                                    : [C.powerOffTop, C.powerOffBottom],
                                 center: .center,
                                 startRadius: 2,
                                 endRadius: diameter * 0.55
@@ -304,7 +309,7 @@ struct PowerConnectButton: View {
                         .overlay(
                             Circle()
                                 .stroke(
-                                    (connected ? C.lime : Color.white).opacity(dock ? 0.35 : (connected ? 0.25 : 0.08)),
+                                    (connected ? C.lime : C.overlay).opacity(dock ? 0.35 : (connected ? 0.25 : 0.08)),
                                     lineWidth: dock ? 1 : 1
                                 )
                         )
@@ -312,11 +317,11 @@ struct PowerConnectButton: View {
                         ProgressView()
                             .controlSize(dock ? .mini : (compact ? .small : .regular))
                             .scaleEffect(dock ? 0.65 : 1)
-                            .tint(.white)
+                            .tint(connected || !themeLight ? .white : C.text)
                     } else {
                         Image(systemName: "power")
                             .font(.system(size: iconSize, weight: .bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(connected || !themeLight ? .white : C.text)
                     }
                 }
                 .frame(width: dock ? diameter : nil, height: dock ? diameter : nil)
@@ -368,7 +373,7 @@ struct SpeedUnitSwitch: View {
                 text: title,
                 size: 12,
                 weight: .bold,
-                color: on ? Color(red: 0.04, green: 0.08, blue: 0.14) : C.muted
+                color: on ? C.onAccent : C.muted
             )
             .padding(.horizontal, 11)
             .frame(height: 28)

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SpeedTestView: View {
     @EnvironmentObject var model: Model
+    @Environment(\.themeLight) private var themeLight
     @State private var running = false
     @State private var tested = false
     @State private var testPhase = ""
@@ -61,6 +62,7 @@ struct SpeedTestView: View {
     }
 
     var body: some View {
+        let _ = themeLight
         let gaugeIdle = !running
 
         VStack(alignment: .leading, spacing: 0) {
@@ -156,7 +158,7 @@ struct SpeedTestView: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .strokeBorder(
                     LinearGradient(
-                        colors: [Color.white.opacity(0.16), C.line],
+                        colors: [C.hairline, C.line],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     ),
@@ -188,7 +190,7 @@ struct SpeedTestView: View {
                 Text(value)
                     .font(.custom("Inter", size: 17).weight(.bold))
                     .monospacedDigit()
-                    .foregroundStyle(.white)
+                    .foregroundStyle(C.text)
                 if let unit {
                     Text(unit)
                         .font(.custom("Inter", size: 10).weight(.semibold))
@@ -239,7 +241,7 @@ struct SpeedTestView: View {
                 Text(value)
                     .font(.custom("Inter", size: 16).weight(.bold))
                     .monospacedDigit()
-                    .foregroundStyle(dimmed ? C.muted : .white)
+                    .foregroundStyle(dimmed ? C.muted : C.text)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
             }
@@ -262,7 +264,7 @@ struct SpeedTestView: View {
                 .strokeBorder(
                     active
                         ? tint.opacity(0.55)
-                        : Color.white.opacity(0.10),
+                        : C.hairline,
                     lineWidth: active ? 1.5 : 1
                 )
         )
@@ -293,7 +295,7 @@ struct SpeedTestView: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .strokeBorder(
                     LinearGradient(
-                        colors: [Color.white.opacity(0.16), C.line],
+                        colors: [C.hairline, C.line],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     ),
@@ -348,7 +350,7 @@ struct SpeedTestView: View {
             }
             Text(value)
                 .font(.custom("Inter", size: 12).weight(.semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(C.text)
                 .lineLimit(2)
                 .minimumScaleFactor(0.75)
         }
@@ -369,7 +371,7 @@ struct SpeedTestView: View {
             RoundedRectangle(cornerRadius: radius, style: .continuous)
                 .fill(
                     LinearGradient(
-                        colors: [Color.white.opacity(C.glassy ? 0.08 : 0.05), Color.clear],
+                        colors: [C.shine, Color.clear],
                         startPoint: .top,
                         endPoint: .bottom
                     )

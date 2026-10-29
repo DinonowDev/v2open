@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject var model: Model
+    @State private var muxConcurrency = ""
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -39,11 +40,11 @@ struct SettingsView: View {
                         ) { model.set("loglevel", $0) }
                         SettingsDivider()
                         SettingsSelectRow(
-                            title: model.t("appearance"),
+                            title: model.t("theme"),
                             icon: "circle.lefthalf.filled",
-                            value: model.settings["appearance"] as? String ?? "legacy",
-                            options: [("legacy", model.t("legacy")), ("glassy", model.t("glassy"))]
-                        ) { model.set("appearance", $0) }
+                            value: model.themeLight ? "light" : "dark",
+                            options: [("dark", model.t("themeDark")), ("light", model.t("themeLight"))]
+                        ) { model.set("theme", $0) }
                     }
                     SettingsCard {
                         SettingsToggleRow(title: model.t("insecure"), isOn: model.settings["allow_insecure"] as? Bool ?? false) { model.set("allow_insecure", $0) }
@@ -53,6 +54,21 @@ struct SettingsView: View {
                         SettingsToggleRow(title: model.t("sleep"), hint: model.t("sleepSub"), isOn: model.settings["stop_on_sleep"] as? Bool ?? true) { model.set("stop_on_sleep", $0) }
                         SettingsDivider()
                         SettingsToggleRow(title: "Mux", isOn: model.settings["mux_enabled"] as? Bool ?? false) { model.set("mux_enabled", $0) }
+                        if model.settings["mux_enabled"] as? Bool == true {
+                            SettingsDivider()
+                            V2Field(label: model.t("muxConcurrency"), placeholder: "8", text: $muxConcurrency, latin: true, icon: "number")
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 8)
+                            SheetActionButton(title: model.t("save"), primary: true, icon: "checkmark") {
+                                if let v = Int(muxConcurrency) { model.set("mux_concurrency", v) }
+                                model.showToast(model.t("saved"), tone: .success)
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.bottom, 10)
+                        }
+                    }
+                    .onAppear {
+                        muxConcurrency = String(model.settings["mux_concurrency"] as? Int ?? Int(model.settings["mux_concurrency"] as? Double ?? 8))
                     }
                 }
 
@@ -79,6 +95,8 @@ struct SettingsView: View {
                         SettingsDivider(inset: 58)
                         SettingsNavRow(icon: "server.rack", title: model.t("dns"), action: { model.push("dns") })
                         SettingsDivider(inset: 58)
+                        SettingsNavRow(icon: "antenna.radiowaves.left.and.right", title: model.t("inbounds"), action: { model.push("network_settings") })
+                        SettingsDivider(inset: 58)
                         SettingsNavRow(icon: "square.stack.3d.up.fill", title: model.t("apps"), value: appsModeLabel, action: { model.push("apps") })
                         SettingsDivider(inset: 58)
                         SettingsToggleRow(title: model.t("proxy"), isOn: model.settings["apply_system_proxy"] as? Bool ?? true) { model.set("apply_system_proxy", $0) }
@@ -86,13 +104,16 @@ struct SettingsView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
+                    SettingsSectionLabel(text: model.t("subscriptionSection"))
+                    SettingsCard {
+                        SettingsNavRow(icon: "link", title: model.t("subscriptionSection"), action: { model.push("subscription_settings") })
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
                     SettingsSectionLabel(text: model.t("dataSection"))
                     SettingsCard {
-                    SettingsNavRow(icon: "square.and.arrow.up", title: model.t("backup"), chevron: false) {
-                        _ = model.call("backup")
-                        model.refresh()
-                        model.showToast(model.t("saved"), tone: .success)
-                    }
+                    SettingsNavRow(icon: "clock.arrow.circlepath", title: model.t("backup"), action: { model.push("backup_settings") })
                     SettingsDivider(inset: 58)
                     SettingsNavRow(icon: "arrow.counterclockwise", title: model.t("reset"), tint: Color(red: 1, green: 0.72, blue: 0.38), chevron: false) {
                         _ = model.call("reset")

@@ -21,8 +21,13 @@ struct V2OpenApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(model)
-                .background(WindowChrome(glassy: (model.settings["appearance"] as? String) == "glassy"))
+                .background(WindowChrome(light: model.themeLight))
                 .onAppear { model.boot() }
+                .onReceive(NotificationCenter.default.publisher(for: NSWorkspace.willSleepNotification)) { _ in
+                    if model.settings["stop_on_sleep"] as? Bool ?? true {
+                        model.disconnectTunnel()
+                    }
+                }
         }
         .defaultSize(width: AppFrame.width, height: AppFrame.height)
         .windowResizability(.contentSize)

@@ -5,6 +5,9 @@ struct RoutingView: View {
     @EnvironmentObject var model: Model
     @State private var editing = false
     @State private var showPresets = false
+    @State private var fragmentPackets = ""
+    @State private var fragmentLength = ""
+    @State private var fragmentInterval = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -16,6 +19,10 @@ struct RoutingView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             SettingsSectionLabel(text: model.t("routes"))
                             SettingsCard {
+                                SettingsToggleRow(title: model.t("enable"), isOn: model.settings["routing_enabled"] as? Bool ?? true) {
+                                    model.set("routing_enabled", $0)
+                                }
+                                SettingsDivider()
                                 infoSelect(model.t("strategy"), model.t("strategyInfo"), model.settings["domain_strategy"] as? String ?? "AsIs", [("AsIs", "AsIs"), ("IPIfNonMatch", "IPIfNonMatch"), ("IPOnDemand", "IPOnDemand")]) {
                                     model.set("domain_strategy", $0)
                                 }
@@ -23,9 +30,19 @@ struct RoutingView: View {
                                 infoToggle(model.t("routeOnly"), model.t("routeOnlyInfo"), model.settings["route_only"] as? Bool ?? true) { model.set("route_only", $0) }
                                 divider
                                 infoToggle(model.t("apple"), model.t("appleInfo"), model.settings["apple_direct"] as? Bool ?? false) { model.set("apple_direct", $0) }
+                                divider
+                                infoToggle(model.t("sniffing"), model.t("sniffingInfo"), model.settings["sniffing"] as? Bool ?? true) { model.set("sniffing", $0) }
+                                divider
+                                infoToggle(model.t("blockUdp443"), model.t("blockUdp443Info"), model.settings["block_udp_443"] as? Bool ?? true) { model.set("block_udp_443", $0) }
+                                divider
+                                infoToggle(model.t("bypassLan"), model.t("bypassLanInfo"), model.settings["bypass_lan"] as? Bool ?? true) { model.set("bypass_lan", $0) }
                             }
                             SettingsCard {
                                 infoToggle(model.t("fragment"), model.t("fragmentInfo"), model.settings["fragment_enabled"] as? Bool ?? false) { model.set("fragment_enabled", $0) }
+                                if model.settings["fragment_enabled"] as? Bool == true {
+                                    divider
+                                    fragmentFields
+                                }
                             }
                         }
                         HStack {
@@ -45,9 +62,35 @@ struct RoutingView: View {
                     .padding(.horizontal, PageLayout.horizontal)
                     .padding(.bottom, PageLayout.bottom + PageLayout.tabBarClearance)
                 }
+                .scrollIndicators(.hidden)
                 if showPresets { presetOverlay }
             }
         }
+        .onAppear { loadFragment() }
+    }
+
+    var fragmentFields: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            V2Field(label: model.t("fragmentPackets"), placeholder: "tlshello", text: $fragmentPackets, latin: true, icon: "square.split.2x1")
+            V2Field(label: model.t("fragmentLength"), placeholder: "100-200", text: $fragmentLength, latin: true, icon: "ruler")
+            V2Field(label: model.t("fragmentInterval"), placeholder: "10-20", text: $fragmentInterval, latin: true, icon: "timer")
+            SheetActionButton(title: model.t("save"), primary: true, icon: "checkmark") { saveFragment() }
+        }
+        .padding(.horizontal, 14)
+        .padding(.bottom, 12)
+    }
+
+    func loadFragment() {
+        fragmentPackets = model.settings["fragment_packets"] as? String ?? "tlshello"
+        fragmentLength = model.settings["fragment_length"] as? String ?? "100-200"
+        fragmentInterval = model.settings["fragment_interval"] as? String ?? "10-20"
+    }
+
+    func saveFragment() {
+        model.set("fragment_packets", fragmentPackets)
+        model.set("fragment_length", fragmentLength)
+        model.set("fragment_interval", fragmentInterval)
+        model.showToast(model.t("saved"), tone: .success)
     }
 
     var routeIds: [String] {

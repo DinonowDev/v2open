@@ -3,6 +3,7 @@ import SwiftUI
 
 struct V2Field: View {
     @EnvironmentObject var model: Model
+    @Environment(\.themeLight) private var themeLight
     var label: String? = nil
     var placeholder: String = ""
     @Binding var text: String
@@ -33,6 +34,7 @@ struct V2Field: View {
     }
 
     var body: some View {
+        let _ = themeLight
         VStack(alignment: .leading, spacing: 7) {
             if let label, !label.isEmpty {
                 Mix(text: label, size: 12, weight: .semibold, color: invalid ? Color(red: 1, green: 0.45, blue: 0.52) : (focused ? C.cyan : C.muted))
@@ -57,7 +59,7 @@ struct V2Field: View {
                 }
                 .textFieldStyle(.plain)
                 .font(font)
-                .foregroundStyle(.white)
+                .foregroundStyle(C.text)
                 .focused($focused)
                 if secure {
                     fieldTool(revealed ? "eye.slash" : "eye") { revealed.toggle() }
@@ -103,22 +105,17 @@ struct V2Field: View {
     }
 
     @ViewBuilder private var fieldBackground: some View {
-        if C.glassy {
-            ZStack {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(focused ? C.fieldFillFocus : C.fieldFill)
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white.opacity(focused ? 0.10 : 0.05), Color.clear],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-            }
-        } else {
+        ZStack {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(focused ? C.fieldFillFocus : C.fieldFill)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [C.overlay.opacity(focused ? 0.08 : 0.04), Color.clear],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
         }
     }
 }

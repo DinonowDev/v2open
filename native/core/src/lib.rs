@@ -1,10 +1,11 @@
-#![recursion_limit = "256"]
+#![recursion_limit = "512"]
 
 #[cfg(not(target_os = "macos"))]
 compile_error!("v2core is macOS-only");
 
 mod app;
 mod builder;
+mod dns_items;
 mod parser;
 mod platform;
 mod routing;

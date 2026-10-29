@@ -51,7 +51,7 @@ struct ConfigActionBar: View {
                 Image(systemName: "arrow.up.arrow.down")
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(C.muted)
-                Mix(text: sortTitle, size: 12, weight: .semibold, color: .white)
+                Mix(text: sortTitle, size: 12, weight: .semibold)
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
                 Image(systemName: "chevron.down")
@@ -91,7 +91,7 @@ struct ConfigChip: View {
     var action: () -> Void
     var body: some View {
         Button(action: action) {
-            Mix(text: title, size: 13, weight: .semibold, color: accent ? C.cyan : .white)
+            Mix(text: title, size: 13, weight: .semibold, color: accent ? C.cyan : C.text)
                 .lineLimit(1)
                 .padding(.horizontal, 12)
                 .frame(height: 36)
@@ -128,7 +128,7 @@ struct ConfigRowIconLabel: View {
             .font(.system(size: 13, weight: .semibold))
             .foregroundStyle(active ? C.cyan : C.muted)
             .frame(width: 28, height: 28)
-            .background(Color.white.opacity(active ? 0.08 : 0.04))
+            .background(C.overlay.opacity(active ? 0.08 : 0.04))
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(C.line.opacity(0.9), lineWidth: 1))
     }
@@ -175,7 +175,7 @@ struct ConfigMiniButton: View {
             Mix(text: title, size: 11, weight: .semibold, color: danger ? Color(red: 1, green: 0.36, blue: 0.45) : C.muted)
                 .padding(.horizontal, 8)
                 .frame(height: 28)
-                .background(Color.white.opacity(0.05))
+                .background(C.overlay.opacity(0.05))
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(C.line, lineWidth: 1))
         }

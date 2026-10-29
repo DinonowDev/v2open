@@ -11,7 +11,7 @@ struct InfoTip: View {
         }
         .buttonStyle(.plain)
         .popover(isPresented: $open) {
-            Mix(text: text, size: 13, color: .white)
+            Mix(text: text, size: 13)
                 .padding(12)
                 .frame(width: 250, alignment: .leading)
         }

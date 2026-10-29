@@ -22,12 +22,12 @@ impl Running {
     }
 }
 
-pub fn adapt_all(profiles: &[Value], singbox: &Path, work: &Path) -> Result<(Vec<Value>, Running), String> {
+pub fn adapt_all(profiles: &[Value], singbox: &Path, work: &Path, settings: &Value) -> Result<(Vec<Value>, Running), String> {
     let _ = fs::create_dir_all(work);
     let mut out = Vec::new();
     let mut running = Running::new();
     for (index, profile) in profiles.iter().enumerate() {
-        match adapt_one(profile, singbox, &work.join(format!("b{index}"))) {
+        match adapt_one(profile, singbox, &work.join(format!("b{index}")), settings) {
             Ok((node, part)) => {
                 out.push(node);
                 running.children.extend(part.children);
@@ -58,7 +58,7 @@ pub fn stop(running: &mut Running) {
     running.stops.clear();
 }
 
-fn adapt_one(profile: &Value, singbox: &Path, work: &Path) -> Result<(Value, Running), String> {
+fn adapt_one(profile: &Value, singbox: &Path, work: &Path, settings: &Value) -> Result<(Value, Running), String> {
     let protocol = text(profile, "protocol");
     match protocol.as_str() {
         "shadowsocksr" => {
@@ -67,14 +67,14 @@ fn adapt_one(profile: &Value, singbox: &Path, work: &Path) -> Result<(Value, Run
             running.stops.push(stop_flag);
             Ok((socks(profile, port), running))
         }
-        "masterdns" => masterdns(profile, singbox, work),
+        "masterdns" => masterdns(profile, singbox, work, settings),
         "dnstt" => dnstt(profile, singbox, work),
         "ping" => ping(profile, singbox, work),
         _ => Ok((profile.clone(), Running::new())),
     }
 }
 
-fn masterdns(profile: &Value, singbox: &Path, work: &Path) -> Result<(Value, Running), String> {
+fn masterdns(profile: &Value, singbox: &Path, work: &Path, settings: &Value) -> Result<(Value, Running), String> {
     let bin = tool(singbox, "masterdns")?;
     let _ = fs::create_dir_all(work);
     let port = free_port()?;
@@ -99,19 +99,28 @@ fn masterdns(profile: &Value, singbox: &Path, work: &Path) -> Result<(Value, Run
     fs::write(&resolvers, resolver_body).map_err(|e| e.to_string())?;
     let log = File::create(work.join("masterdns.log")).map_err(|e| e.to_string())?;
     let err = log.try_clone().map_err(|e| e.to_string())?;
-    let mut child = Command::new(bin)
-        .arg("-config").arg(&cfg)
+    let mut cmd = Command::new(bin);
+    cmd.arg("-config").arg(&cfg)
         .arg("-resolvers").arg(&resolvers)
         .arg("-listen-ip").arg("127.0.0.1")
         .arg("-listen-port").arg(port.to_string())
         .arg("-d").arg(&domain)
         .arg("-k").arg(&key)
         .arg("-data-encryption-method").arg(&method)
-        .arg("-protocol-type").arg("SOCKS5")
-        .stdout(Stdio::from(log))
-        .stderr(Stdio::from(err))
-        .spawn()
-        .map_err(|e| e.to_string())?;
+        .arg("-protocol-type").arg("SOCKS5");
+    if settings["mtu_optimize"].as_bool().unwrap_or(false) {
+        cmd.arg("-max-upload-mtu").arg(settings["max_upload_mtu"].as_u64().unwrap_or(150).to_string())
+            .arg("-min-upload-mtu").arg(settings["min_upload_mtu"].as_u64().unwrap_or(38).to_string())
+            .arg("-max-download-mtu").arg(settings["max_download_mtu"].as_u64().unwrap_or(500).to_string())
+            .arg("-min-download-mtu").arg(settings["min_download_mtu"].as_u64().unwrap_or(100).to_string())
+            .arg("-mtu-test-parallelism").arg(settings["mtu_test_parallelism"].as_u64().unwrap_or(16).to_string())
+            .arg("-mtu-test-retries").arg(settings["mtu_test_retries"].as_u64().unwrap_or(2).to_string())
+            .arg("-mtu-test-timeout").arg(settings["mtu_test_timeout"].as_u64().unwrap_or(2).to_string());
+        if settings["mtu_save_log"].as_bool().unwrap_or(false) {
+            cmd.arg("-save-mtu-servers-to-file");
+        }
+    }
+    let mut child = cmd.stdout(Stdio::from(log)).stderr(Stdio::from(err)).spawn().map_err(|e| e.to_string())?;
     wait_port(port, &mut child)?;
     let mut running = Running::new();
     running.children.push(child);

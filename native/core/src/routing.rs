@@ -131,6 +131,30 @@ fn asset(name: &str, url: &str, kind: &str) -> Value {
     json!({"name": name, "url": url, "kind": kind, "builtin": true})
 }
 
+pub fn geosite_download_url(source: &str) -> String {
+    let s = source.trim();
+    if s.starts_with("http://") || s.starts_with("https://") {
+        return s.to_string();
+    }
+    let repo = s.trim_start_matches("https://github.com/").trim_matches('/');
+    if repo.is_empty() {
+        return "https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat".into();
+    }
+    format!("https://github.com/{repo}/releases/latest/download/dlc.dat")
+}
+
+pub fn geoip_download_url(source: &str) -> String {
+    let s = source.trim();
+    if s.starts_with("http://") || s.starts_with("https://") {
+        return s.to_string();
+    }
+    let repo = s.trim_start_matches("https://github.com/").trim_matches('/');
+    if repo.is_empty() {
+        return "https://github.com/v2fly/geoip/releases/latest/download/geoip.dat".into();
+    }
+    format!("https://github.com/{repo}/releases/latest/download/geoip.dat")
+}
+
 fn to_v2box(rule: &Value) -> Value {
     let mut item = json!({
         "remarks": rule["remark"].as_str().unwrap_or(""),

@@ -443,6 +443,8 @@ fn strategy(settings: &Value) -> &'static str {
 }
 
 fn dns(settings: &Value, rules_dir: &Path) -> Value {
+    let mut settings = settings.clone();
+    crate::dns_items::sync_legacy_dns(&mut settings);
     let domestic = dns_server(settings["domestic_dns"].as_str().unwrap_or("223.5.5.5"), "dns-direct", None);
     let mut remote = dns_server(settings["remote_dns"].as_str().unwrap_or("https://1.1.1.1/dns-query"), "dns-remote", Some("proxy"));
     remote["domain_resolver"] = json!("dns-direct");
@@ -471,7 +473,7 @@ fn dns(settings: &Value, rules_dir: &Path) -> Value {
     if rules_dir.join("geosite-private.srs").exists() {
         rules.push(json!({"rule_set":"geosite-private","action":"route","server":"dns-direct"}));
     }
-    let names = process_names(settings);
+    let names = process_names(&settings);
     let mut dns_final = if settings["final"].as_str() == Some("direct") { "dns-direct" } else { "dns-remote" };
     match settings["per_app_mode"].as_str().unwrap_or("off") {
         "exclude" if !names.is_empty() => {
@@ -484,6 +486,33 @@ fn dns(settings: &Value, rules_dir: &Path) -> Value {
         _ => {}
     }
     let mut servers = vec![domestic, remote];
+    let remote_id = settings["remote_dns_id"].as_str().unwrap_or("");
+    let domestic_id = settings["domestic_dns_id"].as_str().unwrap_or("");
+    if let Some(items) = settings["dns_items"].as_array() {
+        for item in items {
+            if !item["enabled"].as_bool().unwrap_or(true) {
+                continue;
+            }
+            let id = item["id"].as_str().unwrap_or("");
+            if id.is_empty() || id == remote_id || id == domestic_id {
+                continue;
+            }
+            let uri = crate::dns_items::item_to_uri(item);
+            if uri.is_empty() {
+                continue;
+            }
+            let tag = format!("dns-{id}");
+            let detour = match item["role"].as_str().unwrap_or("remote") {
+                "domestic" => None,
+                _ => Some("proxy"),
+            };
+            let mut extra = dns_server(&uri, &tag, detour);
+            if detour.is_some() {
+                extra["domain_resolver"] = json!("dns-direct");
+            }
+            servers.push(extra);
+        }
+    }
     if settings["fake_dns"].as_bool().unwrap_or(false) {
         servers.insert(0, json!({"type":"fakeip","tag":"fakeip","inet4_range":"198.18.0.0/15","inet6_range":"fc00::/18"}));
         rules.push(json!({"query_type":["A","AAAA"],"action":"route","server":"fakeip"}));
@@ -492,7 +521,7 @@ fn dns(settings: &Value, rules_dir: &Path) -> Value {
         "servers": servers,
         "rules": rules,
         "final": dns_final,
-        "strategy": strategy(settings),
+        "strategy": strategy(&settings),
         "disable_cache": settings["dns_cache"].as_bool() == Some(false)
     })
 }

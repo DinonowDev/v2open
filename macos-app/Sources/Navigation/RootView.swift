@@ -4,9 +4,9 @@ import Combine
 
 struct RootView: View {
     @EnvironmentObject var model: Model
-    var body: some View { themed((model.settings["appearance"] as? String) == "glassy") }
-    @ViewBuilder func themed(_ glassy: Bool) -> some View {
-        let _ = (C.glassy = glassy)
+    var body: some View { themed(model.themeLight) }
+    @ViewBuilder func themed(_ light: Bool) -> some View {
+        let _ = C.apply(light: light)
         VStack(spacing: 0) {
             HStack(spacing: 0) {
                 Color.clear.frame(width: 78)
@@ -24,6 +24,11 @@ struct RootView: View {
                 case "geo_assets": GeoAssetsView()
                 case "route_editor": RouteEditorView()
                 case "dns": DNSView()
+                case "dns_items": DnsItemsView()
+                case "xray_advanced": XrayAdvancedView()
+                case "network_settings": NetworkSettingsView()
+                case "subscription_settings": SubscriptionSettingsView()
+                case "backup_settings": BackupSettingsView()
                 case "logs": LogsView()
                 case "about": AboutView()
                 case "editor": EditorView()
@@ -47,6 +52,8 @@ struct RootView: View {
         .scrollIndicators(.hidden)
         .clipped()
         .environment(\.layoutDirection, model.fa ? .rightToLeft : .leftToRight)
+        .environment(\.themeLight, light)
+        .preferredColorScheme(light ? .light : .dark)
         .overlay(alignment: .bottom) {
             TabStrip()
         }

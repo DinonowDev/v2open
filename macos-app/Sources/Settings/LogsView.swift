@@ -2,11 +2,25 @@ import SwiftUI
 
 struct LogsView: View {
     @EnvironmentObject var model: Model
+    @Environment(\.themeLight) private var themeLight
     @State private var text = ""
     var body: some View {
+        let _ = themeLight
         sub(model.t("logs")) {
             ScrollView(.vertical, showsIndicators: false) {
-                SettingsCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Spacer()
+                        SettingsChipButton(title: model.t("clearLogs")) {
+                            _ = model.call("clear_logs")
+                            text = ""
+                            model.showToast(model.t("saved"), tone: .success)
+                        }
+                        SettingsChipButton(title: model.t("update")) {
+                            text = (model.call("logs")["data"] as? [String: Any])?["text"] as? String ?? ""
+                        }
+                    }
+                    SettingsCard {
                     if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         VStack(spacing: 10) {
                             ZStack {
@@ -24,10 +38,11 @@ struct LogsView: View {
                     } else {
                         Text(text)
                             .font(.custom("Inter", size: 12))
-                            .foregroundStyle(.white.opacity(0.82))
+                            .foregroundStyle(C.text.opacity(0.82))
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(14)
                             .textSelection(.enabled)
+                    }
                     }
                 }
                 .padding(.horizontal, PageLayout.horizontal)

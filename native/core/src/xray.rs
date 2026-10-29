@@ -26,16 +26,23 @@ fn core(settings: &Value, routes: &[Value], proxy: Value) -> Value {
     } else {
         vec![proxy, direct, block]
     };
+    let mut routing = json!({
+        "domainStrategy": settings["domain_strategy"].as_str().unwrap_or("AsIs"),
+        "rules": rules(settings, routes)
+    });
+    if let Some(balancers) = balancers(settings) {
+        routing["balancers"] = balancers;
+    }
     let mut doc = json!({
         "log": {"loglevel": settings["loglevel"].as_str().unwrap_or("warning")},
         "dns": dns(settings),
         "inbounds": [],
         "outbounds": outbounds,
-        "routing": {
-            "domainStrategy": settings["domain_strategy"].as_str().unwrap_or("AsIs"),
-            "rules": rules(settings, routes)
-        }
+        "routing": routing
     });
+    if let Some(policy) = policy(settings) {
+        doc["policy"] = policy;
+    }
     if settings["fake_dns"].as_bool().unwrap_or(false) {
         doc["fakedns"] = json!([{"ipPool":"198.18.0.0/15","poolSize":65535}]);
     }
@@ -51,6 +58,8 @@ fn sniffing(settings: &Value) -> Value {
 }
 
 fn dns(settings: &Value) -> Value {
+    let mut settings = settings.clone();
+    crate::dns_items::sync_legacy_dns(&mut settings);
     let remote = settings["remote_dns"].as_str().unwrap_or("https://1.1.1.1/dns-query");
     let domestic = settings["domestic_dns"].as_str().unwrap_or("223.5.5.5");
     let mut servers = Vec::new();
@@ -87,6 +96,66 @@ fn dns(settings: &Value) -> Value {
     dns
 }
 
+fn policy(settings: &Value) -> Option<Value> {
+    let level = settings["xray_policy_level"].as_u64().unwrap_or(0);
+    let uplink = settings["xray_policy_uplink_only"].as_u64().unwrap_or(0);
+    let downlink = settings["xray_policy_downlink_only"].as_u64().unwrap_or(0);
+    let stats_up = settings["xray_policy_stats_user_uplink"].as_bool().unwrap_or(false);
+    let stats_down = settings["xray_policy_stats_user_downlink"].as_bool().unwrap_or(false);
+    if level == 0 && uplink == 0 && downlink == 0 && !stats_up && !stats_down {
+        return None;
+    }
+    let mut level_obj = json!({});
+    if uplink > 0 {
+        level_obj["uplinkOnly"] = json!(uplink);
+    }
+    if downlink > 0 {
+        level_obj["downlinkOnly"] = json!(downlink);
+    }
+    if stats_up {
+        level_obj["statsUserUplink"] = json!(true);
+    }
+    if stats_down {
+        level_obj["statsUserDownlink"] = json!(true);
+    }
+    Some(json!({
+        "levels": {
+            level.to_string(): level_obj
+        },
+        "system": {
+            "statsInboundUplink": stats_up,
+            "statsInboundDownlink": stats_down,
+            "statsOutboundUplink": stats_up,
+            "statsOutboundDownlink": stats_down
+        }
+    }))
+}
+
+fn balancers(settings: &Value) -> Option<Value> {
+    if !settings["xray_balancer_enabled"].as_bool().unwrap_or(false) {
+        return None;
+    }
+    let tag = settings["xray_balancer_tag"].as_str().unwrap_or("balancer");
+    let strategy = settings["xray_balancer_strategy"].as_str().unwrap_or("random");
+    let selector: Vec<Value> = settings["xray_balancer_selector"]
+        .as_array()
+        .map(|a| a.iter().filter_map(|v| v.as_str().map(|s| json!(s))).collect())
+        .unwrap_or_else(|| vec![json!("proxy")]);
+    if selector.is_empty() {
+        return None;
+    }
+    let strategy_obj = match strategy {
+        "leastPing" => json!({"type": "leastPing"}),
+        "roundRobin" => json!({"type": "roundRobin"}),
+        _ => json!({"type": "random"}),
+    };
+    Some(json!([{
+        "tag": tag,
+        "selector": selector,
+        "strategy": strategy_obj
+    }]))
+}
+
 fn rules(settings: &Value, routes: &[Value]) -> Vec<Value> {
     let mut rules = Vec::new();
     if settings["block_udp_443"].as_bool().unwrap_or(false) && !routes.iter().any(|rule| {
@@ -106,6 +175,10 @@ fn rules(settings: &Value, routes: &[Value]) -> Vec<Value> {
         for rule in routes {
             push_rule(&mut rules, rule);
         }
+    }
+    if settings["xray_balancer_enabled"].as_bool().unwrap_or(false) {
+        let tag = settings["xray_balancer_tag"].as_str().unwrap_or("balancer");
+        rules.push(json!({"type":"field","network":"tcp,udp","balancerTag": tag}));
     }
     rules
 }

@@ -24,19 +24,45 @@ enum PageLayout {
     static let tabBarClearance: CGFloat = 86
 }
 
+private struct ThemeLightKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var themeLight: Bool {
+        get { self[ThemeLightKey.self] }
+        set { self[ThemeLightKey.self] = newValue }
+    }
+}
+
 enum C {
-    static var glassy = false
+    static var light = false
+    static var scheme: ColorScheme { light ? .light : .dark }
 
-    private static let navyDeep = Color(red: 0.043, green: 0.071, blue: 0.125)
-    private static let navyMid = Color(red: 0.059, green: 0.090, blue: 0.165)
-    private static let navyLift = Color(red: 0.118, green: 0.161, blue: 0.231)
+    static func apply(light: Bool) {
+        Self.light = light
+    }
 
-    static var bg: Color { glassy ? navyDeep : navyMid }
-    static var bgGradientTop: Color { glassy ? Color(red: 0.02, green: 0.05, blue: 0.12) : navyMid }
-    static var bgGradientBottom: Color { glassy ? Color(red: 0.06, green: 0.14, blue: 0.24) : navyLift }
-    static var card: Color { glassy ? Color.white.opacity(0.08) : Color(red: 0.09, green: 0.13, blue: 0.20) }
-    static var cardElevated: Color { glassy ? Color.white.opacity(0.11) : Color(red: 0.11, green: 0.16, blue: 0.24) }
-    static var line: Color { glassy ? Color.white.opacity(0.14) : Color.white.opacity(0.10) }
+    private static func ns(_ r: CGFloat, _ g: CGFloat, _ b: CGFloat, _ a: CGFloat = 1) -> NSColor {
+        NSColor(calibratedRed: r, green: g, blue: b, alpha: a)
+    }
+
+    private static func adaptive(light: NSColor, dark: NSColor) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.aqua, .darkAqua]) == .aqua ? light : dark
+        })
+    }
+
+    static let bg = adaptive(light: ns(0.945, 0.957, 0.973), dark: ns(0.059, 0.090, 0.165))
+    static let bgGradientTop = adaptive(light: ns(0.973, 0.980, 0.992), dark: ns(0.059, 0.090, 0.165))
+    static let bgGradientBottom = adaptive(light: ns(0.890, 0.918, 0.949), dark: ns(0.118, 0.161, 0.231))
+    static let card = adaptive(light: .white, dark: ns(0.09, 0.13, 0.20))
+    static let cardElevated = adaptive(light: .white, dark: ns(0.11, 0.16, 0.24))
+    static let text = adaptive(light: ns(0.090, 0.130, 0.200), dark: .white)
+    static let overlay = adaptive(light: .black, dark: .white)
+    static let line = adaptive(light: ns(0, 0, 0, 0.08), dark: ns(1, 1, 1, 0.10))
+    static let shine = adaptive(light: ns(0, 0, 0, 0.04), dark: ns(1, 1, 1, 0.06))
+    static let hairline = adaptive(light: ns(0, 0, 0, 0.10), dark: ns(1, 1, 1, 0.16))
 
     static let cyan = Color(red: 0.243, green: 0.878, blue: 0.961)
     static let accent = Color(red: 0.133, green: 0.827, blue: 0.933)
@@ -46,20 +72,33 @@ enum C {
     static let speedUp = Color(red: 0.655, green: 0.545, blue: 0.980)
     static let speedUpDeep = Color(red: 0.486, green: 0.337, blue: 0.925)
     static let green = Color(red: 0.204, green: 0.780, blue: 0.349)
-    /// Legacy alias — use `accent` for primary highlights.
     static let lime = accent
     static let limeDeep = accentDeep
-    static var muted: Color { glassy ? Color(red: 0.72, green: 0.80, blue: 0.88) : Color(red: 0.58, green: 0.64, blue: 0.72) }
+    static let muted = adaptive(light: ns(0.38, 0.45, 0.54), dark: ns(0.58, 0.64, 0.72))
     static let ping = Color(red: 0.169, green: 0.831, blue: 0.478)
     static let pingWarn = Color(red: 0.98, green: 0.75, blue: 0.22)
     static let pingBad = Color(red: 1, green: 0.36, blue: 0.45)
     static let pingDead = Color(red: 0.95, green: 0.40, blue: 0.58)
-    static var track: Color { glassy ? Color.white.opacity(0.22) : Color(red: 0.902, green: 0.902, blue: 0.918) }
-    static var fieldFill: Color { glassy ? Color.white.opacity(0.07) : Color(red: 0.13, green: 0.13, blue: 0.15) }
-    static var fieldFillFocus: Color { glassy ? Color.white.opacity(0.11) : Color(red: 0.16, green: 0.16, blue: 0.19) }
-    static var fieldStroke: Color { glassy ? Color.white.opacity(0.14) : Color(red: 0.26, green: 0.26, blue: 0.28) }
+    static let track = adaptive(light: ns(0.82, 0.85, 0.90), dark: ns(0.902, 0.902, 0.918))
+    static let fieldFill = adaptive(light: ns(0.93, 0.945, 0.965), dark: ns(0.13, 0.13, 0.15))
+    static let fieldFillFocus = adaptive(light: .white, dark: ns(0.16, 0.16, 0.19))
+    static let fieldStroke = adaptive(light: ns(0, 0, 0, 0.10), dark: ns(0.26, 0.26, 0.28, 1))
     static var fieldStrokeFocus: Color { cyan.opacity(0.75) }
-    static var fieldGlow: Color { cyan.opacity(glassy ? 0.22 : 0.14) }
+    static var fieldGlow: Color { cyan.opacity(light ? 0.16 : 0.14) }
+    static let switchOff = adaptive(light: ns(0.78, 0.81, 0.86), dark: ns(0.22, 0.22, 0.24))
+    static let powerOffTop = adaptive(light: ns(0.82, 0.86, 0.92), dark: ns(0.14, 0.19, 0.28))
+    static let powerOffBottom = adaptive(light: ns(0.68, 0.74, 0.82), dark: ns(0.08, 0.11, 0.17))
+    static var onAccent: Color { Color(red: 0.04, green: 0.08, blue: 0.14) }
+
+    static var windowBackground: NSColor {
+        light
+            ? NSColor(calibratedRed: 0.945, green: 0.957, blue: 0.973, alpha: 1)
+            : NSColor(calibratedRed: 0.059, green: 0.090, blue: 0.165, alpha: 1)
+    }
+
+    static var scrollerKnob: NSColor {
+        (light ? NSColor.black : NSColor.white).withAlphaComponent(light ? 0.28 : 0.32)
+    }
 }
 
 enum PingMark {
@@ -81,7 +120,7 @@ enum PingMark {
     }
 }
 
-func mixed(_ string: String, size: CGFloat, weight: Font.Weight = .regular, color: Color = .white) -> Text {
+func mixed(_ string: String, size: CGFloat, weight: Font.Weight = .regular) -> Text {
     let pattern = try! NSRegularExpression(pattern: "[\\u0600-\\u06FF\\u0750-\\u077F]+|[^\\u0600-\\u06FF\\u0750-\\u077F]+")
     let ns = string as NSString
     var result = AttributedString()
@@ -94,16 +133,22 @@ func mixed(_ string: String, size: CGFloat, weight: Font.Weight = .regular, colo
     for (text, persian) in parts {
         var segment = AttributedString(text)
         segment.font = Font.custom(persian ? "Vazir" : "Inter", size: size).weight(weight)
-        segment.foregroundColor = color
         result.append(segment)
     }
     return Text(result)
 }
 
 struct Mix: View {
+    @Environment(\.themeLight) private var themeLight
     var text: String
     var size: CGFloat = 16
     var weight: Font.Weight = .regular
-    var color: Color = .white
-    var body: some View { mixed(text, size: size, weight: weight, color: color) }
+    var color: Color? = nil
+
+    var body: some View {
+        mixed(text, size: size, weight: weight)
+            .foregroundStyle(color ?? C.text)
+            .transaction { $0.animation = nil }
+            .id(themeLight)
+    }
 }

@@ -1,5 +1,5 @@
 use crate::builder::{build_config, build_pipe, exclude_tunnel_addresses, preset};
-use crate::routing::{builtin_geo_assets, export_routes, matcher_text, normalize_rule, parse_routes};
+use crate::routing::{builtin_geo_assets, export_routes, geoip_download_url, geosite_download_url, matcher_text, normalize_rule, parse_routes};
 use crate::parser::{build_link, parse_text, parse_userinfo};
 use serde_json::{json, Value};
 use std::fs::{self, File};
@@ -193,6 +193,9 @@ fn defaults() -> Value {
         "route_only": true,
         "apple_direct": false,
         "routing_enabled": true,
+        "sniffing": true,
+        "geo_files_source": "v2fly/domain-list-community",
+        "geoip_source": "v2fly/geoip",
         "geo_assets": [],
         "remote_dns": "https://1.1.1.1/dns-query",
         "domestic_dns": "223.5.5.5",
@@ -212,13 +215,38 @@ fn defaults() -> Value {
         "on_demand": false,
         "on_demand_text": "",
         "net_combiner": false,
-        "appearance": "legacy",
+        "theme": "dark",
         "icloud": false,
         "selected_id": "",
         "user_agent": "Mozilla/5.0",
         "send_hwid": false,
         "hwid": id(),
         "auto_update": false,
+        "geo_auto_interval_hours": 24,
+        "geo_last_auto_update": 0,
+        "remote_dns_id": "",
+        "domestic_dns_id": "",
+        "dns_items": [],
+        "mtu_optimize": false,
+        "mtu_optimize_on_connect": false,
+        "mtu_save_log": false,
+        "min_upload_mtu": 38,
+        "max_upload_mtu": 150,
+        "min_download_mtu": 100,
+        "max_download_mtu": 500,
+        "mtu_test_parallelism": 16,
+        "mtu_test_retries": 2,
+        "mtu_test_timeout": 2,
+        "mtu_last_result": 0,
+        "xray_balancer_enabled": false,
+        "xray_balancer_tag": "balancer",
+        "xray_balancer_strategy": "random",
+        "xray_balancer_selector": ["proxy"],
+        "xray_policy_level": 0,
+        "xray_policy_uplink_only": 0,
+        "xray_policy_downlink_only": 0,
+        "xray_policy_stats_user_uplink": false,
+        "xray_policy_stats_user_downlink": false,
         "show_announcements": true,
         "speed_endpoint": "https://www.gstatic.com/generate_204",
         "speed_timeout": 8,
@@ -253,6 +281,7 @@ impl Core {
             bypass: Vec::new(),
         };
         core.load();
+        crate::dns_items::ensure_dns_items(&mut core.settings);
         core.ensure_unique_profile_ids();
         core.forget_session_pings();
         if core.singbox.exists() {
@@ -276,6 +305,7 @@ impl Core {
             }));
             self.save();
         }
+        crate::dns_items::ensure_dns_items(&mut self.settings);
     }
 
     fn merge_icloud(&mut self) {
@@ -544,6 +574,64 @@ impl Core {
                 self.delete_geo_asset(args["name"].as_str().unwrap_or(""))?;
                 Ok(self.state())
             }
+            "update_all_geo_assets" => {
+                self.update_all_geo_assets()?;
+                Ok(self.state())
+            }
+            "import_geo_asset_file" => {
+                self.import_geo_asset_file(
+                    args["path"].as_str().unwrap_or(""),
+                    args["name"].as_str().unwrap_or(""),
+                )?;
+                Ok(self.state())
+            }
+            "import_hosts" => {
+                self.import_hosts(args["text"].as_str().unwrap_or(""))?;
+                Ok(self.state())
+            }
+            "save_dns_item" => {
+                crate::dns_items::save_dns_item(&mut self.settings, args)?;
+                self.save();
+                Ok(self.state())
+            }
+            "delete_dns_item" => {
+                crate::dns_items::delete_dns_item(&mut self.settings, args["id"].as_str().unwrap_or(""))?;
+                self.save();
+                Ok(self.state())
+            }
+            "set_active_dns" => {
+                crate::dns_items::set_active_dns(
+                    &mut self.settings,
+                    args["role"].as_str().unwrap_or("remote"),
+                    args["id"].as_str().unwrap_or(""),
+                )?;
+                self.save();
+                Ok(self.state())
+            }
+            "optimize_mtu" => {
+                let result = self.optimize_mtu()?;
+                self.save();
+                Ok(json!({"result": result, "state": self.state()}))
+            }
+            "save_xray_advanced" => {
+                for key in [
+                    "xray_balancer_enabled",
+                    "xray_balancer_tag",
+                    "xray_balancer_strategy",
+                    "xray_balancer_selector",
+                    "xray_policy_level",
+                    "xray_policy_uplink_only",
+                    "xray_policy_downlink_only",
+                    "xray_policy_stats_user_uplink",
+                    "xray_policy_stats_user_downlink",
+                ] {
+                    if let Some(value) = args.get(key) {
+                        self.settings[key] = value.clone();
+                    }
+                }
+                self.save();
+                Ok(self.state())
+            }
             "save_profile" => {
                 self.save_profile(&args["profile"])?;
                 Ok(self.state())
@@ -607,6 +695,12 @@ impl Core {
                     self.runtime.profile_name = profile["remark"].as_str().unwrap_or("").to_string();
                 }
                 self.watch_traffic();
+                if self.settings["mtu_optimize_on_connect"].as_bool().unwrap_or(false)
+                    && self.settings["mode"].as_str().unwrap_or("tun") == "tun"
+                {
+                    let _ = self.optimize_mtu();
+                    self.save();
+                }
                 Ok(self.state())
             }
             "processes" => Ok(json!({"names": process_names()})),
@@ -844,6 +938,22 @@ impl Core {
             }
         }
         items
+            .into_iter()
+            .map(|mut item| {
+                let name = item["name"].as_str().unwrap_or("").to_string();
+                let fallback = item["url"].as_str().unwrap_or("").to_string();
+                item["url"] = json!(self.geo_asset_url(&name, &fallback));
+                item
+            })
+            .collect()
+    }
+
+    fn geo_asset_url(&self, name: &str, fallback: &str) -> String {
+        match name {
+            "geosite.dat" => geosite_download_url(self.settings["geo_files_source"].as_str().unwrap_or("v2fly/domain-list-community")),
+            "geoip.dat" => geoip_download_url(self.settings["geoip_source"].as_str().unwrap_or("v2fly/geoip")),
+            _ => fallback.to_string(),
+        }
     }
 
     fn list_geo_assets(&self) -> Vec<Value> {
@@ -858,6 +968,7 @@ impl Core {
                 item["size"] = json!(meta.as_ref().map(|m| m.len()).unwrap_or(0));
                 item["updated_at"] = json!(meta.and_then(|m| m.modified().ok()).and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0));
                 item["path"] = json!(path.to_string_lossy());
+                item["primary"] = json!(matches!(name.as_str(), "geoip.dat" | "geosite.dat" | "iran.dat"));
                 item
             })
             .collect()
@@ -879,7 +990,7 @@ impl Core {
         self.download_geo(name, url)
     }
 
-    fn update_geo_asset(&mut self, name: &str) -> Result<(), String> {
+    fn update_geo_asset(&self, name: &str) -> Result<(), String> {
         let item = self
             .catalog_geo()
             .into_iter()
@@ -890,6 +1001,66 @@ impl Core {
             return Err("this asset has no download url".into());
         }
         self.download_geo(name, &url)
+    }
+
+    fn update_all_geo_assets(&self) -> Result<(), String> {
+        let names: Vec<String> = self
+            .catalog_geo()
+            .into_iter()
+            .filter_map(|a| a["name"].as_str().map(|s| s.to_string()))
+            .collect();
+        let mut last_err = None;
+        for name in names {
+            if let Err(err) = self.update_geo_asset(&name) {
+                last_err = Some(err);
+            }
+        }
+        if let Some(err) = last_err {
+            return Err(err);
+        }
+        Ok(())
+    }
+
+    fn import_geo_asset_file(&self, path: &str, name: &str) -> Result<(), String> {
+        let src = Path::new(path);
+        if !src.is_file() {
+            return Err("geo file not found".into());
+        }
+        let file_name = if name.trim().is_empty() {
+            src.file_name().and_then(|s| s.to_str()).unwrap_or("").to_string()
+        } else {
+            Path::new(name).file_name().and_then(|s| s.to_str()).unwrap_or(name).to_string()
+        };
+        if !(file_name.ends_with(".dat") || file_name.ends_with(".srs")) {
+            return Err("file name must end with .dat or .srs".into());
+        }
+        let kind = if file_name.ends_with(".srs") { "srs" } else { "dat" };
+        let dest = self.geo_path(&file_name, kind);
+        if let Some(parent) = dest.parent() {
+            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        fs::copy(src, &dest).map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    fn import_hosts(&mut self, text: &str) -> Result<(), String> {
+        let mut hosts = serde_json::Map::new();
+        for line in text.lines() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            let mut parts = line.split_whitespace();
+            let Some(domain) = parts.next() else { continue };
+            let ip = parts.collect::<Vec<_>>().join(" ");
+            if ip.is_empty() {
+                continue;
+            }
+            hosts.insert(domain.to_string(), json!(ip));
+        }
+        self.settings["hosts"] = json!(hosts);
+        self.save();
+        Ok(())
     }
 
     fn delete_geo_asset(&mut self, name: &str) -> Result<(), String> {
@@ -1087,7 +1258,7 @@ impl Core {
         let dir = self.path.parent().unwrap_or(Path::new(".")).to_path_buf();
         let _ = fs::create_dir_all(&dir);
         let (extras, routed, stops) = self.front_xray(&mut profiles, &dir)?;
-        let (profiles, mut running) = crate::sidecar::adapt_all(&profiles, &self.singbox, &dir.join("bridges"))?;
+        let (profiles, mut running) = crate::sidecar::adapt_all(&profiles, &self.singbox, &dir.join("bridges"), &self.settings)?;
         running.children.extend(extras);
         running.stops.extend(stops);
         self.bridges = running;
@@ -1746,7 +1917,50 @@ impl Core {
             let smart = self.runtime.smart;
             let _ = self.connect(&id, smart);
         }
+        if self.settings["auto_update"].as_bool().unwrap_or(false) {
+            let hours = self.settings["geo_auto_interval_hours"].as_u64().unwrap_or(24).max(1);
+            let interval = hours * 3600;
+            let last = self.settings["geo_last_auto_update"].as_u64().unwrap_or(0);
+            if now().saturating_sub(last) >= interval {
+                if self.update_all_geo_assets().is_ok() {
+                    self.settings["geo_last_auto_update"] = json!(now());
+                    self.save();
+                }
+            }
+        }
         Ok(())
+    }
+
+    fn optimize_mtu(&mut self) -> Result<Value, String> {
+        let floor = self.settings["min_upload_mtu"].as_u64().unwrap_or(576).max(576) as usize;
+        let ceiling = self
+            .settings["max_download_mtu"]
+            .as_u64()
+            .unwrap_or(1500)
+            .clamp(900, 9000) as usize;
+        let url = self.settings["speed_endpoint"].as_str().unwrap_or("https://www.gstatic.com/generate_204");
+        let timeout = Duration::from_secs(self.settings["speed_timeout"].as_u64().unwrap_or(8));
+        let http_port = self.settings["http_port"].as_u64().unwrap_or(10807);
+        let use_proxy = self.runtime.connected;
+        let mut lo = floor;
+        let mut hi = ceiling;
+        let mut best = floor;
+        while lo <= hi {
+            let mid = lo + (hi - lo) / 2;
+            if mtu_probe_post(url, mid, timeout, use_proxy, http_port) {
+                best = mid;
+                lo = mid + 1;
+            } else {
+                if mid == 0 {
+                    break;
+                }
+                hi = mid - 1;
+            }
+        }
+        let mtu = (best + 120).min(1500).max(576) as u64;
+        self.settings["mtu"] = json!(mtu);
+        self.settings["mtu_last_result"] = json!(mtu);
+        Ok(json!({"mtu": mtu, "payload": best}))
     }
 
     pub fn speed_plan(&self) -> SpeedPlan {
@@ -2455,6 +2669,21 @@ fn install_rules(dir: &Path) {
 
 pub fn support_dir() -> PathBuf {
     PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| ".".into())).join("Library/Application Support/V2Open")
+}
+
+fn mtu_probe_post(url: &str, payload_bytes: usize, timeout: Duration, via_proxy: bool, http_port: u64) -> bool {
+    let body = vec![b'x'; payload_bytes];
+    let mut agent = ureq::AgentBuilder::new().timeout(timeout);
+    if via_proxy {
+        if let Ok(proxy) = ureq::Proxy::new(&format!("http://127.0.0.1:{http_port}")) {
+            agent = agent.proxy(proxy);
+        }
+    }
+    let agent = agent.build();
+    match agent.post(url).send_bytes(&body) {
+        Ok(resp) => resp.status() >= 200 && resp.status() < 500,
+        Err(_) => false,
+    }
 }
 
 pub fn locate_core() -> Option<PathBuf> {

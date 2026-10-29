@@ -58,6 +58,8 @@ struct ToolsView: View {
                             SettingsToggleRow(title: model.t("icloud"), isOn: model.settings["icloud"] as? Bool ?? false) { model.set("icloud", $0) }
                         }
                         SettingsCard {
+                            SettingsNavRow(icon: "slider.horizontal.3", title: model.t("xrayAdvanced"), action: { model.push("xray_advanced") })
+                            SettingsDivider(inset: 58)
                             VStack(alignment: .leading, spacing: 12) {
                                 Mix(
                                     text: model.fa ? "هر خط: wifi,نام,connect یا cellular,*,disconnect" : "Each line: wifi,Name,connect or cellular,*,disconnect",

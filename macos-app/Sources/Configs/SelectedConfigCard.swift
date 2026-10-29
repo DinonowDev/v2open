@@ -83,9 +83,9 @@ struct SelectedConfigCard: View {
         .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
+                .strokeBorder(C.hairline, lineWidth: 1)
         )
-        .shadow(color: .black.opacity(0.22), radius: 14, y: 5)
+        .shadow(color: .black.opacity(C.light ? 0.08 : 0.22), radius: 14, y: 5)
         .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
             guard connected else { return }
             let response = model.call("tick")

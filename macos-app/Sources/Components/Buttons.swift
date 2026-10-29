@@ -9,6 +9,7 @@ struct QuietPressStyle: ButtonStyle {
 }
 
 struct SheetActionButton: View {
+    @Environment(\.themeLight) private var themeLight
     var title: String
     var compact = false
     var primary = false
@@ -21,6 +22,7 @@ struct SheetActionButton: View {
     private var radius: CGFloat { compact ? 14 : 16 }
 
     var body: some View {
+        let _ = themeLight
         Button(action: action) {
             HStack(spacing: 8) {
                 if let icon {
@@ -52,10 +54,10 @@ struct SheetActionButton: View {
     }
 
     private var labelColor: Color {
-        if primary { return Color(red: 0.04, green: 0.08, blue: 0.14) }
+        if primary { return C.onAccent }
         if danger { return Color(red: 1, green: 0.36, blue: 0.45) }
         if quiet { return C.muted }
-        return .white
+        return C.text
     }
 
     @ViewBuilder private var fill: some View {
@@ -78,6 +80,7 @@ struct SheetActionButton: View {
 }
 
 struct AppToastView: View {
+    @Environment(\.themeLight) private var themeLight
     var item: AppToastItem
 
     private var accent: Color {
@@ -99,23 +102,24 @@ struct AppToastView: View {
     }
 
     var body: some View {
+        let _ = themeLight
         HStack(spacing: 10) {
             Image(systemName: icon)
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(accent)
-            Mix(text: item.text, size: 14, weight: .semibold, color: .white)
+            Mix(text: item.text, size: 14, weight: .semibold)
                 .lineLimit(3)
                 .multilineTextAlignment(.leading)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(red: 0.07, green: 0.09, blue: 0.15).opacity(0.96))
+        .background(C.cardElevated.opacity(0.96))
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(accent.opacity(0.55), lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .shadow(color: .black.opacity(0.4), radius: 14, y: 5)
+        .shadow(color: .black.opacity(C.light ? 0.12 : 0.4), radius: 14, y: 5)
     }
 }

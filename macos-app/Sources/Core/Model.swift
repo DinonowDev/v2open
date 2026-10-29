@@ -15,10 +15,12 @@ final class Model: ObservableObject {
     private static let autoPingInterval: TimeInterval = 60
 
     var fa: Bool { (settings["language"] as? String) != "en" }
+    var themeLight: Bool { (settings["theme"] as? String) == "light" }
     var settings: [String: Any] { state["settings"] as? [String: Any] ?? [:] }
     var groups: [[String: Any]] { state["groups"] as? [[String: Any]] ?? [] }
     var routes: [[String: Any]] { state["routes"] as? [[String: Any]] ?? [] }
     var geoAssets: [[String: Any]] { state["geo_assets"] as? [[String: Any]] ?? [] }
+    var backups: [[String: Any]] { state["backups"] as? [[String: Any]] ?? [] }
     var runtime: [String: Any] { state["runtime"] as? [String: Any] ?? [:] }
 
     func t(_ key: String) -> String {

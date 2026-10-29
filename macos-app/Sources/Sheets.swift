@@ -6,7 +6,7 @@ struct SheetBackdrop<Content: View>: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.55)
+            Color.black.opacity(C.light ? 0.28 : 0.55)
                 .ignoresSafeArea()
                 .onTapGesture(perform: onDismiss)
             VStack {
@@ -26,7 +26,7 @@ struct SheetCard<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Capsule()
-                .fill(Color.white.opacity(0.22))
+                .fill(C.overlay.opacity(0.22))
                 .frame(width: 36, height: 4)
                 .frame(maxWidth: .infinity)
                 .padding(.top, 10)
@@ -38,16 +38,11 @@ struct SheetCard<Content: View>: View {
         .background {
             ZStack {
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(C.glassy ? Color(red: 0.06, green: 0.09, blue: 0.15).opacity(0.94) : Color(red: 0.08, green: 0.12, blue: 0.19))
-                if C.glassy {
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .fill(.ultraThinMaterial)
-                        .opacity(0.45)
-                }
+                    .fill(C.cardElevated)
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
                     .fill(
                         LinearGradient(
-                            colors: [Color.white.opacity(0.08), Color.clear],
+                            colors: [C.shine, Color.clear],
                             startPoint: .top,
                             endPoint: .center
                         )
@@ -58,14 +53,14 @@ struct SheetCard<Content: View>: View {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .strokeBorder(
                     LinearGradient(
-                        colors: [Color.white.opacity(0.24), C.line],
+                        colors: [C.hairline, C.line],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     ),
                     lineWidth: 1
                 )
         )
-        .shadow(color: .black.opacity(0.42), radius: 24, y: 10)
+        .shadow(color: .black.opacity(C.light ? 0.12 : 0.42), radius: 24, y: 10)
         .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 }
@@ -104,7 +99,7 @@ struct SheetHeader: View {
                         .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(C.muted)
                         .frame(width: 32, height: 32)
-                        .background(Color.white.opacity(0.06))
+                        .background(C.overlay.opacity(0.06))
                         .clipShape(Circle())
                 }
                 .buttonStyle(QuietPressStyle())
@@ -257,7 +252,7 @@ struct ProtocolChipPicker: View {
                 } label: {
                     Text(item.label)
                         .font(.custom("Inter", size: 12).weight(.bold))
-                        .foregroundStyle(on ? Color(red: 0.04, green: 0.08, blue: 0.14) : .white)
+                        .foregroundStyle(on ? C.onAccent : C.text)
                         .frame(maxWidth: .infinity)
                         .frame(height: 34)
                         .background(on ? AnyShapeStyle(LinearGradient(colors: [C.cyan, C.accent], startPoint: .topLeading, endPoint: .bottomTrailing)) : AnyShapeStyle(C.fieldFill))
@@ -322,7 +317,7 @@ struct SettingsCard<Content: View>: View {
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
                         .fill(
                             LinearGradient(
-                                colors: [Color.white.opacity(C.glassy ? 0.08 : 0.05), Color.clear],
+                                colors: [C.shine, Color.clear],
                                 startPoint: .top,
                                 endPoint: .bottom
                             )
@@ -333,7 +328,7 @@ struct SettingsCard<Content: View>: View {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .strokeBorder(
                         LinearGradient(
-                            colors: [Color.white.opacity(0.16), C.line],
+                            colors: [C.hairline, C.line],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ),

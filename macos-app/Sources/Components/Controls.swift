@@ -1,12 +1,14 @@
 import SwiftUI
 
 struct SoftSwitch: View {
+    @Environment(\.themeLight) private var themeLight
     @Binding var isOn: Bool
     var body: some View {
+        let _ = themeLight
         Button { isOn.toggle() } label: {
             ZStack(alignment: isOn ? .trailing : .leading) {
                 Capsule()
-                    .fill(isOn ? C.green : Color(red: 0.22, green: 0.22, blue: 0.24))
+                    .fill(isOn ? C.green : C.switchOff)
                 Circle()
                     .fill(.white)
                     .padding(2)
@@ -43,7 +45,7 @@ struct SoftSelect: View {
                             .foregroundStyle(open ? C.cyan : C.muted)
                             .frame(width: 18)
                     }
-                    Mix(text: chosenLabel, size: 15, weight: .medium, color: .white)
+                    Mix(text: chosenLabel, size: 15, weight: .medium)
                     Spacer(minLength: 0)
                     Image(systemName: "chevron.down")
                         .font(.system(size: 11, weight: .bold))
@@ -70,7 +72,7 @@ struct SoftSelect: View {
                             open = false
                         } label: {
                             HStack(spacing: 10) {
-                                Mix(text: option.1, size: 14, weight: chosen ? .semibold : .regular, color: chosen ? C.cyan : .white)
+                                Mix(text: option.1, size: 14, weight: chosen ? .semibold : .regular, color: chosen ? C.cyan : C.text)
                                 Spacer()
                                 if chosen {
                                     Image(systemName: "checkmark")
@@ -99,12 +101,14 @@ struct SoftSelect: View {
 
 struct TabStrip: View {
     @EnvironmentObject var model: Model
+    @Environment(\.themeLight) private var themeLight
 
     private var activeId: String? {
         model.stack.isEmpty ? model.page : nil
     }
 
     var body: some View {
+        let _ = themeLight
         HStack(spacing: 2) {
             tab("home", "house.fill", model.t("home"))
             tab("configs", "list.bullet", model.t("configs"))
@@ -117,9 +121,9 @@ struct TabStrip: View {
         .clipShape(Capsule(style: .continuous))
         .overlay {
             Capsule(style: .continuous)
-                .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
+                .strokeBorder(C.hairline, lineWidth: 1)
         }
-        .shadow(color: .black.opacity(0.28), radius: 16, y: 6)
+        .shadow(color: .black.opacity(C.light ? 0.10 : 0.28), radius: 16, y: 6)
         .padding(.horizontal, 16)
         .padding(.bottom, 12)
         .padding(.top, 4)
@@ -132,12 +136,12 @@ struct TabStrip: View {
                 Image(systemName: icon)
                     .font(.system(size: 16, weight: .semibold))
                     .symbolRenderingMode(.monochrome)
-                    .foregroundStyle(on ? C.accent : Color.white.opacity(0.72))
+                    .foregroundStyle(on ? C.accent : C.text.opacity(0.62))
                 Mix(
                     text: title,
                     size: 10,
                     weight: .semibold,
-                    color: on ? C.accent : Color.white.opacity(0.70)
+                    color: on ? C.accent : C.text.opacity(0.62)
                 )
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)

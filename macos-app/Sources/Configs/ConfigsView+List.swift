@@ -109,10 +109,10 @@ extension ConfigsView {
                             .font(.custom("Inter", size: 10).weight(.heavy))
                             .foregroundStyle(selected ? C.cyan : C.muted)
                             .frame(width: 34, height: 34)
-                            .background(selected ? C.cyan.opacity(0.18) : Color.white.opacity(0.06))
+                            .background(selected ? C.cyan.opacity(0.18) : C.overlay.opacity(0.06))
                             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                         VStack(alignment: .leading, spacing: 2) {
-                            Mix(text: profile["remark"] as? String ?? "", size: 12, weight: .medium, color: .white)
+                            Mix(text: profile["remark"] as? String ?? "", size: 12, weight: .medium)
                                 .lineLimit(1)
                             Mix(
                                 text: "\(profile["address"] as? String ?? ""):\(port > 0 ? port : 0)",

@@ -144,7 +144,7 @@ struct ConfigSearchHeader: View {
         Circle().fill(
             searching || !query.isEmpty
                 ? C.cyan.opacity(0.16)
-                : Color.white.opacity(0.06)
+                : C.overlay.opacity(0.06)
         )
     }
 
@@ -163,6 +163,7 @@ struct ConfigSearchHeader: View {
 
 struct ConfigSearchField: View {
     @EnvironmentObject var model: Model
+    @Environment(\.themeLight) private var themeLight
     @Binding var query: String
     var placeholder: String
     var latin: Bool
@@ -170,6 +171,7 @@ struct ConfigSearchField: View {
     @FocusState private var focused: Bool
 
     var body: some View {
+        let _ = themeLight
         HStack(spacing: 8) {
             ZStack {
                 Circle()
@@ -194,7 +196,7 @@ struct ConfigSearchField: View {
                 TextField("", text: $query)
                     .textFieldStyle(.plain)
                     .font(.custom(latin ? "Inter" : "Vazir", size: 14.5).weight(.medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(C.text)
                     .focused($focused)
                     .background(ConfigSearchFieldKit())
             }
@@ -206,9 +208,9 @@ struct ConfigSearchField: View {
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 8, weight: .heavy))
-                        .foregroundStyle(.white.opacity(0.92))
+                        .foregroundStyle(C.text.opacity(0.92))
                         .frame(width: 18, height: 18)
-                        .background(Color.white.opacity(0.14))
+                        .background(C.overlay.opacity(0.14))
                         .clipShape(Circle())
                 }
                 .buttonStyle(QuietIconPressStyle())
@@ -225,7 +227,7 @@ struct ConfigSearchField: View {
                 LinearGradient(
                     colors: focused
                         ? [C.cyan.opacity(0.9), C.accent.opacity(0.42)]
-                        : [Color.white.opacity(0.16), Color.white.opacity(0.05)],
+                        : [C.hairline, C.overlay.opacity(0.05)],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 ),
@@ -246,16 +248,13 @@ struct ConfigSearchField: View {
             Capsule().fill(
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(focused ? 0.10 : 0.055),
+                        C.overlay.opacity(focused ? 0.10 : 0.055),
                         Color.clear
                     ],
                     startPoint: .top,
                     endPoint: .bottom
                 )
             )
-            if C.glassy {
-                Capsule().fill(.ultraThinMaterial)
-            }
         }
     }
 }

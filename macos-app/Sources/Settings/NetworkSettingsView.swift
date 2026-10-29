@@ -15,7 +15,10 @@ struct NetworkSettingsView: View {
     @State private var mtuRetries = ""
     @State private var mtuTimeout = ""
     @State private var speedConcurrency = ""
+    @State private var speedTimeout = ""
+    @State private var speedEndpoint = ""
     @State private var lanIface = ""
+    @State private var lanIfaces: [String] = []
 
     var body: some View {
         sub(model.t("networkSection")) {
@@ -35,9 +38,12 @@ struct NetworkSettingsView: View {
                             model.set("lan_sharing", $0)
                         }
                         SettingsDivider()
-                        V2Field(label: model.t("lanIface"), placeholder: "en0", text: $lanIface, latin: true, icon: "cable.connector")
-                            .padding(.horizontal, 14)
-                            .padding(.bottom, 10)
+                        SettingsSelectRow(
+                            title: model.t("lanIface"),
+                            icon: "cable.connector",
+                            value: lanIface.isEmpty ? "" : lanIface,
+                            options: lanOptions
+                        ) { lanIface = $0 }
                         SheetActionButton(title: model.t("save"), icon: "checkmark") {
                             model.set("lan_iface", lanIface.trimmingCharacters(in: .whitespaces))
                             model.showToast(model.t("saved"), tone: .success)
@@ -120,8 +126,18 @@ struct NetworkSettingsView: View {
                         SettingsDivider()
                         V2Field(label: model.t("speedConcurrency"), placeholder: "2", text: $speedConcurrency, latin: true, icon: "square.stack.3d.up")
                             .padding(.horizontal, 14)
+                        V2Field(label: model.t("speedTimeout"), placeholder: "8", text: $speedTimeout, latin: true, icon: "clock")
+                            .padding(.horizontal, 14)
+                        V2Field(label: model.t("speedEndpoint"), placeholder: "https://www.gstatic.com/generate_204", text: $speedEndpoint, latin: true, icon: "link")
+                            .padding(.horizontal, 14)
                         SheetActionButton(title: model.t("save"), icon: "checkmark") {
                             if let v = Int(speedConcurrency), v >= 1, v <= 8 { model.set("speed_concurrency", v) }
+                            if let v = Int(speedTimeout), v >= 2, v <= 60 { model.set("speed_timeout", v) }
+                            let endpoint = speedEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if !endpoint.isEmpty {
+                                model.set("speed_endpoint", endpoint)
+                                model.set("probe_url", endpoint)
+                            }
                             model.showToast(model.t("saved"), tone: .success)
                         }
                         .padding(.horizontal, 14)
@@ -146,7 +162,11 @@ struct NetworkSettingsView: View {
                             model.set("include_apns", $0)
                         }
                         SettingsDivider()
-                        SettingsToggleRow(title: model.t("useXrayTun"), isOn: model.settings["use_xray_tun"] as? Bool ?? false) {
+                        SettingsToggleRow(title: model.t("includeCellular"), hint: model.t("includeCellularHint"), isOn: model.settings["include_cellular_services"] as? Bool ?? false) {
+                            model.set("include_cellular_services", $0)
+                        }
+                        SettingsDivider()
+                        SettingsToggleRow(title: model.t("useXrayTun"), hint: model.t("useXrayTunHint"), isOn: model.settings["use_xray_tun"] as? Bool ?? false) {
                             model.set("use_xray_tun", $0)
                         }
                         SettingsDivider()
@@ -207,7 +227,19 @@ struct NetworkSettingsView: View {
         mtuRetries = num("mtu_test_retries", 2)
         mtuTimeout = num("mtu_test_timeout", 2)
         speedConcurrency = num("speed_concurrency", 2)
+        speedTimeout = num("speed_timeout", 8)
+        speedEndpoint = model.settings["speed_endpoint"] as? String ?? (model.settings["probe_url"] as? String ?? "https://www.gstatic.com/generate_204")
         lanIface = model.settings["lan_iface"] as? String ?? ""
+        let diag = model.call("diagnostics")["data"] as? [String: Any] ?? [:]
+        if let rows = diag["ifaces"] as? [String] {
+            lanIfaces = rows
+        } else if let rows = diag["ifaces"] as? [Any] {
+            lanIfaces = rows.compactMap { $0 as? String }
+        }
+    }
+
+    var lanOptions: [(String, String)] {
+        [("", model.t("sortDefault"))] + lanIfaces.map { ($0, $0) }
     }
 
     func num(_ key: String, _ def: Int) -> String {

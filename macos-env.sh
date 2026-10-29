@@ -14,3 +14,35 @@ case "$ARCH" in
   aarch64) ARCH=arm64 ;;
 esac
 export SWIFT_TARGET="${ARCH}-apple-macos${MACOSX_DEPLOYMENT_TARGET}"
+
+v2open_codesign_id() {
+  security find-identity -v -p codesigning 2>/dev/null | awk -F'"' '/Apple Development|Developer ID Application|Mac Developer/{print $2; exit}'
+}
+
+v2open_codesign() {
+  local target="$1"
+  local ents="${2:-}"
+  local id
+  id="$(v2open_codesign_id || true)"
+  if [[ -n "${id:-}" && -n "$ents" && -f "$ents" ]]; then
+    if codesign --force --sign "$id" --entitlements "$ents" "$target"; then
+      return 0
+    fi
+  fi
+  codesign --force --sign - "$target"
+}
+
+v2open_compile_packet_tunnel() {
+  local app="$1"
+  local bundle_id="$2"
+  local opt="${3:--g -Onone}"
+  local appex="$app/Contents/PlugIns/PacketTunnel.appex"
+  mkdir -p "$appex/Contents/MacOS"
+  # shellcheck disable=SC2086
+  swiftc -parse-as-library $opt -target "$SWIFT_TARGET" -o "$appex/Contents/MacOS/PacketTunnel" \
+    "$ROOT/macos-app/PacketTunnel/PacketTunnelProvider.swift" "$ROOT/macos-app/PacketTunnel/PacketBridge.swift" \
+    -framework Foundation -framework NetworkExtension -framework Network
+  cp "$ROOT/macos-app/PacketTunnel/Info.plist" "$appex/Contents/Info.plist"
+  /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $bundle_id" "$appex/Contents/Info.plist" >/dev/null
+  v2open_codesign "$appex" "$ROOT/macos-app/PacketTunnel/PacketTunnel.entitlements"
+}

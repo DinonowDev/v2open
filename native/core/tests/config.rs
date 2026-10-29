@@ -66,7 +66,7 @@ fn per_app_modes_pass_sing_box_check() {
             "remote_dns": "https://1.1.1.1/dns-query", "domestic_dns": "223.5.5.5",
             "final": "proxy", "block_udp_443": true, "bypass_lan": true,
             "per_app_mode": mode,
-            "per_app_text": "Safari\nCursor\nCursor Helper (Plugin)"
+            "per_app_text": "Safari\nFinder\nNotes"
         });
         let config = build_config(&settings, &[node.clone()], &rules, &rules_dir, "tun").unwrap();
         let file = std::env::temp_dir().join(format!("v2open-per-app-{mode}.json"));

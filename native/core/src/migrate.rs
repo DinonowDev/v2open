@@ -60,6 +60,21 @@ pub fn migrate_settings(settings: &mut Value) {
     if settings.get("include_apns").is_none() {
         settings["include_apns"] = json!(false);
     }
+    if settings.get("include_cellular_services").is_none() {
+        settings["include_cellular_services"] = json!(false);
+    }
+    if settings.get("app_icon").is_none() {
+        settings["app_icon"] = json!("default");
+    }
+    if settings.get("legacy_slider").is_none() {
+        settings["legacy_slider"] = json!(false);
+    }
+    if settings.get("fab_fixed").is_none() {
+        settings["fab_fixed"] = json!(false);
+    }
+    if settings.get("fab_home_only").is_none() {
+        settings["fab_home_only"] = json!(false);
+    }
     if settings.get("xhttp_optimization").is_none() {
         settings["xhttp_optimization"] = json!("none");
     }

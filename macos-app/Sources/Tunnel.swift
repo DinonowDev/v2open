@@ -16,6 +16,8 @@ struct TunnelStartOptions {
     var rules: String
     var engine: String
     var enforceRoutes: Bool
+    var includeCellular: Bool
+    var useXrayTun: Bool
 }
 
 final class TunnelManager: NSObject {
@@ -75,7 +77,8 @@ final class TunnelManager: NSObject {
             "includeLocal": options.includeLocal,
             "dns": options.dns,
             "launchCore": options.launchCore,
-            "engine": options.engine
+            "engine": options.engine,
+            "useXrayTun": options.useXrayTun
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: payload) else {
             connect(options, completion: completion)
@@ -122,7 +125,7 @@ final class TunnelManager: NSObject {
             let manager = managers?.first ?? NETunnelProviderManager()
             if manager.protocolConfiguration == nil {
                 let proto = NETunnelProviderProtocol()
-                proto.providerBundleIdentifier = "local.v2open.desktop.PacketTunnel"
+                proto.providerBundleIdentifier = Self.providerId
                 proto.serverAddress = "V2Open"
                 manager.protocolConfiguration = proto
                 manager.localizedDescription = "V2Open"
@@ -138,7 +141,7 @@ final class TunnelManager: NSObject {
 
     private func apply(_ options: TunnelStartOptions, to manager: NETunnelProviderManager) {
         let proto = NETunnelProviderProtocol()
-        proto.providerBundleIdentifier = "local.v2open.desktop.PacketTunnel"
+        proto.providerBundleIdentifier = Self.providerId
         proto.serverAddress = "V2Open"
         proto.providerConfiguration = [
             "configPath": options.configPath,
@@ -147,12 +150,14 @@ final class TunnelManager: NSObject {
             "includeLocal": options.includeLocal,
             "dns": options.dns,
             "launchCore": options.launchCore,
-            "engine": options.engine
+            "engine": options.engine,
+            "useXrayTun": options.useXrayTun
         ]
         proto.includeAllNetworks = options.killSwitch || options.combiner || options.includeAll
         proto.excludeLocalNetworks = !options.includeLocal
         proto.enforceRoutes = options.killSwitch || options.enforceRoutes
         applyIncludeAPNs(proto, enabled: options.includeApns)
+        applyIncludeCellular(proto, enabled: options.includeCellular)
         manager.protocolConfiguration = proto
         manager.localizedDescription = "V2Open"
         manager.isEnabled = true
@@ -165,6 +170,17 @@ final class TunnelManager: NSObject {
         if proto.responds(to: setter) {
             proto.perform(setter, with: NSNumber(value: !enabled))
         }
+    }
+
+    private func applyIncludeCellular(_ proto: NETunnelProviderProtocol, enabled: Bool) {
+        let setter = NSSelectorFromString("setIncludeCellularServices:")
+        if proto.responds(to: setter) {
+            proto.perform(setter, with: NSNumber(value: enabled))
+        }
+    }
+
+    static var providerId: String {
+        (Bundle.main.bundleIdentifier ?? "local.v2open.desktop") + ".PacketTunnel"
     }
 
     private static func messageOK(_ data: Data?) -> Bool {

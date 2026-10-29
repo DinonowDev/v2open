@@ -392,6 +392,7 @@ fn defaults() -> Value {
         "use_xray_tun": false,
         "include_all_networks": false,
         "include_apns": false,
+        "include_cellular_services": false,
         "xhttp_optimization": "none",
         "speed_concurrency": 2,
         "lan_iface": "",
@@ -400,6 +401,10 @@ fn defaults() -> Value {
         "glassy": false,
         "connect_button_size": "medium",
         "theme": "dark",
+        "app_icon": "default",
+        "legacy_slider": false,
+        "fab_fixed": false,
+        "fab_home_only": false,
         "remote_dns_id": "",
         "domestic_dns_id": "",
         "dns_items": [],
@@ -663,7 +668,10 @@ impl Core {
     fn flatten_catalog(&self, data: &Value) -> Value {
         let cat = &data["catalog"];
         json!({
-            "device_id": data["device_id"],
+            "device_id": data.get("device_id").cloned().unwrap_or_else(|| data["meta"]["device_id"].clone()),
+            "note": data.get("note").cloned().unwrap_or_else(|| data["meta"]["note"].clone()),
+            "expires_at": data.get("expires_at").cloned().unwrap_or_else(|| data["meta"]["expires_at"].clone()),
+            "allowed_ids": data.get("allowed_ids").cloned().unwrap_or_else(|| data["meta"]["allowed_ids"].clone()),
             "settings": cat.get("settings.json").cloned().unwrap_or(data["settings"].clone()),
             "groups": cat.get("groups.json").cloned().unwrap_or(data["groups"].clone()),
             "routes": cat.get("routes.json").cloned().unwrap_or(data["routes"].clone()),
@@ -752,6 +760,21 @@ impl Core {
                     self.settings["selected_id"] = json!("");
                 }
                 self.save();
+                Ok(self.state())
+            }
+            "clear_group" => {
+                let gid = args["id"].as_str().unwrap_or("");
+                let selected = self.settings["selected_id"].as_str().unwrap_or("").to_string();
+                if let Some(group) = self.groups.iter_mut().find(|g| g["id"].as_str() == Some(gid)) {
+                    if !selected.is_empty() {
+                        let drop_selected = group["profiles"].as_array().map(|arr| arr.iter().any(|p| p["id"].as_str() == Some(selected.as_str()))).unwrap_or(false);
+                        if drop_selected {
+                            self.settings["selected_id"] = json!("");
+                        }
+                    }
+                    group["profiles"] = json!([]);
+                    self.save();
+                }
                 Ok(self.state())
             }
             "ping" => {
@@ -950,7 +973,10 @@ impl Core {
             }
             "logs" => Ok(json!({"text": self.logs_kind(args["kind"].as_str().unwrap_or("error"))})),
             "clear_logs" => {
-                let _ = fs::write(self.path.parent().unwrap_or(Path::new(".")).join("core.log"), "");
+                let dir = self.path.parent().unwrap_or(Path::new("."));
+                for name in ["core.log", "error.log", "access.log", "dns.log", "tunnel.log"] {
+                    let _ = fs::write(dir.join(name), "");
+                }
                 Ok(json!({"ok": true}))
             }
             "sidecar_logs" => Ok(json!({"text": self.sidecar_logs()})),
@@ -1008,13 +1034,9 @@ impl Core {
                 if path.is_empty() {
                     return Err("path is required".into());
                 }
-                if password.len() < 4 {
-                    return Err("password is required for .v2box".into());
-                }
                 let payload = self.package_catalog_with(args);
-                let bytes = crate::vault::seal(password, &serde_json::to_vec(&payload).map_err(|e| e.to_string())?)?;
-                fs::write(path, bytes).map_err(|e| e.to_string())?;
-                Ok(json!({"path": path, "format": "v2box", "files": payload["catalog"].as_object().map(|o| o.len()).unwrap_or(0)}))
+                write_v2box_zip(path, password, &payload)?;
+                Ok(json!({"path": path, "format": "v2box", "files": payload["catalog"].as_object().map(|o| o.len()).unwrap_or(0), "password": !password.is_empty()}))
             }
             "export_group" => {
                 let gid = args["id"].as_str().unwrap_or("");
@@ -1060,7 +1082,11 @@ impl Core {
                         ZipPayload::Json(plain) => serde_json::from_slice(&plain).or_else(|_| serde_json::from_str(&String::from_utf8_lossy(&plain))).map_err(|e| e.to_string())?,
                         ZipPayload::Links(text) => {
                             self.import_text(&text, None)?;
-                            return Ok(self.state());
+                            let mut st = self.state();
+                            if let Some(obj) = st.as_object_mut() {
+                                obj.insert("import_note".into(), json!(""));
+                            }
+                            return Ok(st);
                         }
                     }
                 } else {
@@ -1091,18 +1117,17 @@ impl Core {
                 if expires > 0 && now() > expires {
                     return Err("this backup has expired".into());
                 }
+                let note = payload["note"].as_str().or_else(|| payload["meta"]["note"].as_str()).unwrap_or("").trim().to_string();
                 self.restore_payload(&payload);
-                Ok(self.state())
+                let mut st = self.state();
+                if let Some(obj) = st.as_object_mut() {
+                    obj.insert("import_note".into(), json!(note));
+                }
+                Ok(st)
             }
             "share_locked" => {
                 let path = args["path"].as_str().unwrap_or("");
                 let password = args["password"].as_str().unwrap_or("");
-                if path.is_empty() {
-                    return Err("path is required".into());
-                }
-                if password.len() < 4 {
-                    return Err("password is required for .v2box".into());
-                }
                 let id = args["id"].as_str().unwrap_or("");
                 let gid = args["group_id"].as_str().unwrap_or("");
                 let mut catalog = self.package_catalog_with(args);
@@ -1130,9 +1155,12 @@ impl Core {
                     catalog["groups"] = json!(groups.clone());
                     catalog["catalog"]["groups.json"] = json!(groups);
                 }
-                let bytes = crate::vault::seal(password, &serde_json::to_vec(&catalog).map_err(|e| e.to_string())?)?;
-                fs::write(path, bytes).map_err(|e| e.to_string())?;
-                Ok(json!({"path": path, "format": "v2box"}))
+                let text = share_locked_text(&catalog);
+                if path.is_empty() {
+                    return Ok(json!({"text": text, "format": "v2box", "password": !password.is_empty()}));
+                }
+                write_v2box_zip(path, password, &catalog)?;
+                Ok(json!({"path": path, "format": "v2box", "text": text, "password": !password.is_empty()}))
             }
             "update_group" => Err("subscriptions were removed".into()),
             "prepare" => self.prepare(
@@ -1718,12 +1746,21 @@ impl Core {
             "sing_path": cfg.display().to_string(),
             "xray_path": xray.display().to_string(),
             "engine": if use_xray { "xray" } else { "sing-box" },
-            "socks_port": if self.direct_bridge > 0 { self.direct_bridge as u64 } else { self.settings["socks_port"].as_u64().unwrap_or(10808) },
+            "socks_port": if self.direct_bridge > 0 {
+                self.direct_bridge as u64
+            } else if use_xray {
+                10809
+            } else {
+                self.settings["socks_port"].as_u64().unwrap_or(10808)
+            },
+            "tun_type": if use_xray { "gvisor" } else { "system" },
             "launch_core": self.direct_bridge == 0,
             "mtu": self.settings["mtu"].as_u64().unwrap_or(1500),
             "include_local": self.settings["include_local"].as_bool().unwrap_or(false),
             "include_all_networks": self.settings["include_all_networks"].as_bool().unwrap_or(false),
             "include_apns": self.settings["include_apns"].as_bool().unwrap_or(false),
+            "include_cellular_services": self.settings["include_cellular_services"].as_bool().unwrap_or(false),
+            "use_xray_tun": use_xray,
             "kill_switch": self.settings["kill_switch"].as_bool().unwrap_or(false),
             "dns": host,
             "on_demand": self.settings["on_demand"].as_bool().unwrap_or(false),
@@ -1772,8 +1809,30 @@ impl Core {
         let cfg = dir.join("config.json");
         fs::write(&cfg, serde_json::to_string_pretty(&config).unwrap_or_else(|_| "{}".into())).map_err(|e| e.to_string())?;
         if let Some(profile) = profiles.first() {
-            let xray = crate::xray::document(&self.settings, profile, &self.routes);
+            let mut xray = crate::xray::document(&self.settings, profile, &self.routes);
+            let logging = self.settings["logging_enabled"].as_bool().unwrap_or(true);
+            xray["log"] = if logging {
+                json!({
+                    "loglevel": self.settings["loglevel"].as_str().unwrap_or("warning"),
+                    "access": dir.join("access.log").display().to_string(),
+                    "error": dir.join("error.log").display().to_string(),
+                    "dnsLog": true
+                })
+            } else {
+                json!({"loglevel": "none"})
+            };
             let _ = fs::write(dir.join("xray.json"), serde_json::to_string_pretty(&xray).unwrap_or_else(|_| "{}".into()));
+            for name in ["geoip.dat", "geosite.dat"] {
+                if let Some(src) = bundled_geo(name, &self.singbox) {
+                    let dest = dir.join(name);
+                    if !dest.exists() {
+                        let _ = fs::copy(src, dest);
+                    }
+                }
+            }
+            let _ = fs::OpenOptions::new().create(true).append(true).open(dir.join("access.log"));
+            let _ = fs::OpenOptions::new().create(true).append(true).open(dir.join("error.log"));
+            let _ = fs::OpenOptions::new().create(true).append(true).open(dir.join("dns.log"));
         }
         if !self.singbox.exists() {
             return Err("sing-box core was not found".into());
@@ -2320,10 +2379,14 @@ impl Core {
         let path = match kind {
             "access" => dir.join("access.log"),
             "dns" => dir.join("dns.log"),
+            "error" => dir.join("error.log"),
             _ => dir.join("core.log"),
         };
         let body = Self::tail_log(&path);
         if kind == "error" || kind == "all" {
+            if body.trim().is_empty() {
+                return Self::tail_log(&dir.join("core.log"));
+            }
             return body;
         }
         if body.trim().is_empty() {
@@ -2668,6 +2731,7 @@ impl Core {
             "profile": self.runtime.profile_name,
             "config_path": config.display().to_string(),
             "log_path": dir.join("core.log").display().to_string(),
+            "error_log": dir.join("error.log").display().to_string(),
             "routes": routes_text,
             "route_rows": route_rows,
             "dns": dns_text,
@@ -2681,6 +2745,8 @@ impl Core {
                 .collect::<Vec<_>>(),
             "config": live,
             "xray_path": dir.join("xray.json").display().to_string(),
+            "access_log": dir.join("access.log").display().to_string(),
+            "dns_log": dir.join("dns.log").display().to_string(),
             "proxy": cmd_text("scutil", &["--proxy"]),
             "bootstrap": dns_servers.clone(),
             "vpn_dns": self.settings["remote_dns"].clone(),
@@ -2693,7 +2759,7 @@ impl Core {
     fn about_info(&self) -> Result<Value, String> {
         let xray = xray_binary(&self.singbox).ok().and_then(|bin| {
             Command::new(bin).arg("version").output().ok().and_then(|out| {
-                String::from_utf8_lossy(&out.stdout).lines().next().map(|s| s.trim().to_string())
+                String::from_utf8_lossy(&out.stdout).lines().next().map(|s| xray_core_version(s))
             })
         }).unwrap_or_default();
         Ok(json!({
@@ -3251,6 +3317,18 @@ fn xray_asset_dir(bin: &Path, data_dir: &Path) -> Option<PathBuf> {
     Some(parent.to_path_buf())
 }
 
+fn xray_core_version(raw: &str) -> String {
+    let line = raw.lines().next().unwrap_or(raw).trim();
+    let rest = line.strip_prefix("Xray ").unwrap_or(line);
+    let token = rest.split_whitespace().next().unwrap_or(rest);
+    let version = token.split('(').next().unwrap_or(token).trim();
+    if version.is_empty() {
+        line.to_string()
+    } else {
+        version.to_string()
+    }
+}
+
 fn xray_binary(singbox: &Path) -> Result<PathBuf, String> {
     let path = singbox.parent().unwrap_or(Path::new(".")).join("xray");
     if path.exists() {
@@ -3286,13 +3364,24 @@ fn cloud_newer(cloud: &Path, local: &Path) -> bool {
 
 fn demand_action(text: &str, kind: &str, ssid: &str) -> Option<String> {
     for line in text.lines() {
-        let parts: Vec<&str> = line.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
-        if parts.len() < 3 {
+        let parts: Vec<&str> = line.splitn(3, ',').map(|s| s.trim()).collect();
+        if parts.len() < 3 || parts[2].is_empty() {
             continue;
         }
         let iface_ok = parts[0].eq_ignore_ascii_case("any") || parts[0].eq_ignore_ascii_case(kind);
-        let ssid_ok = parts[1] == "*" || parts[1] == ssid;
-        if iface_ok && ssid_ok {
+        if !iface_ok {
+            continue;
+        }
+        let names: Vec<&str> = parts[1]
+            .split('|')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .collect();
+        let ssid_ok = names.is_empty()
+            || names
+                .iter()
+                .any(|name| *name == "*" || (!ssid.is_empty() && name.eq_ignore_ascii_case(ssid)));
+        if ssid_ok {
             return Some(parts[2].to_ascii_lowercase());
         }
     }
@@ -3363,6 +3452,95 @@ enum ZipPayload {
     Links(String),
 }
 
+fn share_locked_text(catalog: &Value) -> String {
+    let note = catalog["note"].as_str().unwrap_or("").trim();
+    let mut uris = Vec::new();
+    if let Some(groups) = catalog["groups"].as_array() {
+        for group in groups {
+            for profile in group["profiles"].as_array().cloned().unwrap_or_default() {
+                let link = profile["link"].as_str().unwrap_or("").trim();
+                if !link.is_empty() {
+                    uris.push(link.to_string());
+                }
+            }
+        }
+    }
+    if note.is_empty() {
+        return uris.join("\n");
+    }
+    format!("# {note}\n{}", uris.join("\n"))
+}
+
+fn write_v2box_zip(path: &str, password: &str, catalog: &Value) -> Result<(), String> {
+    let dir = std::env::temp_dir().join(format!("v2open-out-{}", now()));
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let groups = catalog["groups"].clone();
+    let mut uris = Vec::new();
+    let mut configs = Vec::new();
+    if let Some(arr) = groups.as_array() {
+        for group in arr {
+            for profile in group["profiles"].as_array().cloned().unwrap_or_default() {
+                let link = profile["link"].as_str().unwrap_or("").trim();
+                if !link.is_empty() {
+                    uris.push(link.to_string());
+                }
+                configs.push(profile);
+            }
+        }
+    }
+    let note = catalog["note"].as_str().unwrap_or("").trim();
+    let manifest = json!({
+        "format": "v2box",
+        "app": "V2Open",
+        "version": 2,
+        "created_at": catalog["created_at"],
+        "note": note,
+        "expires_at": catalog["expires_at"],
+        "allowed_ids": catalog["allowed_ids"],
+        "device_id": catalog["device_id"],
+        "files": ["manifest.json", "groups.json", "configs.json", "uris.txt", "settings.json", "routes.json", "dns.json"]
+    });
+    fs::write(dir.join("manifest.json"), serde_json::to_vec_pretty(&manifest).unwrap_or_default()).map_err(|e| e.to_string())?;
+    fs::write(dir.join("groups.json"), serde_json::to_vec_pretty(&groups).unwrap_or_default()).map_err(|e| e.to_string())?;
+    fs::write(dir.join("configs.json"), serde_json::to_vec_pretty(&configs).unwrap_or_default()).map_err(|e| e.to_string())?;
+    fs::write(dir.join("uris.txt"), uris.join("\n")).map_err(|e| e.to_string())?;
+    fs::write(dir.join("settings.json"), serde_json::to_vec_pretty(&catalog["settings"]).unwrap_or_default()).map_err(|e| e.to_string())?;
+    fs::write(dir.join("routes.json"), serde_json::to_vec_pretty(&catalog["routes"]).unwrap_or_default()).map_err(|e| e.to_string())?;
+    fs::write(dir.join("dns.json"), serde_json::to_vec_pretty(&catalog["dns_items"]).unwrap_or_default()).map_err(|e| e.to_string())?;
+    if !note.is_empty() {
+        fs::write(dir.join("note.txt"), note).map_err(|e| e.to_string())?;
+    }
+    if password.len() >= 4 {
+        if let Ok(raw) = serde_json::to_vec(catalog) {
+            if let Ok(sealed) = crate::vault::seal(password, &raw) {
+                let _ = fs::write(dir.join("payload.v2open"), sealed);
+            }
+        }
+    }
+    let zip_path = dir.join("out.zip");
+    let mut cmd = Command::new("zip");
+    cmd.current_dir(&dir);
+    cmd.arg("-q").arg("-r");
+    if !password.is_empty() {
+        cmd.arg("-P").arg(password);
+    }
+    cmd.arg(&zip_path).arg(".");
+    let out = cmd.output().map_err(|_| "zip is not available".to_string())?;
+    if !out.status.success() {
+        let _ = fs::remove_dir_all(&dir);
+        return Err("could not write the .v2box package".into());
+    }
+    let bytes = fs::read(&zip_path).map_err(|e| e.to_string())?;
+    fs::write(path, bytes).map_err(|e| e.to_string())?;
+    let _ = fs::remove_dir_all(&dir);
+    Ok(())
+}
+
+fn read_json_file(path: &Path) -> Option<Value> {
+    let body = fs::read(path).ok()?;
+    serde_json::from_slice(&body).ok()
+}
+
 fn unzip_library(password: &str, bytes: &[u8]) -> Result<ZipPayload, String> {
     let dir = std::env::temp_dir().join(format!("v2open-zip-{}", now()));
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
@@ -3370,14 +3548,70 @@ fn unzip_library(password: &str, bytes: &[u8]) -> Result<ZipPayload, String> {
     fs::write(&zip, bytes).map_err(|e| e.to_string())?;
     let result = Command::new("unzip").args(["-P", password, "-o"]).arg(&zip).arg("-d").arg(&dir).output().map_err(|_| "unzip is not available".to_string())?;
     if !result.status.success() {
+        let _ = fs::remove_dir_all(&dir);
         return Err("wrong password or the archive is not a zip".into());
     }
     let files = walk_files(&dir);
     for path in &files {
         let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("").to_ascii_lowercase();
+        if name == "payload.v2open" {
+            if let Ok(body) = fs::read(path) {
+                if body.starts_with(b"V2OPEN1") {
+                    if let Ok(plain) = crate::vault::open(password, &body).or_else(|_| crate::vault::open("", &body)) {
+                        let _ = fs::remove_dir_all(&dir);
+                        return Ok(ZipPayload::Json(plain));
+                    }
+                }
+            }
+        }
+    }
+    let mut manifest = Value::Null;
+    let mut groups = Value::Null;
+    let mut settings = Value::Null;
+    let mut routes = Value::Null;
+    let mut dns = Value::Null;
+    for path in &files {
+        let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("").to_ascii_lowercase();
+        if name == "manifest.json" {
+            manifest = read_json_file(path).unwrap_or(Value::Null);
+        } else if name == "groups.json" {
+            groups = read_json_file(path).unwrap_or(Value::Null);
+        } else if name == "settings.json" {
+            settings = read_json_file(path).unwrap_or(Value::Null);
+        } else if name == "routes.json" {
+            routes = read_json_file(path).unwrap_or(Value::Null);
+        } else if name == "dns.json" {
+            dns = read_json_file(path).unwrap_or(Value::Null);
+        }
+    }
+    if groups.is_array() || groups.is_object() {
+        let wrapped = json!({
+            "format": "v2box",
+            "device_id": manifest["device_id"],
+            "note": manifest["note"],
+            "expires_at": manifest["expires_at"],
+            "allowed_ids": manifest["allowed_ids"],
+            "meta": manifest,
+            "catalog": {
+                "settings.json": settings,
+                "groups.json": groups,
+                "routes.json": routes,
+                "dns.json": dns
+            },
+            "settings": settings,
+            "groups": groups,
+            "routes": routes,
+            "dns_items": dns
+        });
+        let _ = fs::remove_dir_all(&dir);
+        return Ok(ZipPayload::Json(serde_json::to_vec(&wrapped).unwrap_or_default()));
+    }
+    for path in &files {
+        let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("").to_ascii_lowercase();
         if name.ends_with(".json") || name.contains("library") || name.contains("groups") {
             if let Ok(body) = fs::read(path) {
                 if serde_json::from_slice::<Value>(&body).is_ok() {
+                    let _ = fs::remove_dir_all(&dir);
                     return Ok(ZipPayload::Json(body));
                 }
             }
@@ -3389,6 +3623,7 @@ fn unzip_library(password: &str, bytes: &[u8]) -> Result<ZipPayload, String> {
             links.extend(extract_share_links(&body));
         }
     }
+    let _ = fs::remove_dir_all(&dir);
     if !links.is_empty() {
         links.sort();
         links.dedup();
@@ -3543,6 +3778,75 @@ pub fn locate_core() -> Option<PathBuf> {
 }
 
 #[cfg(test)]
+mod xray_version_tests {
+    use super::xray_core_version;
+
+    #[test]
+    fn strips_slogan_and_go_build() {
+        assert_eq!(
+            xray_core_version("Xray 26.10.21 (Xray, Penetrates Everything.) 1b1647c (go1.27.3 darwin/arm64)"),
+            "26.10.21"
+        );
+        assert_eq!(
+            xray_core_version("Xray 1.8.24 (Xray, Penetrates Everything.) Custom (go1.21.5 linux/amd64)"),
+            "1.8.24"
+        );
+    }
+
+    #[test]
+    fn keeps_plain_version() {
+        assert_eq!(xray_core_version("26.10.21"), "26.10.21");
+        assert_eq!(xray_core_version(""), "");
+    }
+}
+
+#[cfg(test)]
+mod v2box_zip_tests {
+    use super::{share_locked_text, unzip_library, write_v2box_zip};
+    use serde_json::json;
+    use std::fs;
+
+    #[test]
+    fn zip_roundtrip_keeps_links_and_note() {
+        let dir = std::env::temp_dir().join(format!("v2open-zip-test-{}", super::now()));
+        let _ = fs::create_dir_all(&dir);
+        let path = dir.join("pack.v2box");
+        let catalog = json!({
+            "format": "v2box",
+            "created_at": 1,
+            "note": "hello from v2open",
+            "expires_at": 0,
+            "allowed_ids": [],
+            "device_id": "dev-1",
+            "settings": {"theme": "dark"},
+            "groups": [{"id": "g1", "name": "Local", "profiles": [{"id": "p1", "link": "vless://uuid@host:443?type=tcp#node"}]}],
+            "routes": [],
+            "dns_items": [],
+            "catalog": {"groups.json": []}
+        });
+        write_v2box_zip(path.to_str().unwrap(), "", &catalog).expect("zip");
+        let bytes = fs::read(&path).expect("read zip");
+        assert!(bytes.starts_with(b"PK"));
+        let unzipped = unzip_library("", &bytes).expect("unzip");
+        match unzipped {
+            super::ZipPayload::Json(body) => {
+                let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+                assert_eq!(value["note"], "hello from v2open");
+                let groups = value["groups"].as_array().or_else(|| value["catalog"]["groups.json"].as_array()).unwrap();
+                assert!(!groups.is_empty());
+            }
+            super::ZipPayload::Links(text) => {
+                assert!(text.contains("vless://"));
+            }
+        }
+        let text = share_locked_text(&catalog);
+        assert!(text.contains("hello from v2open"));
+        assert!(text.contains("vless://"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
 mod speed_probe_tests {
     use super::{rate_bps, run_speed_probe, SpeedPlan};
     use std::time::Duration;
@@ -3609,5 +3913,19 @@ mod ping_measure_tests {
             return;
         };
         assert!(ms >= 5, "remote ping {ms}ms is still tun-local");
+    }
+}
+
+#[cfg(test)]
+mod demand_rule_tests {
+    use super::demand_action;
+
+    #[test]
+    fn matches_ssid_list_ethernet_and_ignore() {
+        let text = "wifi,home|office,connect\nethernet,*,disconnect\nany,*,ignore";
+        assert_eq!(demand_action(text, "wifi", "office").as_deref(), Some("connect"));
+        assert_eq!(demand_action(text, "wifi", "cafe").as_deref(), Some("ignore"));
+        assert_eq!(demand_action(text, "ethernet", "").as_deref(), Some("disconnect"));
+        assert_eq!(demand_action("wifi,cafe,ignore", "wifi", "home"), None);
     }
 }

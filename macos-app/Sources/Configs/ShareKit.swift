@@ -137,6 +137,8 @@ struct ProfileShareSheet: View {
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                     .padding(.bottom, 12)
                     Mix(text: model.t("lockShare"), size: 13, weight: .semibold)
+                        .padding(.bottom, 4)
+                    Mix(text: model.t("passwordOptional"), size: 11, color: C.muted)
                         .padding(.bottom, 8)
                     V2Field(placeholder: model.t("filePassword"), text: $password, latin: true, secure: true, icon: "key.fill")
                         .padding(.bottom, 8)
@@ -147,6 +149,7 @@ struct ProfileShareSheet: View {
                     V2Field(placeholder: model.t("expiresAt"), text: $expires, latin: true, icon: "calendar")
                         .padding(.bottom, 12)
                     SheetActionButton(title: model.t("lockShare"), primary: true, icon: "lock.rectangle") { lockShare() }
+                    SheetActionButton(title: model.t("lockCopy"), icon: "lock.doc") { lockCopy() }
                     SheetActionButton(title: model.t("cancel"), quiet: true, action: onClose)
                 }
             }
@@ -175,13 +178,9 @@ struct ProfileShareSheet: View {
         model.showToast(model.t("saved"), tone: .success)
     }
 
-    func lockShare() {
-        let panel = NSSavePanel()
-        panel.nameFieldStringValue = "\(profile["remark"] as? String ?? "config").v2box"
-        panel.allowedContentTypes = [ShareKit.v2boxType()]
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+    func lockArgs(path: String) -> [String: Any] {
         var args: [String: Any] = [
-            "path": url.path,
+            "path": path,
             "password": password,
             "id": profile["id"] as? String ?? "",
             "group_id": groupId,
@@ -189,7 +188,28 @@ struct ProfileShareSheet: View {
             "allowed_ids": allowed
         ]
         if let n = UInt64(expires.trimmingCharacters(in: .whitespaces)) { args["expires_at"] = n }
-        let response = model.call("share_locked", args)
+        return args
+    }
+
+    func lockShare() {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "\(profile["remark"] as? String ?? "config").v2box"
+        panel.allowedContentTypes = [ShareKit.v2boxType()]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let response = model.call("share_locked", lockArgs(path: url.path))
+        if response["ok"] as? Bool == false {
+            model.showToast(response["error"] as? String ?? model.t("failed"), tone: .error)
+        } else {
+            model.showToast(model.t("saved"), tone: .success)
+            onClose()
+        }
+    }
+
+    func lockCopy() {
+        let response = model.call("share_locked", lockArgs(path: ""))
+        let text = ((response["data"] as? [String: Any])?["text"] as? String)
+            ?? (profile["link"] as? String ?? "")
+        ShareKit.copy(text)
         if response["ok"] as? Bool == false {
             model.showToast(response["error"] as? String ?? model.t("failed"), tone: .error)
         } else {

@@ -94,6 +94,7 @@ scaffold_app() {
   cp "$ROOT/assets/fonts/"*.ttf "$APP/Contents/Resources/Fonts/"
   sync_speedometer
   sync_locales
+  sync_app_icons
   sync_cores
 }
 
@@ -101,6 +102,13 @@ sync_locales() {
   mkdir -p "$APP/Contents/Resources/Locales"
   if [[ -d "$ROOT/macos-app/Resources/Locales" ]]; then
     cp "$ROOT/macos-app/Resources/Locales/"*.json "$APP/Contents/Resources/Locales/" 2>/dev/null || true
+  fi
+}
+
+sync_app_icons() {
+  mkdir -p "$APP/Contents/Resources/AppIcons"
+  if [[ -d "$ROOT/macos-app/Resources/AppIcons" ]]; then
+    cp "$ROOT/macos-app/Resources/AppIcons/"*.png "$APP/Contents/Resources/AppIcons/" 2>/dev/null || true
   fi
 }
 
@@ -154,7 +162,9 @@ build_dev_app() {
   sync_cores
   sync_speedometer
   sync_locales
+  sync_app_icons
   rm -f "$APP/Contents/MacOS/geoip.dat" "$APP/Contents/MacOS/geosite.dat"
+  v2open_compile_packet_tunnel "$APP" "local.v2open.dev.PacketTunnel" "-g -Onone"
   SWIFT_SOURCES=()
   while IFS= read -r swift_file; do
     SWIFT_SOURCES+=("$swift_file")
@@ -167,9 +177,10 @@ EOF
     -framework SwiftUI -framework AppKit -framework AVFoundation -framework Vision -framework CoreText \
     -framework Security -framework CoreFoundation -framework SystemConfiguration -framework NetworkExtension -framework CloudKit -framework WebKit \
     -framework CoreWLAN -framework CoreLocation -framework CoreImage \
+    -framework PhotosUI -framework Photos -framework CreateML -framework TabularData -framework CoreML -framework NaturalLanguage \
     -lc++ -liconv
-  codesign --force --sign - "$EXE"
-  codesign --force --sign - "$APP"
+  v2open_codesign "$EXE"
+  v2open_codesign "$APP" "$ROOT/macos-app/V2Open.entitlements"
   echo "built $APP"
 }
 

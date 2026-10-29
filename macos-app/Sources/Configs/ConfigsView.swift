@@ -72,7 +72,7 @@ struct ConfigsView: View {
                 .clipped()
             }
 
-            if model.selectedProfile != nil {
+            if model.selectedProfile != nil && model.settings["fab_home_only"] as? Bool != true {
                 ConfigConnectDock()
                     .padding(.horizontal, 14)
                     .padding(.bottom, PageLayout.tabBarClearance)

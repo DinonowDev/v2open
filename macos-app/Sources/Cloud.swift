@@ -13,6 +13,44 @@ final class CloudSync {
     private var last = Date.distantPast
     private let container = CKContainer(identifier: "iCloud.local.v2open.desktop")
 
+    enum AccountKind { case available, noAccount, restricted, unknown }
+
+    func account(completion: @escaping (AccountKind) -> Void) {
+        container.accountStatus { status, _ in
+            let kind: AccountKind
+            switch status {
+            case .available: kind = .available
+            case .noAccount: kind = .noAccount
+            case .restricted, .temporarilyUnavailable: kind = .restricted
+            default: kind = .unknown
+            }
+            DispatchQueue.main.async { completion(kind) }
+        }
+    }
+
+    func syncServers(completion: @escaping (Bool) -> Void) {
+        queue.async {
+            self.syncLibrary()
+            DispatchQueue.main.async { completion(true) }
+        }
+    }
+
+    func localSynced(completion: @escaping (Bool) -> Void) {
+        queue.async {
+            let local = self.libraryURL()
+            let cloud = self.driveURL()
+            var synced = false
+            if let local, let cloud,
+               FileManager.default.fileExists(atPath: local.path),
+               FileManager.default.fileExists(atPath: cloud.path) {
+                let l = (try? FileManager.default.attributesOfItem(atPath: local.path)[.modificationDate] as? Date) ?? .distantPast
+                let r = (try? FileManager.default.attributesOfItem(atPath: cloud.path)[.modificationDate] as? Date) ?? .distantPast
+                synced = abs(l.timeIntervalSince(r)) < 5
+            }
+            DispatchQueue.main.async { completion(synced) }
+        }
+    }
+
     func kick(force: Bool = false) {
         queue.async { [weak self] in
             guard let self else { return }

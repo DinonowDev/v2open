@@ -1,6 +1,5 @@
 import AppKit
 import SwiftUI
-import Vision
 import UniformTypeIdentifiers
 
 extension ConfigsView {
@@ -124,18 +123,21 @@ extension ConfigsView {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.image]
         guard panel.runModal() == .OK, let url = panel.url, let image = NSImage(contentsOf: url) else { return }
-        var rect = NSRect(origin: .zero, size: image.size)
-        guard let cg = image.cgImage(forProposedRect: &rect, context: nil, hints: nil) else {
-            model.showToast(model.t("wrong"), tone: .warning)
-            return
-        }
-        let request = VNDetectBarcodesRequest()
-        try? VNImageRequestHandler(cgImage: cg).perform([request])
-        guard let text = request.results?.first?.payloadStringValue else {
+        guard let text = PhotoQRPicker.decode(image) else {
             model.showToast(model.t("wrong"), tone: .warning)
             return
         }
         finishImport(text: text)
+    }
+
+    func importQRFromPhotos() {
+        PhotoQRPicker.shared.present { text in
+            guard let text, !text.isEmpty else {
+                model.showToast(model.t("wrong"), tone: .warning)
+                return
+            }
+            finishImport(text: text)
+        }
     }
 
     func importFile() {

@@ -10,6 +10,7 @@ final class Model: ObservableObject {
     @Published var toast: AppToastItem?
     @Published var pingingIds: Set<String> = []
     @Published var about: [String: Any] = [:]
+    @Published var pendingNote: String?
 
     private var booted = false
     private var pingLoopTask: Task<Void, Never>?
@@ -75,6 +76,8 @@ final class Model: ObservableObject {
         }
         refresh()
         refreshAbout()
+        AppIconStore.apply(settings["app_icon"] as? String ?? "default")
+        LogClassifier.shared.prepare()
         syncBackgroundScheduler()
         armSystemOnDemand()
         startAutoPing()
@@ -99,6 +102,10 @@ final class Model: ObservableObject {
 
     func mergeState(from response: [String: Any]) {
         if let data = response["data"] as? [String: Any] {
+            if let note = data["import_note"] as? String {
+                let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { pendingNote = trimmed }
+            }
             state = data
         } else if response["ok"] as? Bool != false {
             refresh()
@@ -174,6 +181,9 @@ final class Model: ObservableObject {
     func set(_ key: String, _ value: Any) {
         _ = call("set", ["key": key, "value": value])
         refresh()
+        if key == "app_icon" {
+            AppIconStore.apply(value as? String ?? "default")
+        }
         if ["geo_auto_update", "on_demand", "persist_tunnel", "reconnect_after_wake", "on_demand_text"].contains(key) {
             syncBackgroundScheduler()
             armSystemOnDemand()
@@ -331,7 +341,9 @@ final class Model: ObservableObject {
             onDemand: data["on_demand"] as? Bool ?? false,
             rules: data["on_demand_text"] as? String ?? "",
             engine: data["engine"] as? String ?? "sing-box",
-            enforceRoutes: settings["enforce_routes"] as? Bool ?? false
+            enforceRoutes: settings["enforce_routes"] as? Bool ?? false,
+            includeCellular: data["include_cellular_services"] as? Bool ?? false,
+            useXrayTun: data["use_xray_tun"] as? Bool ?? (data["engine"] as? String == "xray")
         )
         let tunnel = TunnelManager.shared
         let finish: (Bool) -> Void = { [weak self] system in

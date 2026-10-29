@@ -27,6 +27,7 @@ struct RootView: View {
                 case "dns_items": DnsItemsView()
                 case "xray_advanced": XrayAdvancedView()
                 case "network_settings": NetworkSettingsView()
+                case "on_demand": OnDemandView()
                 case "backup_settings": BackupSettingsView()
                 case "logs": LogsView()
                 case "diagnostics": DiagnosticsView()
@@ -61,12 +62,32 @@ struct RootView: View {
         .overlay(alignment: .bottom) {
             TabStrip()
         }
+        .overlay(alignment: .bottomTrailing) {
+            if showFixedPower {
+                PowerConnectButton(
+                    connected: model.runtime["connected"] as? Bool ?? false,
+                    connecting: (model.runtime["phase"] as? String ?? "") == "connecting",
+                    compact: true,
+                    action: {
+                        if model.runtime["connected"] as? Bool == true { model.disconnectTunnel() }
+                        else { model.connectTunnel() }
+                    }
+                )
+                .padding(.trailing, 18)
+                .padding(.bottom, 92)
+            }
+        }
         .overlay(alignment: .bottom) {
             if let toast = model.toast {
                 AppToastView(item: toast)
                     .padding(.horizontal, 18)
                     .padding(.bottom, 90)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .overlay {
+            if let note = model.pendingNote, !note.isEmpty {
+                CreatorNoteSheet(note: note) { model.pendingNote = nil }
             }
         }
         .animation(.easeOut(duration: 0.22), value: model.toast?.id)
@@ -76,6 +97,33 @@ struct RootView: View {
             if model.settings["icloud"] as? Bool == true { CloudSync.shared.kick() }
         }
         .onOpenURL { model.handleOpenURL($0) }
+    }
+
+    var showFixedPower: Bool {
+        guard model.settings["fab_fixed"] as? Bool == true else { return false }
+        if model.settings["fab_home_only"] as? Bool == true {
+            return model.current == "home"
+        }
+        return true
+    }
+}
+
+struct CreatorNoteSheet: View {
+    @EnvironmentObject var model: Model
+    var note: String
+    var onClose: () -> Void
+
+    var body: some View {
+        SheetBackdrop(onDismiss: onClose) {
+            SheetCard {
+                VStack(alignment: .leading, spacing: 0) {
+                    SheetHeader(title: model.t("creatorMessage"), subtitle: "", close: onClose, closeLabel: model.t("cancel"))
+                    Mix(text: note, size: 14)
+                        .padding(.bottom, 14)
+                    SheetActionButton(title: model.t("save"), primary: true, icon: "checkmark", action: onClose)
+                }
+            }
+        }
     }
 }
 

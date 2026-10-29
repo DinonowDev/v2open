@@ -73,8 +73,14 @@ extension ConfigsView {
                     _ = model.call("pin_group", ["id": gid, "pinned": !(group["pinned"] as? Bool == true)])
                     model.refresh()
                 }
+                ConfigRowIconButton(systemName: "doc.on.doc", label: model.t("copyAllLinks")) {
+                    copyGroupLinks(gid: gid)
+                }
                 ConfigRowIconButton(systemName: "square.and.arrow.up", label: model.t("exportGroup")) {
                     exportGroup(gid: gid, name: name)
+                }
+                ConfigRowIconButton(systemName: "trash", label: model.t("deleteAllLocal")) {
+                    clearGroup(gid: gid)
                 }
                 Spacer(minLength: 0)
             }
@@ -85,7 +91,10 @@ extension ConfigsView {
                     _ = model.call("pin_group", ["id": gid, "pinned": !(group["pinned"] as? Bool == true)])
                     model.refresh()
                 }
+                Button(model.t("copyAllLinks")) { copyGroupLinks(gid: gid) }
                 Button(model.t("exportGroup")) { exportGroup(gid: gid, name: name) }
+                Divider()
+                Button(model.t("deleteAllLocal"), role: .destructive) { clearGroup(gid: gid) }
             }
 
             if expanded {
@@ -283,5 +292,24 @@ extension ConfigsView {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         let response = model.call("export_group", ["id": gid, "path": url.path])
         model.showToast(response["ok"] as? Bool == false ? (response["error"] as? String ?? model.t("failed")) : model.t("saved"), tone: response["ok"] as? Bool == false ? .error : .success)
+    }
+
+    func copyGroupLinks(gid: String) {
+        let response = model.call("export_group", ["id": gid])
+        let text = (response["data"] as? [String: Any])?["text"] as? String ?? ""
+        ShareKit.copy(text)
+        model.showToast(model.t("saved"), tone: .success)
+    }
+
+    func clearGroup(gid: String) {
+        let alert = NSAlert()
+        alert.messageText = model.t("deleteAllLocal")
+        alert.informativeText = model.t("confirmDeleteAll")
+        alert.addButton(withTitle: model.t("delete"))
+        alert.addButton(withTitle: model.t("cancel"))
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        _ = model.call("clear_group", ["id": gid])
+        model.refresh()
+        model.showToast(model.t("saved"), tone: .success)
     }
 }

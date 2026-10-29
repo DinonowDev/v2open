@@ -16,6 +16,7 @@
   <key>NSCameraUsageDescription</key><string>V2Open uses the camera to scan a config QR code.</string>
   <key>NSLocationUsageDescription</key><string>V2Open uses location to read the Wi-Fi BSSID in Diagnostics.</string>
   <key>NSLocationWhenInUseUsageDescription</key><string>V2Open uses location to read the Wi-Fi BSSID in Diagnostics.</string>
+  <key>NSPhotoLibraryUsageDescription</key><string>V2Open reads a photo to scan a config QR code.</string>
   <key>CFBundleURLTypes</key>
   <array>
     <dict>

@@ -18,10 +18,18 @@ pub fn document(settings: &Value, profile: &Value, routes: &[Value]) -> Value {
     ];
     if settings["use_xray_tun"].as_bool().unwrap_or(false) {
         inbounds.insert(0, json!({
+            "tag": "socks-tun",
+            "port": 10809,
+            "listen": "127.0.0.1",
+            "protocol": "socks",
+            "settings": {"udp": true, "auth": "noauth"},
+            "sniffing": sniffing(settings)
+        }));
+        inbounds.insert(0, json!({
             "tag": "tun-in",
             "protocol": "tun",
             "settings": {
-                "name": "xray-tun",
+                "name": "xray0",
                 "MTU": settings["mtu"].as_u64().unwrap_or(1500)
             },
             "sniffing": sniffing(settings)
@@ -621,5 +629,35 @@ mod tests {
         let hello = client_hello("example.com");
         assert_eq!(hello[0], 0x16);
         assert!(hello.windows(b"example.com".len()).any(|w| w == b"example.com"));
+    }
+
+    #[test]
+    fn tun_inbound_is_xray0_with_socks_bridge() {
+        let settings = json!({
+            "use_xray_tun": true,
+            "socks_port": 10808,
+            "http_port": 10807,
+            "lan_sharing": false,
+            "mtu": 1500,
+            "loglevel": "warning"
+        });
+        let profile = json!({
+            "protocol": "vless",
+            "address": "example.com",
+            "port": 443,
+            "uuid": "b1a2c3d4-1111-2222-3333-444455556666",
+            "encryption": "none",
+            "network": "tcp",
+            "tls": "tls",
+            "sni": "example.com"
+        });
+        let doc = document(&settings, &profile, &[]);
+        let inbounds = doc["inbounds"].as_array().cloned().unwrap_or_default();
+        let tun = inbounds.iter().find(|item| item["tag"] == "tun-in").expect("tun inbound");
+        assert_eq!(tun["settings"]["name"], json!("xray0"));
+        assert!(tun.get("settings").and_then(|s| s.get("stack")).is_none());
+        let socks = inbounds.iter().find(|item| item["tag"] == "socks-tun").expect("socks bridge");
+        assert_eq!(socks["port"], json!(10809));
+        assert_eq!(socks["listen"], json!("127.0.0.1"));
     }
 }

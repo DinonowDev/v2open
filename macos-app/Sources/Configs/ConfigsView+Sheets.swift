@@ -95,6 +95,7 @@ extension ConfigsView {
                         .stroke(C.cyan.opacity(0.28), lineWidth: 1)
                 )
                 .padding(.bottom, 14)
+                SheetActionButton(title: model.t("photosLibrary"), icon: "photo.on.rectangle") { importQRFromPhotos() }
                 SheetActionButton(title: model.t("chooseImage"), icon: "photo") { importQRImage() }
                 SheetActionButton(title: model.t("cancel"), quiet: true) { addStep = .none }
               }

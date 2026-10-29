@@ -55,6 +55,11 @@ struct LogsView: View {
                     V2Field(placeholder: model.t("search"), text: $query, latin: true, icon: "magnifyingglass")
                     SettingsCard {
                         let shown = filtered
+                        if !shown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Mix(text: "\(model.t("logClassified")) · \(LogClassifier.shared.classify(shown))", size: 11, color: C.muted)
+                                .padding(.horizontal, 14)
+                                .padding(.top, 10)
+                        }
                         if shown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                             VStack(spacing: 10) {
                                 ZStack {
@@ -101,9 +106,14 @@ struct LogsView: View {
     func highlight(_ raw: String) -> AttributedString {
         var result = AttributedString(raw)
         result.foregroundColor = C.text.opacity(0.82)
+        highlightPattern("\\b\\d{1,3}(?:\\.\\d{1,3}){3}(?::\\d+)?\\b", in: raw, into: &result, color: C.accent)
         highlightPattern("https?://[^\\s]+|vless://[^\\s]+|vmess://[^\\s]+|trojan://[^\\s]+|ss://[^\\s]+|ssr://[^\\s]+", in: raw, into: &result, color: C.cyan)
         highlightPattern("\"[A-Za-z0-9_\\-]+\"", in: raw, into: &result, color: C.speedUp)
-        highlightPattern("\\berror\\b|\\bfatal\\b", in: raw, into: &result, color: C.pingBad)
+        highlightPattern("\\b(error|fatal|panic|failed)\\b", in: raw, into: &result, color: C.pingBad)
+        highlightPattern("\\b(warn|warning|deprecated)\\b", in: raw, into: &result, color: Color.orange)
+        highlightPattern("\\b(info|started|listening)\\b", in: raw, into: &result, color: C.lime)
+        highlightPattern("\\b(dns|doh|dot|query|nameserver)\\b", in: raw, into: &result, color: C.cyan)
+        highlightPattern("\\b(accepted|inbound|from)\\b", in: raw, into: &result, color: C.speedUp)
         return result
     }
 

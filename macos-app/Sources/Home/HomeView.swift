@@ -24,14 +24,27 @@ struct HomeView: View {
                 if connected {
                     ConnectionTimer(since: connectedSince)
                 }
-                PowerConnectButton(
-                    connected: connected,
-                    connecting: connecting,
-                    action: {
-                        if connected { model.disconnectTunnel() }
-                        else { model.connectTunnel() }
-                    }
-                )
+                if model.settings["legacy_slider"] as? Bool == true {
+                    ConnectSlider(
+                        connected: connected,
+                        connecting: connecting,
+                        action: {
+                            if connected { model.disconnectTunnel() }
+                            else { model.connectTunnel() }
+                        }
+                    )
+                    .frame(height: 56)
+                    .padding(.horizontal, 8)
+                } else if model.settings["fab_fixed"] as? Bool != true {
+                    PowerConnectButton(
+                        connected: connected,
+                        connecting: connecting,
+                        action: {
+                            if connected { model.disconnectTunnel() }
+                            else { model.connectTunnel() }
+                        }
+                    )
+                }
             }
             .frame(maxWidth: .infinity)
 
@@ -262,6 +275,48 @@ struct ConnectionTimer: View {
         let m = (s % 3600) / 60
         let sec = s % 60
         return String(format: "%02d:%02d:%02d", h, m, sec)
+    }
+}
+
+struct ConnectSlider: View {
+    @EnvironmentObject var model: Model
+    var connected: Bool
+    var connecting: Bool
+    var action: () -> Void
+    @State private var drag: CGFloat = 0
+
+    var body: some View {
+        GeometryReader { geo in
+            let travel = max(geo.size.width - 52, 1)
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(connected ? C.lime.opacity(0.22) : C.fieldFill)
+                Mix(
+                    text: connecting ? model.t("connecting") : (connected ? model.t("slideOff") : model.t("slideOn")),
+                    size: 13,
+                    weight: .semibold,
+                    color: C.muted
+                )
+                .frame(maxWidth: .infinity)
+                Circle()
+                    .fill(LinearGradient(colors: connected ? [C.lime, C.accent] : [C.cyan, C.accent], startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .frame(width: 44, height: 44)
+                    .overlay(Image(systemName: "power").font(.system(size: 16, weight: .bold)).foregroundStyle(.white))
+                    .offset(x: 6 + drag)
+                    .gesture(
+                        DragGesture()
+                            .onChanged { value in
+                                drag = min(max(0, value.translation.width), travel)
+                            }
+                            .onEnded { _ in
+                                if drag > travel * 0.72 && !connecting { action() }
+                                drag = 0
+                            }
+                    )
+            }
+        }
+        .disabled(connecting)
+        .animation(.easeOut(duration: 0.18), value: drag)
     }
 }
 

@@ -62,6 +62,30 @@ struct SettingsView: View {
                                 ("large", model.t("sizeLarge"))
                             ]
                         ) { model.set("connect_button_size", $0) }
+                        SettingsDivider()
+                        SettingsSelectRow(
+                            title: model.t("appIcon"),
+                            icon: "app",
+                            value: model.settings["app_icon"] as? String ?? "default",
+                            options: AppIconStore.options.map { ($0.0, model.t($0.1)) }
+                        ) { model.set("app_icon", $0) }
+                        SettingsDivider()
+                        SettingsToggleRow(title: model.t("legacySlider"), isOn: model.settings["legacy_slider"] as? Bool ?? false) { model.set("legacy_slider", $0) }
+                        SettingsDivider()
+                        SettingsToggleRow(title: model.t("fabFixed"), isOn: model.settings["fab_fixed"] as? Bool ?? false) { model.set("fab_fixed", $0) }
+                        SettingsDivider()
+                        SettingsToggleRow(title: model.t("fabHomeOnly"), isOn: model.settings["fab_home_only"] as? Bool ?? false) { model.set("fab_home_only", $0) }
+                        SettingsDivider()
+                        SettingsNavRow(icon: "arrow.counterclockwise", title: model.t("resetAppearance"), chevron: false) {
+                            model.set("theme", "dark")
+                            model.set("glassy", false)
+                            model.set("connect_button_size", "medium")
+                            model.set("app_icon", "default")
+                            model.set("legacy_slider", false)
+                            model.set("fab_fixed", false)
+                            model.set("fab_home_only", false)
+                            model.showToast(model.t("saved"), tone: .success)
+                        }
                     }
                     SettingsCard {
                         SettingsToggleRow(title: model.t("insecure"), isOn: model.settings["allow_insecure"] as? Bool ?? false) { model.set("allow_insecure", $0) }
@@ -139,6 +163,8 @@ struct SettingsView: View {
                         SettingsNavRow(icon: "server.rack", title: model.t("dns"), action: { model.push("dns") })
                         SettingsDivider(inset: 58)
                         SettingsNavRow(icon: "antenna.radiowaves.left.and.right", title: model.t("inbounds"), action: { model.push("network_settings") })
+                        SettingsDivider(inset: 58)
+                        SettingsNavRow(icon: "bolt.horizontal.circle", title: model.t("onDemandTitle"), action: { model.push("on_demand") })
                         SettingsDivider(inset: 58)
                         SettingsNavRow(icon: "point.3.connected.trianglepath.dotted", title: model.t("clashApi"), action: { model.push("clash_status") })
                         SettingsDivider(inset: 58)

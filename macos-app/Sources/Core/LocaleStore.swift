@@ -10,15 +10,15 @@ enum LocaleStore {
         ("tr", "Türkçe"),
         ("uk", "Українська"),
         ("vi", "Tiếng Việt"),
-        ("zh", "中文")
+        ("zh", "中文"),
+        ("zh-Hans", "简体中文")
     ]
 
     private static var cache: [String: [String: String]] = [:]
 
     static func string(_ key: String, language: String) -> String {
-        if language == "fa" { return faText[key] ?? enText[key] ?? key }
         if language == "en" { return table("en")[key] ?? enText[key] ?? key }
-        return table(language)[key] ?? table("en")[key] ?? enText[key] ?? key
+        return table(language)[key] ?? (language == "fa" ? faText[key] : nil) ?? table("en")[key] ?? enText[key] ?? key
     }
 
     private static func table(_ code: String) -> [String: String] {

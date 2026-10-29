@@ -69,13 +69,16 @@ struct AppsTunnelView: View {
 }
 
 enum TunnelAppList {
-    static let hostIDE = [
-        "Cursor",
-        "Cursor Helper",
-        "Cursor Helper (Plugin)",
-        "Cursor Helper (Renderer)",
-        "Cursor Helper (GPU)"
-    ]
+    static var hostIDE: [String] {
+        let name = ProcessInfo.processInfo.processName
+        return [
+            name,
+            "\(name) Helper",
+            "\(name) Helper (Plugin)",
+            "\(name) Helper (Renderer)",
+            "\(name) Helper (GPU)"
+        ]
+    }
 
     static func addingHostIDE(to text: String) -> String {
         var seen = Set<String>()

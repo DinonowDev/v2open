@@ -3,7 +3,6 @@ import SwiftUI
 
 struct ToolsView: View {
     @EnvironmentObject var model: Model
-    @State private var demand = ""
     @State private var password = ""
     @State private var result = ""
     var body: some View {
@@ -56,17 +55,12 @@ struct ToolsView: View {
                                 .padding(.horizontal, 14)
                                 .padding(.bottom, 8)
                             SettingsDivider()
-                            SettingsToggleRow(title: model.t("demand"), isOn: model.settings["on_demand"] as? Bool ?? false) { model.set("on_demand", $0) }
-                            SettingsDivider()
                             SettingsToggleRow(title: model.t("icloud"), isOn: model.settings["icloud"] as? Bool ?? false) { model.set("icloud", $0) }
                         }
                         SettingsCard {
+                            SettingsNavRow(icon: "bolt.horizontal.circle", title: model.t("onDemandTitle"), action: { model.push("on_demand") })
+                            SettingsDivider(inset: 58)
                             SettingsNavRow(icon: "slider.horizontal.3", title: model.t("xrayAdvanced"), action: { model.push("xray_advanced") })
-                        }
-                        SettingsSectionLabel(text: model.t("onDemandRules"))
-                        OnDemandRulesEditor(text: $demand) {
-                            model.set("on_demand_text", demand)
-                            model.showToast(model.t("saved"), tone: .success)
                         }
                     }
 
@@ -100,9 +94,6 @@ struct ToolsView: View {
             }
             .scrollIndicators(.hidden)
         }
-        .onAppear {
-            demand = model.settings["on_demand_text"] as? String ?? ""
-        }
     }
     func seal() {
         let panel = NSSavePanel()
@@ -127,84 +118,3 @@ struct ToolsView: View {
     }
 }
 
-struct OnDemandRulesEditor: View {
-    @EnvironmentObject var model: Model
-    @Binding var text: String
-    var onSave: () -> Void
-    @State private var iface = "wifi"
-    @State private var ssid = "*"
-    @State private var action = "connect"
-
-    private var rows: [String] {
-        text.split(separator: "\n").map(String.init).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
-    }
-
-    var body: some View {
-        SettingsCard {
-            if rows.isEmpty {
-                Mix(text: model.t("empty"), size: 13, color: C.muted)
-                    .frame(maxWidth: .infinity)
-                    .padding(14)
-            } else {
-                ForEach(Array(rows.enumerated()), id: \.offset) { index, line in
-                    if index > 0 { SettingsDivider() }
-                    HStack {
-                        Mix(text: line, size: 13)
-                        Spacer()
-                        Button {
-                            var next = rows
-                            if index > 0 {
-                                next.swapAt(index, index - 1)
-                                text = next.joined(separator: "\n")
-                            }
-                        } label: {
-                            Image(systemName: "arrow.up")
-                                .foregroundStyle(C.muted)
-                        }
-                        .buttonStyle(.plain)
-                        Button {
-                            var next = rows
-                            if index + 1 < next.count {
-                                next.swapAt(index, index + 1)
-                                text = next.joined(separator: "\n")
-                            }
-                        } label: {
-                            Image(systemName: "arrow.down")
-                                .foregroundStyle(C.muted)
-                        }
-                        .buttonStyle(.plain)
-                        Button {
-                            var next = rows
-                            next.remove(at: index)
-                            text = next.joined(separator: "\n")
-                        } label: {
-                            Image(systemName: "trash")
-                                .foregroundStyle(C.muted)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                }
-            }
-            SettingsDivider()
-            SettingsSelectRow(title: model.t("demandInterface"), icon: "wifi", value: iface, options: [("wifi", "Wi-Fi"), ("ethernet", "Ethernet"), ("cellular", model.t("cellularMacHint")), ("any", "Any")]) { iface = $0 }
-            V2Field(label: model.t("demandSsid"), placeholder: "home|office|*", text: $ssid, latin: true, icon: "tag")
-                .padding(.horizontal, 14)
-            Mix(text: model.t("demandSsidHint"), size: 11, color: C.muted)
-                .padding(.horizontal, 14)
-                .padding(.bottom, 6)
-            SettingsSelectRow(title: model.t("demandAction"), icon: "bolt", value: action, options: [("connect", model.t("connect")), ("disconnect", model.t("disconnect")), ("ignore", model.t("demandIgnore"))]) { action = $0 }
-            SheetActionButton(title: model.t("addOnDemand"), icon: "plus") {
-                let line = "\(iface),\(ssid.isEmpty ? "*" : ssid),\(action)"
-                var next = rows
-                next.append(line)
-                text = next.joined(separator: "\n")
-            }
-            .padding(.horizontal, 14)
-            SheetActionButton(title: model.t("save"), primary: true, icon: "checkmark", action: onSave)
-                .padding(.horizontal, 14)
-                .padding(.bottom, 14)
-        }
-    }
-}

@@ -48,7 +48,7 @@ fn connection_matrix() {
     let scenarios = [
         Scenario { name: "SOCKS اپ، بدون پروکسی سیستم", mode: "proxy", system_proxy: false, per_app: "off", list: "", via: Via::Socks },
         Scenario { name: "پروکسی سیستم", mode: "proxy", system_proxy: true, per_app: "off", list: "", via: Via::System },
-        Scenario { name: "تونل، به‌جز محیط توسعه", mode: "tun", system_proxy: false, per_app: "exclude", list: "Cursor\nCursor Helper\nCursor Helper (Plugin)\nCursor Helper (Renderer)\nCursor Helper (GPU)", via: Via::Route },
+        Scenario { name: "تونل، به‌جز محیط توسعه", mode: "tun", system_proxy: false, per_app: "exclude", list: "Finder\nTerminal\nSafari", via: Via::Route },
         Scenario { name: "تونل، فقط Safari", mode: "tun", system_proxy: false, per_app: "include", list: "Safari", via: Via::Route },
         Scenario { name: "تونل، همه برنامه‌ها", mode: "tun", system_proxy: false, per_app: "off", list: "", via: Via::Route },
     ];

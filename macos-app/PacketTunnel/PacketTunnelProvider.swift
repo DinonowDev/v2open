@@ -22,6 +22,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private var lastEngine = "sing-box"
     private var lastSocks = 10808
     private var lastLaunch = true
+    private var lastUseXrayTun = false
 
     override func startTunnel(options: [String: NSObject]?, completionHandler: @escaping (Error?) -> Void) {
         let config = (protocolConfiguration as? NETunnelProviderProtocol)?.providerConfiguration ?? [:]
@@ -45,9 +46,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 completionHandler(error)
                 return
             }
-            let bridge = PacketBridge(socksPort: UInt16(self?.lastSocks ?? 10808))
-            bridge.start(flow: self?.packetFlow)
-            self?.bridge = bridge
+            self?.startPacketPath()
             completionHandler(nil)
         }
     }
@@ -80,6 +79,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         let includeLocal = obj["includeLocal"] as? Bool ?? lastIncludeLocal
         let dns = obj["dns"] as? String ?? lastDNS
         let launch = obj["launchCore"] as? Bool ?? lastLaunch
+        lastUseXrayTun = obj["useXrayTun"] as? Bool ?? lastUseXrayTun
         lastPath = path
         lastEngine = engine
         lastSocks = socks
@@ -101,14 +101,12 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             let settings = Self.networkSettings(mtu: mtu, includeLocal: includeLocal, dns: dns)
             setTunnelNetworkSettings(settings) { [weak self] error in
                 if error == nil {
-                    self?.bridge?.stop()
-                    let bridge = PacketBridge(socksPort: UInt16(socks))
-                    bridge.start(flow: self?.packetFlow)
-                    self?.bridge = bridge
+                    self?.startPacketPath()
                 }
                 completionHandler?(Self.reply(ok: error == nil, extra: ["reloaded": true, "settings": error == nil]))
             }
         } else {
+            startPacketPath()
             completionHandler?(Self.reply(ok: true, extra: ["reloaded": true, "settings": false]))
         }
     }
@@ -121,6 +119,18 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         lastDNS = config["dns"] as? String ?? "1.1.1.1"
         lastLaunch = (config["launchCore"] as? Bool) ?? true
         lastEngine = config["engine"] as? String ?? "sing-box"
+        lastUseXrayTun = (config["useXrayTun"] as? Bool) ?? (lastEngine == "xray")
+    }
+
+    /// V2Box PacketTunnel always runs a userspace (gVisor-like) stack that
+    /// feeds NE packets into Xray/sing-box over SOCKS — 10809 when Xray TUN.
+    private func startPacketPath() {
+        bridge?.stop()
+        bridge = nil
+        let port = (lastEngine == "xray" && lastUseXrayTun) ? 10809 : lastSocks
+        let next = PacketBridge(socksPort: UInt16(port))
+        next.start(flow: packetFlow)
+        bridge = next
     }
 
     private func launchCore(configPath: String, engine: String) throws {
@@ -130,10 +140,16 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         guard FileManager.default.isExecutableFile(atPath: binary.path) else {
             throw NSError(domain: "V2Open", code: 2, userInfo: [NSLocalizedDescriptionKey: "\(binaryName) is missing from the app"])
         }
+        let workDir = URL(fileURLWithPath: configPath).deletingLastPathComponent()
+        seedGeo(into: workDir, from: contents.appendingPathComponent("Resources"))
         let process = Process()
         process.executableURL = binary
+        process.currentDirectoryURL = workDir
         process.arguments = ["run", "-c", configPath]
-        let logURL = URL(fileURLWithPath: configPath).deletingLastPathComponent().appendingPathComponent("tunnel.log")
+        var env = ProcessInfo.processInfo.environment
+        env["XRAY_LOCATION_ASSET"] = workDir.path
+        process.environment = env
+        let logURL = workDir.appendingPathComponent("tunnel.log")
         FileManager.default.createFile(atPath: logURL.path, contents: nil)
         let handle = try FileHandle(forWritingTo: logURL)
         process.standardOutput = handle
@@ -143,6 +159,18 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         Thread.sleep(forTimeInterval: 0.35)
         if !process.isRunning {
             throw NSError(domain: "V2Open", code: 3, userInfo: [NSLocalizedDescriptionKey: "\(binaryName) exited inside the packet tunnel"])
+        }
+    }
+
+    private func seedGeo(into dir: URL, from resources: URL) {
+        let fm = FileManager.default
+        for name in ["geoip.dat", "geosite.dat"] {
+            let dest = dir.appendingPathComponent(name)
+            if fm.fileExists(atPath: dest.path) { continue }
+            let src = resources.appendingPathComponent(name)
+            if fm.fileExists(atPath: src.path) {
+                try? fm.copyItem(at: src, to: dest)
+            }
         }
     }
 

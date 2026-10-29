@@ -7,12 +7,46 @@
   <key>CFBundleName</key><string>V2Open</string>
   <key>CFBundleDisplayName</key><string>V2Open</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>1.0.0</string>
-  <key>CFBundleVersion</key><string>1</string>
+  <key>CFBundleShortVersionString</key><string>1.1.0</string>
+  <key>CFBundleVersion</key><string>2</string>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>ATSApplicationFontsPath</key><string>Fonts</string>
   <key>NSPrincipalClass</key><string>NSApplication</string>
   <key>NSCameraUsageDescription</key><string>V2Open uses the camera to scan a config QR code.</string>
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key><string>local.v2open.desktop</string>
+      <key>CFBundleURLSchemes</key>
+      <array>
+        <string>v2open</string>
+        <string>v2box</string>
+        <string>vless</string>
+        <string>vmess</string>
+        <string>trojan</string>
+        <string>ss</string>
+        <string>ssr</string>
+        <string>hy2</string>
+        <string>hysteria</string>
+        <string>hysteria2</string>
+        <string>wireguard</string>
+      </array>
+    </dict>
+  </array>
+  <key>CFBundleDocumentTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleTypeName</key><string>V2Open Package</string>
+      <key>CFBundleTypeRole</key><string>Editor</string>
+      <key>LSHandlerRank</key><string>Owner</string>
+      <key>LSItemContentTypes</key>
+      <array>
+        <string>public.data</string>
+        <string>public.json</string>
+        <string>public.yaml</string>
+      </array>
+    </dict>
+  </array>
 </dict>
 </plist>

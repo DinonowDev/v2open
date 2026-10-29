@@ -66,6 +66,25 @@ final class TunnelManager: NSObject {
         usingSystem = false
     }
 
+    func armOnDemand(enabled: Bool, rules: String) {
+        NETunnelProviderManager.loadAllFromPreferences { managers, _ in
+            let manager = managers?.first ?? NETunnelProviderManager()
+            if manager.protocolConfiguration == nil {
+                let proto = NETunnelProviderProtocol()
+                proto.providerBundleIdentifier = "local.v2open.desktop.PacketTunnel"
+                proto.serverAddress = "V2Open"
+                manager.protocolConfiguration = proto
+                manager.localizedDescription = "V2Open"
+            }
+            manager.onDemandRules = Self.demandRules(rules)
+            manager.isOnDemandEnabled = enabled && !(manager.onDemandRules ?? []).isEmpty
+            manager.isEnabled = true
+            manager.saveToPreferences { _ in
+                manager.loadFromPreferences { _ in }
+            }
+        }
+    }
+
     private static func demandRules(_ text: String) -> [NEOnDemandRule] {
         var rules: [NEOnDemandRule] = []
         for line in text.split(separator: "\n") {
@@ -90,6 +109,20 @@ final class TunnelManager: NSObject {
                 rules.append(rule)
             }
         }
+        if rules.isEmpty {
+            let connect = NEOnDemandRuleConnect()
+            connect.interfaceTypeMatch = .any
+            rules.append(connect)
+        }
+        let evaluate = NEOnDemandRuleEvaluateConnection()
+        evaluate.interfaceTypeMatch = .any
+        let probe = NEEvaluateConnectionRule(
+            matchDomains: ["www.gstatic.com", "connectivitycheck.gstatic.com", "captive.apple.com"],
+            andAction: .connectIfNeeded
+        )
+        probe.useDNSServers = ["1.1.1.1"]
+        evaluate.connectionRules = [probe]
+        rules.append(evaluate)
         return rules
     }
 }

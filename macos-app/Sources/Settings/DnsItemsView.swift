@@ -197,8 +197,16 @@ struct DnsItemEditorView: View {
                 title: model.t("dnsType"),
                 icon: "list.bullet",
                 value: kind,
-                options: [("https", "DoH"), ("tls", "DoT"), ("udp", "UDP"), ("quic", "DoQ")]
+                options: [
+                    ("https", "DoH"),
+                    ("tls", "DoT"),
+                    ("udp", "UDP"),
+                    ("quic", (model.about["doq"] as? Bool == true) ? "DoQ" : "DoQ · \(model.t("notSupported"))")
+                ]
             ) { kind = $0 }
+            if kind == "quic" && model.about["doq"] as? Bool != true {
+                Mix(text: model.t("doqRuntimeHint"), size: 11, color: C.muted)
+            }
             V2Field(label: model.t("server"), placeholder: "1.1.1.1", text: $server, latin: true, icon: "server.rack")
             if kind == "https" {
                 V2Field(label: model.t("dnsPath"), placeholder: "/dns-query", text: $path, latin: true, icon: "link")
@@ -231,7 +239,10 @@ struct DnsItemEditorView: View {
         }
         .padding(20)
         .frame(width: 360)
-        .onAppear { load() }
+        .onAppear {
+            model.refreshAbout()
+            load()
+        }
     }
 
     func load() {

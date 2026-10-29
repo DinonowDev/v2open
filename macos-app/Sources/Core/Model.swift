@@ -9,6 +9,7 @@ final class Model: ObservableObject {
     @Published var draft: [String: Any] = [:]
     @Published var toast: AppToastItem?
     @Published var pingingIds: Set<String> = []
+    @Published var about: [String: Any] = [:]
 
     private var booted = false
     private var pingLoopTask: Task<Void, Never>?
@@ -56,8 +57,10 @@ final class Model: ObservableObject {
         }
         if code != 0 { DevLog.error("boot", "init failed: \(code)") }
         UILock.acquire()
-        BackgroundScheduler.syncLaunchAgent(enabled: false)
         refresh()
+        refreshAbout()
+        syncBackgroundScheduler()
+        armSystemOnDemand()
         startAutoPing()
         tickActivity.start { [weak self] in
             Task { @MainActor in
@@ -155,6 +158,58 @@ final class Model: ObservableObject {
     func set(_ key: String, _ value: Any) {
         _ = call("set", ["key": key, "value": value])
         refresh()
+        if ["geo_auto_update", "on_demand", "persist_tunnel", "on_demand_text"].contains(key) {
+            syncBackgroundScheduler()
+            armSystemOnDemand()
+        }
+    }
+
+    func refreshAbout() {
+        about = call("about")["data"] as? [String: Any] ?? [:]
+    }
+
+    func syncBackgroundScheduler() {
+        BackgroundScheduler.installIfNeeded(
+            geoAuto: settings["geo_auto_update"] as? Bool == true,
+            onDemand: settings["on_demand"] as? Bool == true,
+            persist: settings["persist_tunnel"] as? Bool == true
+        )
+    }
+
+    func armSystemOnDemand() {
+        guard Self.hasPacketTunnelExtension else { return }
+        TunnelManager.shared.armOnDemand(
+            enabled: settings["on_demand"] as? Bool == true,
+            rules: settings["on_demand_text"] as? String ?? ""
+        )
+    }
+
+    func handleOpenURL(_ url: URL) {
+        if url.isFileURL {
+            guard let data = try? Data(contentsOf: url) else { return }
+            if data.starts(with: [0x56, 0x32, 0x4F, 0x50, 0x45, 0x4E, 0x31]) {
+                showToast(t("filePassword"), tone: .warning)
+                push("backup_settings")
+                return
+            }
+            if let text = String(data: data, encoding: .utf8) {
+                if let err = invoke("import", ["text": text]) {
+                    showToast(err, tone: .error)
+                } else {
+                    showToast(t("imported"), tone: .success)
+                }
+            }
+            return
+        }
+        var text = url.absoluteString
+        if url.scheme == "v2open", let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems {
+            if let payload = items.first(where: { $0.name == "text" })?.value { text = payload }
+        }
+        if let err = invoke("import", ["text": text]) {
+            showToast(err, tone: .error)
+        } else {
+            showToast(t("imported"), tone: .success)
+        }
     }
 
     func go(_ name: String) {

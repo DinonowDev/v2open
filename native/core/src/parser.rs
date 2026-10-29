@@ -918,6 +918,23 @@ fn clash_node(map: &std::collections::HashMap<String, String>) -> Option<Value> 
             node["password"] = json!(map.get("auth_str").or_else(|| map.get("auth-str")).or_else(|| map.get("password")).cloned().unwrap_or_default());
             node["security"] = json!("tls");
         }
+        "tuic" => {
+            node["protocol"] = json!("tuic");
+            node["uuid"] = json!(map.get("uuid").cloned().unwrap_or_default());
+            node["password"] = json!(map.get("password").cloned().unwrap_or_default());
+            node["security"] = json!("tls");
+        }
+        "wireguard" => {
+            node["protocol"] = json!("wireguard");
+            node["private_key"] = json!(map.get("private-key").or_else(|| map.get("private_key")).cloned().unwrap_or_default());
+            node["peer_public_key"] = json!(map.get("public-key").or_else(|| map.get("public_key")).cloned().unwrap_or_default());
+            node["local_address"] = json!(map.get("ip").cloned().unwrap_or_default());
+        }
+        "ssh" => {
+            node["protocol"] = json!("ssh");
+            node["user"] = json!(map.get("username").or_else(|| map.get("user")).cloned().unwrap_or_default());
+            node["password"] = json!(map.get("password").cloned().unwrap_or_default());
+        }
         "socks5" | "socks" | "http" => {
             node["protocol"] = json!(if kind.starts_with("http") { "http" } else { "socks" });
             node["user"] = json!(map.get("username").cloned().unwrap_or_default());
@@ -928,17 +945,94 @@ fn clash_node(map: &std::collections::HashMap<String, String>) -> Option<Value> 
     if let Some(net) = map.get("network") {
         node["network"] = json!(net);
     }
+    if let Some(path) = map.get("ws-opts.path")
+        .or_else(|| map.get("ws-path"))
+        .or_else(|| map.get("h2-opts.path"))
+        .or_else(|| map.get("http-opts.path"))
+        .or_else(|| map.get("path"))
+    {
+        node["path"] = json!(path);
+    }
+    if let Some(host) = map.get("ws-opts.headers.Host")
+        .or_else(|| map.get("ws-opts.headers.host"))
+        .or_else(|| map.get("ws-host"))
+        .or_else(|| map.get("h2-opts.host"))
+        .or_else(|| map.get("host"))
+    {
+        node["host"] = json!(host);
+    }
+    if let Some(svc) = map.get("grpc-opts.grpc-service-name")
+        .or_else(|| map.get("grpc-service-name"))
+        .or_else(|| map.get("serviceName"))
+    {
+        node["service_name"] = json!(svc);
+        node["network"] = json!("grpc");
+    }
+    if let Some(pbk) = map.get("reality-opts.public-key")
+        .or_else(|| map.get("reality-public-key"))
+        .or_else(|| map.get("public-key"))
+        .or_else(|| map.get("pbk"))
+    {
+        if kind == "vless" || kind == "trojan" {
+            node["pbk"] = json!(pbk);
+            node["tls"] = json!("reality");
+            node["security"] = json!("reality");
+        }
+    }
+    if let Some(sid) = map.get("reality-opts.short-id")
+        .or_else(|| map.get("reality-short-id"))
+        .or_else(|| map.get("short-id"))
+        .or_else(|| map.get("sid"))
+    {
+        node["sid"] = json!(sid);
+    }
+    if map.get("flow").is_some() {
+        node["flow"] = json!(map.get("flow").cloned().unwrap_or_default());
+    }
     if map.get("tls").map(|s| s == "true").unwrap_or(false) || map.get("skip-cert-verify").is_some() {
         if node["security"] == json!("none") {
             node["security"] = json!("tls");
         }
+        if node["tls"] != json!("reality") {
+            node["tls"] = json!("tls");
+        }
     }
-    if let Some(sni) = map.get("sni").or_else(|| map.get("servername")) {
+    if flag(map.get("skip-cert-verify").map(|s| s.as_str()).unwrap_or("")) {
+        node["insecure"] = json!(true);
+    }
+    if let Some(sni) = map.get("sni")
+        .or_else(|| map.get("servername"))
+        .or_else(|| map.get("server-name"))
+    {
         node["sni"] = json!(sni);
         node["serverName"] = json!(sni);
     }
     if let Some(fp) = map.get("client-fingerprint").or_else(|| map.get("fingerprint")) {
         node["fingerprint"] = json!(fp);
+        node["fp"] = json!(fp);
+    }
+    if let Some(alpn) = map.get("alpn") {
+        node["alpn"] = json!(alpn);
+    }
+    if let Some(enc) = map.get("packet-encoding") {
+        node["packet_encoding"] = json!(enc);
+    }
+    if let Some(up) = map.get("up").or_else(|| map.get("up-mbps")) {
+        node["up_mbps"] = json!(up.parse::<u64>().unwrap_or(0));
+    }
+    if let Some(down) = map.get("down").or_else(|| map.get("down-mbps")) {
+        node["down_mbps"] = json!(down.parse::<u64>().unwrap_or(0));
+    }
+    if let Some(plugin) = map.get("plugin") {
+        node["plugin"] = json!(plugin);
+    }
+    if let Some(mode) = map.get("plugin-opts.mode") {
+        node["obfs"] = json!(mode);
+    }
+    if let Some(host) = map.get("plugin-opts.host") {
+        if node["host"].as_str().unwrap_or("").is_empty() {
+            node["host"] = json!(host);
+        }
     }
     Some(node)
 }
@@ -954,6 +1048,7 @@ pub fn parse_clash_yaml(text: &str) -> Vec<Value> {
     }
     let mut nodes = Vec::new();
     let mut current: Option<std::collections::HashMap<String, String>> = None;
+    let mut nests: Vec<(usize, String)> = Vec::new();
     let mut in_proxies = body.contains("proxies:");
     if !body.contains("proxies:") && looks {
         in_proxies = true;
@@ -974,6 +1069,7 @@ pub fn parse_clash_yaml(text: &str) -> Vec<Value> {
                     nodes.push(node);
                 }
             }
+            nests.clear();
             in_proxies = trimmed == "proxies:";
             continue;
         }
@@ -986,6 +1082,7 @@ pub fn parse_clash_yaml(text: &str) -> Vec<Value> {
                     nodes.push(node);
                 }
             }
+            nests.clear();
             if let Some(start) = trimmed.find('{') {
                 if let Some(node) = clash_node(&parse_inline_map(&trimmed[start..])) {
                     nodes.push(node);
@@ -999,6 +1096,7 @@ pub fn parse_clash_yaml(text: &str) -> Vec<Value> {
                     nodes.push(node);
                 }
             }
+            nests.clear();
             let rest = trimmed.trim_start_matches("- ").trim();
             let mut map = std::collections::HashMap::new();
             if let Some((k, v)) = rest.split_once(':') {
@@ -1008,8 +1106,20 @@ pub fn parse_clash_yaml(text: &str) -> Vec<Value> {
             continue;
         }
         if let Some(map) = current.as_mut() {
+            let indent = line.len() - line.trim_start().len();
+            while nests.last().map(|(i, _)| *i >= indent).unwrap_or(false) {
+                nests.pop();
+            }
             if let Some((k, v)) = trimmed.split_once(':') {
-                map.insert(k.trim().to_string(), yaml_unquote(v));
+                let key = k.trim().to_string();
+                let val = yaml_unquote(v);
+                if val.is_empty() && !v.contains('{') {
+                    nests.push((indent, key));
+                } else {
+                    let prefix: String = nests.iter().map(|(_, name)| name.as_str()).collect::<Vec<_>>().join(".");
+                    let full = if prefix.is_empty() { key } else { format!("{prefix}.{key}") };
+                    map.insert(full, val);
+                }
             }
         }
     }

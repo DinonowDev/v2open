@@ -11,15 +11,23 @@ final class AppTerminator: NSObject, NSApplicationDelegate {
         return !keep
     }
 
+    func application(_ sender: NSApplication, open urls: [URL]) {
+        NotificationCenter.default.post(name: .v2openOpenURLs, object: urls)
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         let settings = (v2RPC(method: "state")["data"] as? [String: Any])?["settings"] as? [String: Any] ?? [:]
         UILock.release()
+        let persist = settings["persist_tunnel"] as? Bool == true
+        let onDemand = settings["on_demand"] as? Bool == true
         BackgroundScheduler.installIfNeeded(
             geoAuto: settings["geo_auto_update"] as? Bool == true,
-            onDemand: settings["on_demand"] as? Bool == true,
-            persist: settings["persist_tunnel"] as? Bool == true
+            onDemand: onDemand,
+            persist: persist
         )
-        _ = v2RPC(method: "disconnect")
+        if !persist && !onDemand {
+            _ = v2RPC(method: "disconnect")
+        }
         return .terminateNow
     }
 }
@@ -41,6 +49,11 @@ struct V2OpenApp: App {
                 .environmentObject(model)
                 .background(WindowChrome(light: model.themeLight))
                 .onAppear { model.boot() }
+                .onReceive(NotificationCenter.default.publisher(for: .v2openOpenURLs)) { note in
+                    for url in note.object as? [URL] ?? [] {
+                        model.handleOpenURL(url)
+                    }
+                }
                 .onReceive(NotificationCenter.default.publisher(for: NSWorkspace.willSleepNotification)) { _ in
                     if model.settings["stop_on_sleep"] as? Bool ?? true {
                         model.disconnectTunnel()
@@ -71,6 +84,10 @@ final class WindowMoveView: NSView {
     override func mouseDown(with event: NSEvent) {
         window?.performDrag(with: event)
     }
+}
+
+extension Notification.Name {
+    static let v2openOpenURLs = Notification.Name("v2open.openURLs")
 }
 
 func registerFonts() {

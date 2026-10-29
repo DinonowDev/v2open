@@ -152,28 +152,100 @@ struct EditorView: View {
     @ViewBuilder private var chainHopsEditor: some View {
         let hops = hopsList()
         ForEach(hops.indices, id: \.self) { index in
-            VStack(alignment: .leading, spacing: 8) {
-                Mix(text: "\(model.t("hop")) \(index + 1)", size: 12, weight: .semibold)
-                hopField(index, "protocol", "Protocol")
-                hopField(index, "address", model.fa ? "آدرس" : "Address")
-                hopField(index, "port", model.fa ? "پورت" : "Port")
-                hopField(index, "uuid", "UUID")
-                hopField(index, "password", "Password")
-                SheetActionButton(title: model.t("deleteRule"), danger: true, icon: "trash") {
-                    var next = hopsList()
-                    if next.indices.contains(index) {
-                        next.remove(at: index)
-                        model.draft["chain"] = next
-                    }
-                }
-            }
-            .padding(.bottom, 8)
+            hopCard(index)
         }
         SheetActionButton(title: model.t("addHop"), icon: "plus") {
             var next = hopsList()
-            next.append(["protocol": "vless", "address": "", "port": 443, "uuid": "", "password": ""])
+            next.append(["protocol": "vless", "address": "", "port": 443, "uuid": "", "password": "", "network": "tcp", "tls": "none"])
             model.draft["chain"] = next
         }
+    }
+
+    @ViewBuilder private func hopCard(_ index: Int) -> some View {
+        let proto = hopValue(index, "protocol", "vless")
+        let network = hopValue(index, "network", "tcp")
+        let tls = hopValue(index, "tls", "none")
+        let proxy = ["vless", "vmess", "trojan", "hysteria", "hysteria2"].contains(proto)
+        VStack(alignment: .leading, spacing: 10) {
+            Mix(text: "\(model.t("hop")) \(index + 1)", size: 13, weight: .bold)
+            SoftSelect(
+                title: model.t("protocol"),
+                value: proto,
+                options: ["vless", "vmess", "trojan", "shadowsocks", "hysteria2", "hysteria", "socks", "http", "ssh"].map { ($0, $0) },
+                wide: true
+            ) { setHop(index, "protocol", $0) }
+
+            Mix(text: model.t("server"), size: 11, color: C.muted)
+            hopField(index, "address", model.fa ? "آدرس" : "Address")
+            hopField(index, "port", model.fa ? "پورت" : "Port")
+
+            Mix(text: model.t("identity"), size: 11, color: C.muted)
+            if proto == "vless" || proto == "vmess" {
+                hopField(index, "uuid", "UUID")
+                hopField(index, "flow", "Flow")
+            }
+            if ["trojan", "shadowsocks", "hysteria2", "hysteria", "socks", "http", "ssh"].contains(proto) {
+                hopField(index, "password", "Password")
+            }
+            if proto == "shadowsocks" {
+                hopField(index, "method", "Method")
+            }
+            if proto == "ssh" {
+                hopField(index, "username", "User")
+            }
+            if proto == "hysteria" || proto == "hysteria2" {
+                hopField(index, "up_mbps", "Up Mbps")
+                hopField(index, "down_mbps", "Down Mbps")
+                hopField(index, "obfs", "Obfs")
+                hopField(index, "obfs_password", "Obfs password")
+            }
+
+            if proxy {
+                Mix(text: model.t("transport"), size: 11, color: C.muted)
+                SoftSelect(
+                    title: model.t("network"),
+                    value: network,
+                    options: ["tcp", "ws", "grpc", "h2", "httpupgrade", "xhttp", "quic"].map { ($0, $0) },
+                    wide: true
+                ) { setHop(index, "network", $0) }
+                hopField(index, "host", "Host")
+                hopField(index, "path", "Path")
+                if network == "grpc" {
+                    hopField(index, "service_name", "gRPC service")
+                }
+                if network == "xhttp" {
+                    hopField(index, "mode", "XHTTP mode")
+                    hopField(index, "x_padding", "XHTTP padding")
+                    hopField(index, "xhttp_extra", "XHTTP extra JSON")
+                }
+
+                Mix(text: model.t("security"), size: 11, color: C.muted)
+                SoftSelect(
+                    title: "TLS",
+                    value: tls,
+                    options: ["none", "tls", "reality"].map { ($0, $0) },
+                    wide: true
+                ) { setHop(index, "tls", $0) }
+                hopField(index, "sni", "SNI")
+                hopField(index, "alpn", "ALPN")
+                hopField(index, "fp", "Fingerprint")
+                if tls == "reality" {
+                    hopField(index, "pbk", "Reality public key")
+                    hopField(index, "sid", "Short ID")
+                    hopField(index, "spx", "SpiderX")
+                    hopField(index, "pqv", "ML-DSA verify")
+                }
+            }
+
+            SheetActionButton(title: model.t("deleteRule"), danger: true, icon: "trash") {
+                var next = hopsList()
+                if next.indices.contains(index) {
+                    next.remove(at: index)
+                    model.draft["chain"] = next
+                }
+            }
+        }
+        .padding(.bottom, 8)
     }
 
     private func hopsList() -> [[String: Any]] {
@@ -186,6 +258,20 @@ struct EditorView: View {
             return arr
         }
         return []
+    }
+
+    func hopValue(_ index: Int, _ key: String, _ fallback: String) -> String {
+        let hops = hopsList()
+        guard hops.indices.contains(index) else { return fallback }
+        let value = "\(hops[index][key] ?? "")"
+        return value.isEmpty ? fallback : value
+    }
+
+    func setHop(_ index: Int, _ key: String, _ value: String) {
+        var hops = hopsList()
+        guard hops.indices.contains(index) else { return }
+        hops[index][key] = value
+        model.draft["chain"] = hops
     }
 
     func hopField(_ index: Int, _ key: String, _ title: String) -> some View {

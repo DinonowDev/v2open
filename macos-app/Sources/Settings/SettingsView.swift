@@ -94,6 +94,16 @@ struct SettingsView: View {
                             hint: model.t("smartConnectHint"),
                             isOn: model.settings["smart_connect"] as? Bool ?? false
                         ) { model.set("smart_connect", $0) }
+                        SettingsDivider()
+                        SettingsSelectRow(
+                            title: model.t("smartStrategy"),
+                            icon: "flag.checkered",
+                            value: model.settings["smart_strategy"] as? String ?? "winner",
+                            options: [
+                                ("winner", model.t("smartWinner")),
+                                ("urltest", model.t("smartUrltest"))
+                            ]
+                        ) { model.set("smart_strategy", $0) }
                     }
                 }
 

@@ -7,6 +7,7 @@ struct BackupSettingsView: View {
     @State private var renameId = ""
     @State private var renameText = ""
     @State private var packagePassword = ""
+    @State private var allowForeign = false
 
     var body: some View {
         sub(model.t("backup")) {
@@ -17,7 +18,8 @@ struct BackupSettingsView: View {
                             .padding(14)
                         Mix(text: model.t("v2boxPasswordHint"), size: 11, color: C.muted)
                             .padding(.horizontal, 14)
-                            .padding(.bottom, 10)
+                        SettingsToggleRow(title: model.t("allowForeignDevice"), isOn: allowForeign) { allowForeign = $0 }
+                            .padding(.bottom, 6)
                     }
                     SettingsCard {
                         SettingsNavRow(icon: "square.and.arrow.up", title: model.t("backupNow"), chevron: false) {
@@ -127,7 +129,7 @@ struct BackupSettingsView: View {
         panel.allowsMultipleSelection = false
         panel.allowedContentTypes = [UTType(filenameExtension: "v2box") ?? .data, .json, .item]
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        let response = model.call("import_package", ["path": url.path, "password": packagePassword])
+        let response = model.call("import_package", ["path": url.path, "password": packagePassword, "allow_foreign": allowForeign])
         model.mergeState(from: response)
         model.showToast(response["ok"] as? Bool == false ? (response["error"] as? String ?? model.t("failed")) : model.t("imported"), tone: response["ok"] as? Bool == false ? .error : .success)
     }

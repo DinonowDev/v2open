@@ -124,10 +124,77 @@ fn physical_bind_index() -> Option<u32> {
     if idx == 0 { None } else { Some(idx) }
 }
 
+fn icmp_checksum(buf: &[u8]) -> u16 {
+    let mut sum = 0u32;
+    let mut chunks = buf.chunks_exact(2);
+    for chunk in chunks.by_ref() {
+        sum += u16::from_be_bytes([chunk[0], chunk[1]]) as u32;
+    }
+    if let Some(&b) = chunks.remainder().first() {
+        sum += (b as u32) << 8;
+    }
+    while sum >> 16 != 0 {
+        sum = (sum & 0xffff) + (sum >> 16);
+    }
+    !sum as u16
+}
+
+fn icmp_echo(addr: SocketAddr, echo_type: u8, reply_type: u8, timeout: Duration) -> Option<u64> {
+    use socket2::{Domain, Protocol, SockAddr, Socket, Type};
+    let (domain, proto) = if addr.is_ipv4() {
+        (Domain::IPV4, Protocol::ICMPV4)
+    } else {
+        (Domain::IPV6, Protocol::ICMPV6)
+    };
+    let socket = Socket::new(domain, Type::DGRAM, Some(proto)).ok()?;
+    socket.set_read_timeout(Some(timeout)).ok()?;
+    let mut packet = [0u8; 16];
+    packet[0] = echo_type;
+    packet[4] = 0x76;
+    packet[5] = 0x32;
+    packet[6] = 0x00;
+    packet[7] = 0x01;
+    if addr.is_ipv4() {
+        let sum = icmp_checksum(&packet);
+        packet[2] = (sum >> 8) as u8;
+        packet[3] = (sum & 0xff) as u8;
+    }
+    let started = Instant::now();
+    socket.send_to(&packet, &SockAddr::from(addr)).ok()?;
+    let mut buf = [std::mem::MaybeUninit::<u8>::uninit(); 64];
+    let (n, _) = socket.recv_from(&mut buf).ok()?;
+    if n >= 8 {
+        let kind = unsafe { buf[0].assume_init() };
+        if kind == reply_type || kind == echo_type {
+            return Some(started.elapsed().as_millis().max(1) as u64);
+        }
+    }
+    None
+}
+
+fn icmp_echo_v4(ip: std::net::Ipv4Addr, timeout: Duration) -> Option<u64> {
+    icmp_echo(SocketAddr::from((ip, 0)), 8, 0, timeout)
+}
+
+fn icmp_echo_v6(ip: std::net::Ipv6Addr, timeout: Duration) -> Option<u64> {
+    icmp_echo(SocketAddr::from((ip, 0)), 128, 129, timeout)
+}
+
 fn icmp_ping_ms(host: &str) -> i64 {
     let host = host.trim();
     if host.is_empty() {
         return -1;
+    }
+    if let Ok(addrs) = (host, 0u16).to_socket_addrs() {
+        for addr in addrs {
+            let ms = match addr.ip() {
+                std::net::IpAddr::V4(ip) => icmp_echo_v4(ip, Duration::from_millis(1500)),
+                std::net::IpAddr::V6(ip) => icmp_echo_v6(ip, Duration::from_millis(1500)),
+            };
+            if let Some(ms) = ms {
+                return ms as i64;
+            }
+        }
     }
     let output = Command::new("/sbin/ping")
         .args(["-c", "1", "-t", "2", host])
@@ -154,9 +221,11 @@ fn ping_race(targets: &[(String, String, u16)], prefer_ipv6: bool) -> Vec<(Strin
                 let host = host.clone();
                 let port = *port;
                 scope.spawn(move || {
-                    let ms = tcp_connect_ms(&host, port, Duration::from_secs(2), prefer_ipv6)
+                    let tcp = tcp_connect_ms(&host, port, Duration::from_secs(2), prefer_ipv6)
                         .map(|v| v as i64)
                         .unwrap_or(-1);
+                    let icmp = icmp_ping_ms(&host);
+                    let ms = [tcp, icmp].into_iter().filter(|v| *v > 0).min().unwrap_or(-1);
                     (id, ms)
                 })
             })
@@ -175,14 +244,34 @@ fn cmd_text(bin: &str, args: &[&str]) -> String {
 }
 
 fn clash_http(port: u16, path: &str) -> Result<Value, String> {
+    clash_request("GET", port, path, None)
+}
+
+fn clash_request(method: &str, port: u16, path: &str, body: Option<&str>) -> Result<Value, String> {
     let url = format!("http://127.0.0.1:{port}{path}");
-    let body = ureq::get(&url)
-        .timeout(Duration::from_secs(2))
-        .call()
-        .map_err(|e| e.to_string())?
-        .into_string()
-        .map_err(|e| e.to_string())?;
-    serde_json::from_str(&body).or_else(|_| Ok(json!({"raw": body})))
+    let req = ureq::request(method, &url).timeout(Duration::from_secs(6));
+    let response = if let Some(body) = body {
+        req.set("Content-Type", "application/json").send_string(body)
+    } else {
+        req.call()
+    }
+    .map_err(|e| e.to_string())?;
+    let text = response.into_string().map_err(|e| e.to_string())?;
+    if text.trim().is_empty() {
+        return Ok(json!({"ok": true}));
+    }
+    serde_json::from_str(&text).or_else(|_| Ok(json!({"raw": text})))
+}
+
+fn percent_encode(raw: &str) -> String {
+    let mut out = String::new();
+    for b in raw.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => out.push(b as char),
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
 }
 
 fn tcp_connect_addr(addr: SocketAddr, timeout: Duration, bind_index: Option<u32>) -> std::io::Result<TcpStream> {
@@ -291,6 +380,7 @@ fn defaults() -> Value {
         "sub_last_auto_update": 0,
         "sub_last_error": "",
         "smart_connect": false,
+        "smart_strategy": "winner",
         "smart_interval": "1m",
         "smart_tolerance": 50,
         "probe_url": "https://www.gstatic.com/generate_204",
@@ -501,9 +591,61 @@ impl Core {
         let _ = fs::write(&self.path, serde_json::to_string_pretty(&data).unwrap_or_else(|_| "{}".into()));
         if self.settings["icloud"].as_bool().unwrap_or(false) {
             if let Some(cloud) = crate::platform::icloud_library() {
-                let _ = fs::copy(&self.path, cloud);
+                let _ = fs::copy(&self.path, &cloud);
+                self.write_icloud_catalog(cloud.parent().unwrap_or(Path::new(".")));
             }
         }
+    }
+
+    fn write_icloud_catalog(&self, dir: &Path) {
+        let _ = fs::create_dir_all(dir);
+        let catalog = self.package_catalog();
+        if let Some(files) = catalog["catalog"].as_object() {
+            for (name, value) in files {
+                let path = dir.join(name);
+                let _ = fs::write(path, serde_json::to_string_pretty(value).unwrap_or_else(|_| "{}".into()));
+            }
+        }
+        let _ = fs::write(dir.join("meta.json"), serde_json::to_string_pretty(&catalog["meta"]).unwrap_or_else(|_| "{}".into()));
+    }
+
+    fn package_catalog(&self) -> Value {
+        json!({
+            "format": "v2box",
+            "version": 2,
+            "device_id": self.settings["hwid"],
+            "created_at": now(),
+            "meta": {
+                "app": "V2Open",
+                "device_id": self.settings["hwid"],
+                "created_at": now(),
+                "files": ["settings.json", "groups.json", "routes.json", "dns.json", "balancers.json"]
+            },
+            "catalog": {
+                "settings.json": self.settings,
+                "groups.json": self.groups,
+                "routes.json": self.routes,
+                "dns.json": self.settings["dns_items"],
+                "balancers.json": self.settings["xray_balancers"]
+            },
+            "settings": self.settings,
+            "groups": self.groups,
+            "routes": self.routes,
+            "dns_items": self.settings["dns_items"],
+            "xray_balancers": self.settings["xray_balancers"]
+        })
+    }
+
+    fn flatten_catalog(&self, data: &Value) -> Value {
+        let cat = &data["catalog"];
+        json!({
+            "device_id": data["device_id"],
+            "settings": cat.get("settings.json").cloned().unwrap_or(data["settings"].clone()),
+            "groups": cat.get("groups.json").cloned().unwrap_or(data["groups"].clone()),
+            "routes": cat.get("routes.json").cloned().unwrap_or(data["routes"].clone()),
+            "dns_items": cat.get("dns.json").cloned().unwrap_or(data["dns_items"].clone()),
+            "xray_balancers": cat.get("balancers.json").cloned().unwrap_or(data["xray_balancers"].clone())
+        })
     }
 
     pub fn state(&mut self) -> Value {
@@ -845,24 +987,15 @@ impl Core {
                 if password.len() < 4 {
                     return Err("password is required for .v2box".into());
                 }
-                let payload = json!({
-                    "format": "v2box",
-                    "version": 1,
-                    "device_id": self.settings["hwid"],
-                    "created_at": now(),
-                    "settings": self.settings,
-                    "groups": self.groups,
-                    "routes": self.routes,
-                    "dns_items": self.settings["dns_items"],
-                    "xray_balancers": self.settings["xray_balancers"]
-                });
+                let payload = self.package_catalog();
                 let bytes = crate::vault::seal(password, &serde_json::to_vec(&payload).map_err(|e| e.to_string())?)?;
                 fs::write(path, bytes).map_err(|e| e.to_string())?;
-                Ok(json!({"path": path, "format": "v2box"}))
+                Ok(json!({"path": path, "format": "v2box", "files": payload["catalog"].as_object().map(|o| o.len()).unwrap_or(0)}))
             }
             "import_package" => {
                 let path = args["path"].as_str().unwrap_or("");
                 let password = args["password"].as_str().unwrap_or("");
+                let allow_foreign = args["allow_foreign"].as_bool().unwrap_or(false);
                 let bytes = fs::read(path).map_err(|e| e.to_string())?;
                 let data: Value = if bytes.starts_with(b"V2OPEN1") {
                     let plain = crate::vault::open(password, &bytes)?;
@@ -872,7 +1005,18 @@ impl Core {
                         serde_json::from_str(&String::from_utf8_lossy(&bytes))
                     }).map_err(|e| e.to_string())?
                 };
-                let payload = if data.get("payload").is_some() { data["payload"].clone() } else { data };
+                let payload = if data.get("catalog").is_some() {
+                    self.flatten_catalog(&data)
+                } else if data.get("payload").is_some() {
+                    data["payload"].clone()
+                } else {
+                    data
+                };
+                let foreign = payload["device_id"].as_str().unwrap_or("");
+                let mine = self.settings["hwid"].as_str().unwrap_or("");
+                if !foreign.is_empty() && !mine.is_empty() && foreign != mine && !allow_foreign {
+                    return Err("this backup belongs to another device".into());
+                }
                 self.restore_payload(&payload);
                 Ok(self.state())
             }
@@ -884,6 +1028,30 @@ impl Core {
             ),
             "diagnostics" => self.diagnostics(),
             "clash_status" => self.clash_status(),
+            "clash_select" => {
+                let port = self.settings["clash_port"].as_u64().unwrap_or(9097) as u16;
+                let group = args["group"].as_str().unwrap_or("GLOBAL");
+                let name = args["name"].as_str().ok_or("missing proxy name")?;
+                clash_request("PUT", port, &format!("/proxies/{}", percent_encode(group)), Some(&format!("{{\"name\":{}}}", serde_json::to_string(name).unwrap_or_else(|_| "\"\"".into()))))?;
+                self.clash_status()
+            }
+            "clash_close" => {
+                let port = self.settings["clash_port"].as_u64().unwrap_or(9097) as u16;
+                let id = args["id"].as_str().unwrap_or("");
+                if id.is_empty() {
+                    clash_request("DELETE", port, "/connections", None)?;
+                } else {
+                    clash_request("DELETE", port, &format!("/connections/{}", percent_encode(id)), None)?;
+                }
+                self.clash_status()
+            }
+            "clash_delay" => {
+                let port = self.settings["clash_port"].as_u64().unwrap_or(9097) as u16;
+                let name = args["name"].as_str().ok_or("missing proxy name")?;
+                let url = percent_encode(self.settings["probe_url"].as_str().unwrap_or("https://www.gstatic.com/generate_204"));
+                clash_http(port, &format!("/proxies/{}/delay?url={}&timeout=4000", percent_encode(name), url))
+            }
+            "about" => self.about_info(),
             "mark_connected" => {
                 self.runtime.connected = true;
                 self.runtime.phase = "connected".into();
@@ -1386,6 +1554,12 @@ impl Core {
         if profiles.iter().any(|p| p["ping"].as_i64().unwrap_or(-1) > 0) {
             profiles.retain(|p| p["ping"].as_i64().unwrap_or(-1) > 0);
         }
+        let strategy = self.settings["smart_strategy"].as_str().unwrap_or("winner");
+        if strategy != "urltest" && !profiles.is_empty() {
+            profiles.truncate(1);
+        } else if strategy == "urltest" {
+            profiles.truncate(8);
+        }
     }
 
     fn find_profile(&self, id: &str) -> Option<Value> {
@@ -1462,8 +1636,12 @@ impl Core {
             crate::sidecar::stop(&mut self.bridges);
             return Err(err.lines().last().unwrap_or("invalid configuration").to_string());
         }
-        self.runtime.smart = smart || profiles.len() > 1;
-        self.runtime.profile_name = if self.runtime.smart { "Smart".into() } else { profiles[0]["remark"].as_str().unwrap_or("").into() };
+        self.runtime.smart = profiles.len() > 1;
+        self.runtime.profile_name = if self.runtime.smart {
+            "Smart".into()
+        } else {
+            profiles[0]["remark"].as_str().unwrap_or("").into()
+        };
         self.direct_bridge = if routed && profiles.len() == 1 {
             profiles[0]["port"].as_u64().unwrap_or(0) as u16
         } else {
@@ -1933,9 +2111,22 @@ impl Core {
             return Err("no profile".into());
         }
         if measure {
-            for id in &ids {
-                let ping = self.ping_one(id);
-                self.set_ping(id, ping);
+            let prefer_ipv6 = self.settings["prefer_ipv6"].as_bool().unwrap_or(false);
+            let targets: Vec<(String, String, u16)> = ids
+                .iter()
+                .filter_map(|id| {
+                    let profile = self.find_profile(id)?;
+                    let data = node_data(&profile);
+                    let host = data["address"].as_str().unwrap_or("").trim().to_string();
+                    if host.is_empty() {
+                        return None;
+                    }
+                    let port = data["port"].as_u64().unwrap_or(443).clamp(1, 65535) as u16;
+                    Some((id.clone(), host, port))
+                })
+                .collect();
+            for (id, ms) in ping_race(&targets, prefer_ipv6) {
+                self.set_ping(&id, ms);
             }
         }
         let mut items: Vec<Value> = self
@@ -2281,19 +2472,82 @@ impl Core {
         } else {
             live
         };
+        let routes_text = cmd_text("netstat", &["-nr", "-f", "inet"]);
+        let dns_text = cmd_text("scutil", &["--dns"]);
+        let route_rows: Vec<Value> = routes_text
+            .lines()
+            .filter(|l| l.contains('.') || l.contains("default"))
+            .take(40)
+            .map(|l| json!(l.trim()))
+            .collect();
+        let dns_servers: Vec<Value> = dns_text
+            .lines()
+            .filter(|l| l.contains("nameserver[") || l.contains("DNS"))
+            .take(24)
+            .map(|l| json!(l.trim()))
+            .collect();
         Ok(json!({
             "ssid": self.runtime.ssid,
             "network": self.runtime.net_kind,
             "interface": self.runtime.net_iface,
             "core": self.runtime.core,
+            "engine": self.runtime.engine,
             "phase": self.runtime.phase,
             "connected": self.runtime.connected,
+            "profile": self.runtime.profile_name,
             "config_path": config.display().to_string(),
             "log_path": dir.join("core.log").display().to_string(),
-            "routes": cmd_text("netstat", &["-nr", "-f", "inet"]),
-            "dns": cmd_text("scutil", &["--dns"]),
-            "config": live
+            "routes": routes_text,
+            "route_rows": route_rows,
+            "dns": dns_text,
+            "dns_servers": dns_servers,
+            "ifconfig": cmd_text("ifconfig", &["-u"]),
+            "addresses": cmd_text("ifconfig", &["-u"])
+                .lines()
+                .filter(|l| l.contains("inet "))
+                .take(16)
+                .map(|l| json!(l.trim()))
+                .collect::<Vec<_>>(),
+            "config": live,
+            "updated_at": now()
         }))
+    }
+
+    fn about_info(&self) -> Result<Value, String> {
+        let xray = xray_binary(&self.singbox).ok().and_then(|bin| {
+            Command::new(bin).arg("version").output().ok().and_then(|out| {
+                String::from_utf8_lossy(&out.stdout).lines().next().map(|s| s.trim().to_string())
+            })
+        }).unwrap_or_default();
+        Ok(json!({
+            "app_version": "1.1.0",
+            "sing_box": self.runtime.core,
+            "xray": xray,
+            "engine": self.runtime.engine,
+            "doq": self.dns_quic_supported(),
+            "developer": "Amirhossein Rezaei",
+            "github": "https://github.com/DinonowDev",
+            "repo": "https://github.com/DinonowDev/v2open",
+            "url_schemes": ["v2open", "v2box", "vless", "vmess", "trojan", "ss", "ssr", "hy2", "hysteria", "hysteria2", "wireguard"]
+        }))
+    }
+
+    fn dns_quic_supported(&self) -> bool {
+        if !self.singbox.exists() {
+            return false;
+        }
+        let dir = self.path.parent().unwrap_or(Path::new("."));
+        let probe = dir.join("doq-probe.json");
+        let body = json!({
+            "log": {"level": "error"},
+            "dns": {"servers": [{"type": "quic", "tag": "q", "server": "1.1.1.1", "server_port": 853}]},
+            "inbounds": [{"type": "socks", "listen": "127.0.0.1", "listen_port": 19851}],
+            "outbounds": [{"type": "direct", "tag": "direct"}]
+        });
+        let _ = fs::write(&probe, serde_json::to_string(&body).unwrap_or_default());
+        let ok = Command::new(&self.singbox).args(["check", "-c"]).arg(&probe).output().map(|o| o.status.success()).unwrap_or(false);
+        let _ = fs::remove_file(probe);
+        ok
     }
 
     fn clash_status(&self) -> Result<Value, String> {
@@ -2306,16 +2560,10 @@ impl Core {
                 "connections": []
             }));
         }
-        let mut proxies = clash_http(port, "/proxies").unwrap_or(json!({}));
+        let proxies = clash_http(port, "/proxies").unwrap_or(json!({}));
         let mut connections = clash_http(port, "/connections").unwrap_or(json!({}));
         if let Some(arr) = connections.get_mut("connections").and_then(|v| v.as_array_mut()) {
-            arr.truncate(80);
-        }
-        if let Some(obj) = proxies.get_mut("proxies").and_then(|v| v.as_object_mut()) {
-            if obj.len() > 40 {
-                let keys: Vec<String> = obj.keys().cloned().take(40).collect();
-                obj.retain(|k, _| keys.iter().any(|keep| keep == k));
-            }
+            arr.truncate(120);
         }
         Ok(json!({
             "connected": true,

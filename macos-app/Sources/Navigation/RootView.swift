@@ -32,6 +32,8 @@ struct RootView: View {
                 case "diagnostics": DiagnosticsView()
                 case "clash_status": ClashStatusView()
                 case "about": AboutView()
+                case "terms": LegalView(kind: .terms)
+                case "privacy": LegalView(kind: .privacy)
                 case "editor": EditorView()
                 case "more": ToolsView()
                 case "apps": AppsTunnelView()
@@ -72,6 +74,7 @@ struct RootView: View {
             if let data = response["data"] as? [String: Any] { model.state = data }
             if model.settings["icloud"] as? Bool == true { CloudSync.shared.kick() }
         }
+        .onOpenURL { model.handleOpenURL($0) }
     }
 }
 

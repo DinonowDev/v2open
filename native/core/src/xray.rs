@@ -30,7 +30,7 @@ fn core(settings: &Value, routes: &[Value], proxy: Value) -> Value {
         "domainStrategy": settings["domain_strategy"].as_str().unwrap_or("AsIs"),
         "rules": rules(settings, routes)
     });
-    if let Some(balancers) = balancers(settings) {
+    if let Some(balancers) = crate::xray_balancers::export_balancers(settings) {
         routing["balancers"] = balancers;
     }
     let mut doc = json!({
@@ -131,31 +131,6 @@ fn policy(settings: &Value) -> Option<Value> {
     }))
 }
 
-fn balancers(settings: &Value) -> Option<Value> {
-    if !settings["xray_balancer_enabled"].as_bool().unwrap_or(false) {
-        return None;
-    }
-    let tag = settings["xray_balancer_tag"].as_str().unwrap_or("balancer");
-    let strategy = settings["xray_balancer_strategy"].as_str().unwrap_or("random");
-    let selector: Vec<Value> = settings["xray_balancer_selector"]
-        .as_array()
-        .map(|a| a.iter().filter_map(|v| v.as_str().map(|s| json!(s))).collect())
-        .unwrap_or_else(|| vec![json!("proxy")]);
-    if selector.is_empty() {
-        return None;
-    }
-    let strategy_obj = match strategy {
-        "leastPing" => json!({"type": "leastPing"}),
-        "roundRobin" => json!({"type": "roundRobin"}),
-        _ => json!({"type": "random"}),
-    };
-    Some(json!([{
-        "tag": tag,
-        "selector": selector,
-        "strategy": strategy_obj
-    }]))
-}
-
 fn rules(settings: &Value, routes: &[Value]) -> Vec<Value> {
     let mut rules = Vec::new();
     if settings["block_udp_443"].as_bool().unwrap_or(false) && !routes.iter().any(|rule| {
@@ -176,10 +151,7 @@ fn rules(settings: &Value, routes: &[Value]) -> Vec<Value> {
             push_rule(&mut rules, rule);
         }
     }
-    if settings["xray_balancer_enabled"].as_bool().unwrap_or(false) {
-        let tag = settings["xray_balancer_tag"].as_str().unwrap_or("balancer");
-        rules.push(json!({"type":"field","network":"tcp,udp","balancerTag": tag}));
-    }
+    rules.extend(crate::xray_balancers::balancer_rules(settings));
     rules
 }
 

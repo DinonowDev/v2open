@@ -445,8 +445,17 @@ fn strategy(settings: &Value) -> &'static str {
 fn dns(settings: &Value, rules_dir: &Path) -> Value {
     let mut settings = settings.clone();
     crate::dns_items::sync_legacy_dns(&mut settings);
-    let domestic = dns_server(settings["domestic_dns"].as_str().unwrap_or("223.5.5.5"), "dns-direct", None);
-    let mut remote = dns_server(settings["remote_dns"].as_str().unwrap_or("https://1.1.1.1/dns-query"), "dns-remote", Some("proxy"));
+    let remote_id = settings["remote_dns_id"].as_str().unwrap_or("");
+    let domestic_id = settings["domestic_dns_id"].as_str().unwrap_or("");
+    let remote_item = crate::dns_items::item_by_id(&settings, remote_id);
+    let domestic_item = crate::dns_items::item_by_id(&settings, domestic_id);
+    let mut domestic = dns_server(settings["domestic_dns"].as_str().unwrap_or("223.5.5.5"), "dns-direct", None, domestic_item);
+    let mut remote = dns_server(
+        settings["remote_dns"].as_str().unwrap_or("https://1.1.1.1/dns-query"),
+        "dns-remote",
+        Some("proxy"),
+        remote_item,
+    );
     remote["domain_resolver"] = json!("dns-direct");
     let mut rules = Vec::new();
     if let Some(hosts) = settings["hosts"].as_object() {
@@ -486,8 +495,6 @@ fn dns(settings: &Value, rules_dir: &Path) -> Value {
         _ => {}
     }
     let mut servers = vec![domestic, remote];
-    let remote_id = settings["remote_dns_id"].as_str().unwrap_or("");
-    let domestic_id = settings["domestic_dns_id"].as_str().unwrap_or("");
     if let Some(items) = settings["dns_items"].as_array() {
         for item in items {
             if !item["enabled"].as_bool().unwrap_or(true) {
@@ -506,7 +513,7 @@ fn dns(settings: &Value, rules_dir: &Path) -> Value {
                 "domestic" => None,
                 _ => Some("proxy"),
             };
-            let mut extra = dns_server(&uri, &tag, detour);
+            let mut extra = dns_server(&uri, &tag, detour, Some(item));
             if detour.is_some() {
                 extra["domain_resolver"] = json!("dns-direct");
             }
@@ -517,16 +524,23 @@ fn dns(settings: &Value, rules_dir: &Path) -> Value {
         servers.insert(0, json!({"type":"fakeip","tag":"fakeip","inet4_range":"198.18.0.0/15","inet6_range":"fc00::/18"}));
         rules.push(json!({"query_type":["A","AAAA"],"action":"route","server":"fakeip"}));
     }
-    json!({
+    let mut dns_doc = json!({
         "servers": servers,
         "rules": rules,
         "final": dns_final,
         "strategy": strategy(&settings),
         "disable_cache": settings["dns_cache"].as_bool() == Some(false)
-    })
+    });
+    let item_hosts = crate::dns_items::dns_hosts_map(&settings);
+    if let Some(obj) = item_hosts.as_object() {
+        if !obj.is_empty() {
+            dns_doc["hosts"] = item_hosts;
+        }
+    }
+    dns_doc
 }
 
-fn dns_server(raw: &str, tag: &str, detour: Option<&str>) -> Value {
+fn dns_server(raw: &str, tag: &str, detour: Option<&str>, item: Option<&Value>) -> Value {
     let first = raw.split(',').next().unwrap_or(raw).trim();
     let mut server = json!({"tag": tag});
     if let Some(body) = first.strip_prefix("https://") {
@@ -549,6 +563,9 @@ fn dns_server(raw: &str, tag: &str, detour: Option<&str>) -> Value {
     }
     if let Some(detour) = detour {
         server["detour"] = json!(detour);
+    }
+    if let Some(item) = item {
+        crate::dns_items::apply_to_server(&mut server, item);
     }
     server
 }

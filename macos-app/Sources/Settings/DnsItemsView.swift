@@ -89,6 +89,7 @@ struct DnsItemsView: View {
         let kind = item["type"] as? String ?? "udp"
         let server = item["server"] as? String ?? ""
         let enabled = item["enabled"] as? Bool ?? true
+        let addrCount = (item["addresses"] as? [Any])?.count ?? 0
         return Button {
             sheetItem = item
         } label: {
@@ -99,7 +100,7 @@ struct DnsItemsView: View {
                     .frame(width: 32)
                 VStack(alignment: .leading, spacing: 2) {
                     Mix(text: name, size: 15, weight: .semibold)
-                    Mix(text: "\(kindLabel(kind)) · \(server)", size: 12, color: C.muted)
+                    Mix(text: "\(kindLabel(kind)) · \(server)" + (addrCount > 0 ? " · \(addrCount) IP" : ""), size: 12, color: C.muted)
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.forward")
@@ -180,6 +181,7 @@ struct DnsItemEditorView: View {
     @State private var path = "/dns-query"
     @State private var role = "remote"
     @State private var enabled = true
+    @State private var addresses = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -195,6 +197,15 @@ struct DnsItemEditorView: View {
             if kind == "https" {
                 V2Field(label: model.t("dnsPath"), placeholder: "/dns-query", text: $path, latin: true, icon: "link")
             }
+            V2Field(
+                label: model.t("dnsAddresses"),
+                placeholder: "1.1.1.1\n1.0.0.1",
+                text: $addresses,
+                latin: true,
+                icon: "number",
+                axis: .vertical
+            )
+            Mix(text: model.t("dnsAddressesHint"), size: 11, color: C.muted)
             SettingsSelectRow(
                 title: model.t("dnsRole"),
                 icon: "arrow.triangle.branch",
@@ -225,6 +236,11 @@ struct DnsItemEditorView: View {
         path = item["path"] as? String ?? "/dns-query"
         role = item["role"] as? String ?? "remote"
         enabled = item["enabled"] as? Bool ?? true
+        if let arr = item["addresses"] as? [String] {
+            addresses = arr.joined(separator: "\n")
+        } else {
+            addresses = ""
+        }
     }
 
     func commit() {
@@ -236,7 +252,7 @@ struct DnsItemEditorView: View {
         row["path"] = path.trimmingCharacters(in: .whitespacesAndNewlines)
         row["role"] = role
         row["enabled"] = enabled
-        row["addresses"] = item["addresses"] as? [String] ?? []
+        row["addresses_text"] = addresses
         onSave(row)
     }
 }

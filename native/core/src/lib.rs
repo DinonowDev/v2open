@@ -13,11 +13,13 @@ mod sidecar;
 mod ssr;
 mod vault;
 mod xray;
+mod xray_balancers;
 
 pub use app::{locate_core, support_dir, Core};
 pub use builder::{build_config, preset};
 pub use parser::parse_link;
 pub use routing::{export_routes, parse_routes};
+pub use xray::document as xray_document;
 
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;

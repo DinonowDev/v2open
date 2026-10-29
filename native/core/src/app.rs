@@ -242,6 +242,7 @@ fn defaults() -> Value {
         "xray_balancer_tag": "balancer",
         "xray_balancer_strategy": "random",
         "xray_balancer_selector": ["proxy"],
+        "xray_balancers": [],
         "xray_policy_level": 0,
         "xray_policy_uplink_only": 0,
         "xray_policy_downlink_only": 0,
@@ -282,6 +283,7 @@ impl Core {
         };
         core.load();
         crate::dns_items::ensure_dns_items(&mut core.settings);
+        crate::xray_balancers::ensure_balancers(&mut core.settings);
         core.ensure_unique_profile_ids();
         core.forget_session_pings();
         if core.singbox.exists() {
@@ -306,6 +308,7 @@ impl Core {
             self.save();
         }
         crate::dns_items::ensure_dns_items(&mut self.settings);
+        crate::xray_balancers::ensure_balancers(&mut self.settings);
     }
 
     fn merge_icloud(&mut self) {
@@ -615,10 +618,6 @@ impl Core {
             }
             "save_xray_advanced" => {
                 for key in [
-                    "xray_balancer_enabled",
-                    "xray_balancer_tag",
-                    "xray_balancer_strategy",
-                    "xray_balancer_selector",
                     "xray_policy_level",
                     "xray_policy_uplink_only",
                     "xray_policy_downlink_only",
@@ -629,6 +628,16 @@ impl Core {
                         self.settings[key] = value.clone();
                     }
                 }
+                self.save();
+                Ok(self.state())
+            }
+            "save_xray_balancer" => {
+                crate::xray_balancers::save_balancer(&mut self.settings, args)?;
+                self.save();
+                Ok(self.state())
+            }
+            "delete_xray_balancer" => {
+                crate::xray_balancers::delete_balancer(&mut self.settings, args["id"].as_str().unwrap_or(""))?;
                 self.save();
                 Ok(self.state())
             }

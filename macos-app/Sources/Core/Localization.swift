@@ -181,7 +181,15 @@ let enText: [String: String] = [
     "balancerEnabled": "Enable balancer",
     "balancerTag": "Balancer tag",
     "balancerStrategy": "Strategy",
-    "balancerSelector": "Outbound tags (comma)"
+    "balancerSelector": "Outbound tags (comma)",
+    "dnsAddresses": "Resolver IPs",
+    "dnsAddressesHint": "One IP per line. Used for DoH/DoT hostname pinning.",
+    "addBalancer": "Add balancer",
+    "editBalancer": "Edit balancer",
+    "balancerDefault": "Default",
+    "balancerDomains": "Match domains",
+    "balancerIps": "Match IPs",
+    "balancerNetworks": "Networks"
 ]
 
 let faText: [String: String] = [
@@ -365,5 +373,13 @@ let faText: [String: String] = [
     "balancerEnabled": "فعال‌سازی balancer",
     "balancerTag": "برچسب balancer",
     "balancerStrategy": "استراتژی",
-    "balancerSelector": "تگ outbound (با ویرگول)"
+    "balancerSelector": "تگ outbound (با ویرگول)",
+    "dnsAddresses": "IPهای resolver",
+    "dnsAddressesHint": "هر IP در یک خط. برای DoH/DoT روی hostname.",
+    "addBalancer": "افزودن balancer",
+    "editBalancer": "ویرایش balancer",
+    "balancerDefault": "پیش‌فرض",
+    "balancerDomains": "دامنه‌های match",
+    "balancerIps": "IPهای match",
+    "balancerNetworks": "شبکه‌ها"
 ]

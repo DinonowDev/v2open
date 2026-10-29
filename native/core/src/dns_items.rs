@@ -86,6 +86,95 @@ pub fn sync_legacy_dns(settings: &mut Value) {
     }
 }
 
+pub fn is_ip(raw: &str) -> bool {
+    raw.parse::<std::net::IpAddr>().is_ok()
+}
+
+pub fn resolver_host(item: &Value) -> String {
+    let server = item["server"].as_str().unwrap_or("").trim();
+    if server.is_empty() {
+        return String::new();
+    }
+    if server.starts_with("https://") || server.starts_with("http://") {
+        let body = server.trim_start_matches("https://").trim_start_matches("http://");
+        return body.split('/').next().unwrap_or(body).split(':').next().unwrap_or(body).to_string();
+    }
+    if let Some(body) = server.strip_prefix("tls://") {
+        return body.split(':').next().unwrap_or(body).to_string();
+    }
+    server.split(':').next().unwrap_or(server).to_string()
+}
+
+pub fn normalized_addresses(item: &Value) -> Vec<String> {
+    let mut out = Vec::new();
+    if let Some(arr) = item["addresses"].as_array() {
+        for value in arr {
+            if let Some(raw) = value.as_str() {
+                let ip = raw.trim();
+                if !ip.is_empty() && is_ip(ip) {
+                    out.push(ip.to_string());
+                }
+            }
+        }
+    }
+    out
+}
+
+pub fn parse_addresses_text(text: &str) -> Vec<Value> {
+    text.split(|c| c == '\n' || c == ',' || c == ';')
+        .map(str::trim)
+        .filter(|s| !s.is_empty() && is_ip(s))
+        .map(|s| json!(s))
+        .collect()
+}
+
+pub fn apply_to_server(server: &mut Value, item: &Value) {
+    let addrs = normalized_addresses(item);
+    if addrs.is_empty() {
+        return;
+    }
+    let host = resolver_host(item);
+    let dial = &addrs[0];
+    match server["type"].as_str().unwrap_or("") {
+        "https" | "tls" => {
+            if !host.is_empty() && !is_ip(&host) {
+                server["server"] = json!(dial);
+                if let Some(tls) = server.get_mut("tls") {
+                    if let Some(obj) = tls.as_object_mut() {
+                        obj.insert("server_name".into(), json!(host));
+                        obj.insert("enabled".into(), json!(true));
+                    }
+                } else {
+                    server["tls"] = json!({"enabled": true, "server_name": host});
+                }
+            }
+        }
+        "udp" => {
+            server["server"] = json!(dial);
+        }
+        _ => {}
+    }
+}
+
+pub fn dns_hosts_map(settings: &Value) -> Value {
+    let mut map = serde_json::Map::new();
+    let Some(items) = settings["dns_items"].as_array() else {
+        return json!(map);
+    };
+    for item in items {
+        if !item["enabled"].as_bool().unwrap_or(true) {
+            continue;
+        }
+        let host = resolver_host(item);
+        let addrs = normalized_addresses(item);
+        if host.is_empty() || is_ip(&host) || addrs.is_empty() {
+            continue;
+        }
+        map.insert(host, json!(addrs));
+    }
+    json!(map)
+}
+
 pub fn save_dns_item(settings: &mut Value, item: &Value) -> Result<(), String> {
     let id = item["id"].as_str().unwrap_or("").trim();
     if id.is_empty() {
@@ -107,6 +196,24 @@ pub fn save_dns_item(settings: &mut Value, item: &Value) -> Result<(), String> {
         "domestic" => "domestic",
         _ => "remote",
     });
+    let mut addresses = Vec::new();
+    if let Some(text) = item.get("addresses_text").and_then(|v| v.as_str()) {
+        addresses = parse_addresses_text(text)
+            .into_iter()
+            .filter_map(|v| v.as_str().map(str::to_string))
+            .collect();
+    } else if let Some(arr) = item["addresses"].as_array() {
+        for value in arr {
+            if let Some(raw) = value.as_str() {
+                let ip = raw.trim();
+                if is_ip(ip) {
+                    addresses.push(ip.to_string());
+                }
+            }
+        }
+    }
+    row["addresses"] = json!(addresses);
+    row.as_object_mut().map(|o| o.remove("addresses_text"));
     let mut items = settings["dns_items"].as_array().cloned().unwrap_or_default();
     if let Some(existing) = items.iter_mut().find(|i| i["id"].as_str() == Some(id)) {
         *existing = row;

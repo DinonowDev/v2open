@@ -21,6 +21,9 @@ mkdir -p "$APP/Contents/Resources/AppIcons"
 if [[ -d "$ROOT/macos-app/Resources/AppIcons" ]]; then
   cp "$ROOT/macos-app/Resources/AppIcons/"*.png "$APP/Contents/Resources/AppIcons/" 2>/dev/null || true
 fi
+if [[ -f "$ROOT/macos-app/Resources/AppIcon.icns" ]]; then
+  cp "$ROOT/macos-app/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
+fi
 for tool in sing-box masterdns dnstt-client pingtunnel xray; do
   cp "$ROOT/binaries/macos/$tool" "$APP/Contents/MacOS/$tool"
   chmod +x "$APP/Contents/MacOS/$tool"

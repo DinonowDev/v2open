@@ -1,0 +1,81 @@
+V2Open
+Copyright (c) 2026 Amirhossein Rezaei
+
+V2Open application source (Swift UI, Rust `v2core`, build scripts, and
+documentation in this repository) is licensed under the MIT License.
+See LICENSE.
+
+This distribution also ships **separate** third-party programs, fonts, and
+data files. Those components keep their own licenses. V2Open launches engine
+binaries as child processes; it does not statically link them into `V2Open`.
+You must comply with each component license when you redistribute a bundle
+that includes that component.
+
+Replace a binary only with a build you have the right to ship, then update
+docs/binaries.md and this file if the upstream or license changed.
+
+-----------------------------------------------------------------------------
+Bundled programs (binaries/macos/)
+-----------------------------------------------------------------------------
+
+sing-box (default `sing-box` in this tree is an extended build;
+`sing-box.official` is a stock build kept beside it)
+  Upstream (stock): https://github.com/SagerNet/sing-box
+  License: GPL-3.0-or-later, plus the upstream name restriction
+  Text:    https://github.com/SagerNet/sing-box/blob/dev/LICENSE
+  Note:    Derivative works may not use the sing-box name or imply association
+           without prior consent of the sing-box authors.
+
+Xray
+  Upstream: https://github.com/XTLS/Xray-core
+  License:  MPL-2.0
+  Text:     https://github.com/XTLS/Xray-core/blob/main/LICENSE
+
+dnstt-client
+  Upstream: https://www.bamsoftware.com/software/dnstt/
+            (also https://gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/dnstt)
+  License:  CC0 1.0
+  Text:     binaries/dnstt-COPYING
+
+pingtunnel
+  Upstream: https://github.com/esrrhs/pingtunnel
+  License:  MIT
+  Text:     https://github.com/esrrhs/pingtunnel/blob/master/LICENSE
+
+masterdns
+  Bundled helper identified at runtime as "MasterDnsVPN Client".
+  Keep the upstream URL and license next to any replacement binary.
+  Do not ship a replacement whose license you cannot document here.
+
+-----------------------------------------------------------------------------
+Geo databases (binaries/macos/geoip.dat, geosite.dat)
+-----------------------------------------------------------------------------
+
+Default sources in settings: v2fly/geoip and v2fly/domain-list-community
+  https://github.com/v2fly/geoip
+  https://github.com/v2fly/domain-list-community
+  Typical license: CC-BY-SA 4.0 (confirm on the tag you download)
+
+-----------------------------------------------------------------------------
+Fonts (assets/fonts/)
+-----------------------------------------------------------------------------
+
+Inter
+  Upstream: https://github.com/rsms/inter
+  License:  SIL Open Font License 1.1
+  Text:     https://github.com/rsms/inter/blob/master/LICENSE.txt
+
+Vazir
+  Upstream: https://github.com/rastikerdar/vazir-font
+            (later Vazirmatn: https://github.com/rastikerdar/vazirmatn)
+  License:  SIL Open Font License 1.1
+
+-----------------------------------------------------------------------------
+Other
+-----------------------------------------------------------------------------
+
+Swift, Rust crates, Apple SDK frameworks, and Homebrew tools used only at
+build time are not shipped inside V2Open.app. See each crate’s license in
+native/Cargo.lock / crates.io.
+
+Report a missing attribution: GitHub issue with the `documentation` template.

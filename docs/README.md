@@ -20,6 +20,9 @@ Canonical process: [CONTRIBUTING.md](../CONTRIBUTING.md). Persian: [CONTRIBUTING
 | Bump the version | [versioning.md](versioning.md) |
 | Name a branch or open a PR | [branching.md](branching.md) |
 | Cut a GitHub release | [release.md](release.md) |
+| Replace sing-box / Xray / sidecars | [binaries.md](binaries.md), [../NOTICE](../NOTICE) |
+| Sign the Packet Tunnel | [signing.md](signing.md) |
+| Protect `main` on GitHub | [github.md](github.md) |
 
 ---
 
@@ -55,9 +58,12 @@ Use this table when you touch code. Update **every** matching row in the same PR
 | `native/core/src/dns_items.rs` | [user-guide.md](user-guide.md) § DNS |
 | `native/core/src/diagnostics.rs` | [user-guide.md](user-guide.md) § Diagnostics |
 | `native/core/tests/*` | [testing.md](testing.md) |
+| `macos-app/Tests/*` | [testing.md](testing.md) |
 | `dev-macos.sh`, `build-macos.sh`, `macos-env.sh` | [development.md](development.md) |
+| `macos-app/*.entitlements`, Packet Tunnel ids | [signing.md](signing.md) |
+| `binaries/macos/*` | [binaries.md](binaries.md), [../NOTICE](../NOTICE) |
 | `VERSION`, plists, `Cargo.toml`, `app_version` | [versioning.md](versioning.md), [CHANGELOG.md](../CHANGELOG.md) |
-| GitHub templates, branch names | [branching.md](branching.md), [CONTRIBUTING.md](../CONTRIBUTING.md) |
+| GitHub templates, branch names, CODEOWNERS | [branching.md](branching.md), [github.md](github.md), [CONTRIBUTING.md](../CONTRIBUTING.md) |
 
 When you add a **new** area of code, add a row here in the same PR.
 
@@ -80,4 +86,6 @@ When you add a **new** area of code, add a row here in the same PR.
 ./scripts/check-locales.sh    # every locale has the same keys as en.json
 ./scripts/check-version.sh    # VERSION matches plist / crate / about
 ./scripts/check-docs.sh       # both of the above
+./scripts/test-swift.sh       # macOS helper tests
+./scripts/test.sh             # docs + Swift + cargo test
 ```

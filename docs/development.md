@@ -67,7 +67,7 @@ Dev bundle identity is rewritten with PlistBuddy to `local.v2open.dev` so it can
 The script:
 
 1. `cargo build --release -p v2core`
-2. Copies fonts, locales, speedometer, app icons, engines, `geoip.dat` / `geosite.dat`
+2. Copies fonts, locales, speedometer, app icons, `AppIcon.icns`, engines, `geoip.dat` / `geosite.dat`
 3. Compiles `PacketTunnel.appex` (`-O`)
 4. Compiles the SwiftUI app (`-O`) linking `libv2core`
 5. Codesigns engines, the app binary, and the bundle (with `macos-app/V2Open.entitlements` when a development identity exists)
@@ -135,6 +135,8 @@ Full system VPN requires a provisioning profile and the Network Extension entitl
 
 Do not disable SIP or copy random provisioning profiles into the repo.
 
+Full Packet Tunnel / notarization path: [signing.md](signing.md). Replacing engines: [binaries.md](binaries.md).
+
 ---
 
 ## Debugging checklist
@@ -162,8 +164,7 @@ Never add:
 ## Contributor checks (required before a PR)
 
 ```bash
-./scripts/check-docs.sh          # locales + version copies
-cd native && cargo test -p v2core
+./scripts/test.sh                # locales, version copies, Swift helpers, cargo test
 ```
 
 `./scripts/bump-version.sh x.y.z` is only for `release/*` and `hotfix/*` branches. Details: [versioning.md](versioning.md).

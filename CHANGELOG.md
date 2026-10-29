@@ -11,10 +11,12 @@ How to edit this file: [docs/versioning.md](docs/versioning.md).
 
 ### Added
 
-- Project documentation, contributing rules, branching / PR guide, SemVer source file (`VERSION`), GitHub issue/PR templates, locale/version check scripts, and a CI workflow that runs those checks on every PR.
+- App tunnel can pick installed Mac apps from a searchable list with their icons instead of typing process names.
+- Project documentation, contributing rules, branching / PR guide, SemVer source file (`VERSION`), GitHub issue/PR templates, locale/version check scripts, MIT `LICENSE`, third-party `NOTICE`, Swift helper tests, and CI for docs + Swift tests.
 
 ### Changed
 
+- App icon replaced with a dimensional cyan tunnel mark, plus matching lime and violet alternates, shipped as the bundle `.icns`.
 - `v2core` crate version aligned with the app marketing version (`1.1.0`).
 
 ## [1.1.0] - 2026-10-29

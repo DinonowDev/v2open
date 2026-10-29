@@ -1,6 +1,6 @@
 # Security policy
 
-V2Open is a local client. A bug in parsing, the Packet Tunnel, sidecar processes, or the locked-catalog format can expose traffic or files on the Mac that runs it.
+V2Open is a local client. A bug in parsing, the Packet Tunnel, sidecar processes, or the locked-catalog format can expose traffic or files on the Mac that runs it. Application source is MIT ([LICENSE](LICENSE)); bundled engines keep the licenses in [NOTICE](NOTICE).
 
 ## Supported versions
 

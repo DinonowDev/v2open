@@ -158,7 +158,7 @@ Runtime (not persisted) lives in `Core.runtime`: connected flag, phase (`idle` /
 - `PacketBridge` copies packets between the tunnel and the local SOCKS port when needed.
 - App messages: `status` and `reload` (used by persist-tunnel so a reconnect does not tear the session down).
 
-Entitlements: `macos-app/V2Open.entitlements` and `PacketTunnel/PacketTunnel.entitlements` (`packet-tunnel-provider`, app group `group.local.v2open`). Unsigned ad-hoc codesign is the fallback in `macos-env.sh`.
+Entitlements: `macos-app/V2Open.entitlements` and `PacketTunnel/PacketTunnel.entitlements` (`packet-tunnel-provider`, app group `group.local.v2open`). Unsigned ad-hoc codesign is the fallback in `macos-env.sh`. How to sign for a real system VPN: [signing.md](signing.md). Engine files: [binaries.md](binaries.md).
 
 ---
 

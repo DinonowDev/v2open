@@ -110,7 +110,7 @@ Do not mix extra features into a hotfix.
 
 - Tag format: `v1.2.0` (annotated).
 - GitHub Release notes are generated from the changelog section, not from a dump of commit subjects.
-- Protect `main` on GitHub: require PR, require the template checklist, dismiss stale reviews on force-push if you enable that.
+- Protect `main` on GitHub (required status checks, no force-push): [github.md](github.md). Apply with `./scripts/protect-main.sh` after the first successful CI run.
 
 Issues:
 

@@ -4,7 +4,7 @@ Thank you for helping. This document is the contract for every contribution: cod
 
 Persian version: [CONTRIBUTING.fa.md](CONTRIBUTING.fa.md)
 
-By opening a pull request you agree to the [Code of Conduct](CODE_OF_CONDUCT.md) and to keep documentation, changelog, and version numbers in sync with the change.
+By opening a pull request you agree to the [Code of Conduct](CODE_OF_CONDUCT.md), you license your contribution under the [MIT License](LICENSE) (the same terms as V2Open source), and you keep documentation, changelog, and version numbers in sync with the change. Third-party binaries stay under the licenses in [NOTICE](NOTICE).
 
 ---
 
@@ -171,7 +171,7 @@ Prefer PRs a reviewer can finish in one sitting. If a feature is large, split:
 
 ### Review
 
-- You must not merge until checks pass: GitHub Action `Docs and version` (`.github/workflows/docs.yml` runs `./scripts/check-docs.sh`), `cargo test -p v2core` locally (non-ignored tests), and a manual run of the flow you touched.
+- You must not merge until checks pass: `./scripts/test.sh` (docs + Swift helpers + `cargo test -p v2core`), GitHub Actions `Docs and version` and `Swift tests`, and a manual run of the flow you touched.
 - UI work is not done until you ran the app and clicked through the changed screens, including other tabs that share the same state.
 - At least one approval is required when a second person is available. Maintainers may self-merge small docs/typo PRs.
 - Address review comments with new commits or a rebase; do not force-push over review history unless the reviewer asked for a squash/rebase.
@@ -188,13 +188,13 @@ Delete the remote branch. If the PR was a `feat` / `fix` that should ship, a mai
 See [docs/testing.md](docs/testing.md).
 
 ```bash
-cd native
-cargo test -p v2core -- --skip live   # parser / builder / clash / dns
+./scripts/test.sh                     # docs + Swift + cargo test -p v2core
+cd native && cargo test -p v2core     # Rust only
 ```
 
 Live tests (`live_connect`, `live_matrix`) are `#[ignore]`. They use the **saved user library** and real network; do not run them in CI and do not commit their output.
 
-Add a focused Rust test when you change `parser`, `builder`, `routing`, DNS items, or Xray export. There is no Swift test target yet; for UI, document the manual path in the PR.
+Add a focused Rust test when you change `parser`, `builder`, `routing`, DNS items, or Xray export. Add a Swift helper assertion in `macos-app/Tests/SwiftTests.swift` when you change formatting or locale lookup. For UI, document the manual path in the PR.
 
 ---
 
@@ -214,6 +214,8 @@ Adding a string:
 ---
 
 ## Code style
+
+Match [`.editorconfig`](.editorconfig) (UTF-8, LF, Swift/Rust indent 4, shell indent 2).
 
 ### Swift
 
@@ -241,7 +243,8 @@ Adding a string:
 - Do not paste real share links, UUIDs, or passwords into issues, PRs, or logs.
 - Use `example.com` and the sample UUIDs already in tests.
 - Report vulnerabilities privately: [SECURITY.md](SECURITY.md).
-- Packet Tunnel and entitlements changes need an explicit risk note in the PR.
+- Packet Tunnel and entitlements changes need an explicit risk note in the PR. Guide: [docs/signing.md](docs/signing.md).
+- Replacing `binaries/macos/*` follows [docs/binaries.md](docs/binaries.md) and updates [NOTICE](NOTICE) if the upstream changed.
 
 ---
 
@@ -251,5 +254,7 @@ Adding a string:
 - Tags: `vX.Y.Z` matching `VERSION` (see [docs/release.md](docs/release.md))
 - Bundle IDs: `local.v2open.desktop` (release), `local.v2open.dev` (dev)
 - Copyright holder: Amirhossein Rezaei
+- License: MIT for this source ([LICENSE](LICENSE)); third-party: [NOTICE](NOTICE)
+- Protect `main` once on GitHub: [docs/github.md](docs/github.md)
 
 Questions that are not security issues belong in GitHub Issues.

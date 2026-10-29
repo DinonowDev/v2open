@@ -1,0 +1,15 @@
+# Default reviewer for every path. GitHub only assigns this when the
+# mentioned account has write access on the repository.
+*       @DinonowDev
+
+/.github/               @DinonowDev
+/docs/                  @DinonowDev
+/CONTRIBUTING.md        @DinonowDev
+/CONTRIBUTING.fa.md     @DinonowDev
+/LICENSE                @DinonowDev
+/NOTICE                 @DinonowDev
+/VERSION                @DinonowDev
+/macos-app/PacketTunnel/ @DinonowDev
+/macos-app/*.entitlements @DinonowDev
+/native/core/src/vault.rs @DinonowDev
+/binaries/              @DinonowDev

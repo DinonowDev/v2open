@@ -110,6 +110,14 @@ sync_app_icons() {
   if [[ -d "$ROOT/macos-app/Resources/AppIcons" ]]; then
     cp "$ROOT/macos-app/Resources/AppIcons/"*.png "$APP/Contents/Resources/AppIcons/" 2>/dev/null || true
   fi
+  if [[ -f "$ROOT/macos-app/Resources/AppIcon.icns" ]]; then
+    cp "$ROOT/macos-app/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
+  fi
+  if [[ -f "$APP/Contents/Info.plist" ]]; then
+    /usr/libexec/PlistBuddy -c "Set :CFBundleIconFile AppIcon" "$APP/Contents/Info.plist" >/dev/null 2>&1 \
+      || /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string AppIcon" "$APP/Contents/Info.plist" >/dev/null 2>&1 \
+      || true
+  fi
 }
 
 sync_speedometer() {

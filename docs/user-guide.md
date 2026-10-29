@@ -74,7 +74,7 @@ If you add a protocol, update this section, URL schemes below, `Info.plist`, `pa
 | `theme` | `dark` | `dark` / `light` / `system` |
 | `glassy` | `false` | Extra translucency |
 | `connect_button_size` | `medium` | `small` / `medium` / `large` |
-| `app_icon` | `default` | Alternate icons from `Resources/AppIcons` |
+| `app_icon` | `default` | Alternate icons from `Resources/AppIcons`; Dock uses `AppIcon.icns` |
 | `legacy_slider` | `false` | Slide-to-connect |
 | `fab_fixed` | `false` | Floating connect button |
 | `fab_home_only` | `false` | FAB only on Home |
@@ -111,7 +111,7 @@ From Settings:
 - **Speed test settings** — `speed_mode` `http` / `tcp` / `icmp`, `speed_endpoint`, `speed_timeout`, `speed_concurrency`.
 - **On demand** — `on_demand` plus rule text (`on_demand_text`) applied to the system VPN.
 - **Clash API** — `clash_status`, `clash_select`, `clash_delay`, `clash_close`.
-- **Per-app** — `per_app_mode` `off` / `include` / `exclude` and a list of process names (`per_app_text`).
+- **Per-app** — `per_app_mode` `off` / `include` / `exclude`. The UI lists apps installed on the Mac; the saved value is still process names in `per_app_text`.
 - **Apply system proxy** — `apply_system_proxy` (default true) when in proxy mode.
 
 ### Advanced

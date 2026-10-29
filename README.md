@@ -12,6 +12,7 @@ V2Open is **not** a VPN service. It does not sell bandwidth and does not operate
 | **Core** | Rust `v2core` static library |
 | **Engines** | Bundled `sing-box` and `xray` |
 | **Source** | [github.com/DinonowDev/v2open](https://github.com/DinonowDev/v2open) |
+| **License** | MIT ([LICENSE](LICENSE); third-party: [NOTICE](NOTICE)) |
 | **Author** | Amirhossein Rezaei |
 
 Persian overview: [README.fa.md](README.fa.md)
@@ -105,6 +106,10 @@ CHANGELOG.md        User-facing history
 | [docs/versioning.md](docs/versioning.md) | SemVer, files to bump, changelog |
 | [docs/branching.md](docs/branching.md) | Branches, tags, pull requests |
 | [docs/release.md](docs/release.md) | Cut a release |
+| [docs/binaries.md](docs/binaries.md) | Bundled engines and how to replace them |
+| [docs/signing.md](docs/signing.md) | Codesign and Packet Tunnel |
+| [docs/github.md](docs/github.md) | Protect `main` and repo settings |
+| [NOTICE](NOTICE) | Third-party licenses |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute (required reading) |
 | [CONTRIBUTING.fa.md](CONTRIBUTING.fa.md) | همان سند به فارسی |
 | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Community rules |
@@ -127,4 +132,8 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Short ver
 
 ## License and trademark
 
-Copyright © 2026 Amirhossein Rezaei. The name V2Open and the app icon are used for this project. Third-party engines (`sing-box`, Xray, and sidecar binaries) keep their own licenses; you must have the right to use those binaries and any servers you connect to.
+V2Open application source is **MIT**. See [LICENSE](LICENSE).
+
+Copyright © 2026 Amirhossein Rezaei. The name V2Open and the app icon are used for this project. Bundled engines, fonts, and geo files keep **their own** licenses; see [NOTICE](NOTICE). You must have the right to use those binaries and any servers you connect to.
+
+Pull requests are accepted under the same MIT terms as the rest of this source.

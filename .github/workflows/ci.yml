@@ -1,4 +1,4 @@
-name: Docs and version
+name: CI
 
 on:
   pull_request:
@@ -7,8 +7,17 @@ on:
 
 jobs:
   check:
+    name: Docs and version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Locale keys and version copies
         run: ./scripts/check-docs.sh
+
+  swift:
+    name: Swift tests
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and run helper tests
+        run: ./scripts/test-swift.sh

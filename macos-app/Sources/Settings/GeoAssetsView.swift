@@ -11,6 +11,7 @@ struct GeoAssetsView: View {
     @State private var showUrlSheet = false
     @State private var busy = ""
     @State private var showRuleSets = false
+    @State private var geoInterval = ""
 
     var primaryAssets: [[String: Any]] {
         model.geoAssets.filter { asset in
@@ -28,6 +29,24 @@ struct GeoAssetsView: View {
             header
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 16) {
+                    SettingsSectionLabel(text: model.t("geoAutoUpdate"))
+                    SettingsCard {
+                        SettingsToggleRow(title: model.t("geoAutoUpdate"), isOn: model.settings["geo_auto_update"] as? Bool ?? (model.settings["auto_update"] as? Bool ?? false)) {
+                            model.set("geo_auto_update", $0)
+                            model.set("auto_update", $0)
+                        }
+                        SettingsDivider()
+                        V2Field(label: model.t("geoAutoInterval"), placeholder: "24", text: $geoInterval, latin: true, icon: "clock")
+                            .padding(.horizontal, 14)
+                        SheetActionButton(title: model.t("save"), primary: true, icon: "checkmark") {
+                            if let h = Int(geoInterval.trimmingCharacters(in: .whitespaces)), h > 0 {
+                                model.set("geo_auto_interval_hours", h)
+                                model.showToast(model.t("saved"), tone: .success)
+                            }
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.bottom, 10)
+                    }
                     SettingsSectionLabel(text: model.t("geoFilesSource"))
                     SettingsCard {
                         VStack(alignment: .leading, spacing: 12) {
@@ -85,6 +104,7 @@ struct GeoAssetsView: View {
         .onAppear {
             geoSource = model.settings["geo_files_source"] as? String ?? "v2fly/domain-list-community"
             geoipSource = model.settings["geoip_source"] as? String ?? "v2fly/geoip"
+            geoInterval = String(model.settings["geo_auto_interval_hours"] as? Int ?? Int(model.settings["geo_auto_interval_hours"] as? Double ?? 24))
         }
     }
 

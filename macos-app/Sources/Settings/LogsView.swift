@@ -4,21 +4,31 @@ struct LogsView: View {
     @EnvironmentObject var model: Model
     @Environment(\.themeLight) private var themeLight
     @State private var text = ""
+    @State private var sidecar = false
+
     var body: some View {
         let _ = themeLight
         sub(model.t("logs")) {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
+                        SettingsChipButton(title: model.t("coreLogs"), filled: !sidecar) {
+                            sidecar = false
+                            reload()
+                        }
+                        SettingsChipButton(title: model.t("sidecarLogs"), filled: sidecar) {
+                            sidecar = true
+                            reload()
+                        }
                         Spacer()
-                        SettingsChipButton(title: model.t("clearLogs")) {
-                            _ = model.call("clear_logs")
-                            text = ""
-                            model.showToast(model.t("saved"), tone: .success)
+                        if !sidecar {
+                            SettingsChipButton(title: model.t("clearLogs")) {
+                                _ = model.call("clear_logs")
+                                text = ""
+                                model.showToast(model.t("saved"), tone: .success)
+                            }
                         }
-                        SettingsChipButton(title: model.t("update")) {
-                            text = (model.call("logs")["data"] as? [String: Any])?["text"] as? String ?? ""
-                        }
+                        SettingsChipButton(title: model.t("update")) { reload() }
                     }
                     SettingsCard {
                     if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -50,7 +60,12 @@ struct LogsView: View {
                 .padding(.bottom, PageLayout.bottom + PageLayout.tabBarClearance)
             }
             .scrollIndicators(.hidden)
-            .onAppear { text = (model.call("logs")["data"] as? [String: Any])?["text"] as? String ?? "" }
+            .onAppear { reload() }
         }
+    }
+
+    func reload() {
+        let method = sidecar ? "sidecar_logs" : "logs"
+        text = (model.call(method)["data"] as? [String: Any])?["text"] as? String ?? ""
     }
 }

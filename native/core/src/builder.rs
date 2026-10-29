@@ -76,9 +76,9 @@ fn assemble(settings: &Value, profiles: &[Value], rules: &[Value], rules_dir: &P
             "type": "urltest",
             "tag": "auto",
             "outbounds": proxy_tags,
-            "url": settings["speed_endpoint"].as_str().unwrap_or("https://www.gstatic.com/generate_204"),
-            "interval": "1m",
-            "tolerance": 50
+            "url": settings["probe_url"].as_str().filter(|s| !s.is_empty()).unwrap_or_else(|| settings["speed_endpoint"].as_str().unwrap_or("https://www.gstatic.com/generate_204")),
+            "interval": settings["smart_interval"].as_str().unwrap_or("1m"),
+            "tolerance": settings["smart_tolerance"].as_u64().unwrap_or(50)
         }));
         "auto".to_string()
     } else {
@@ -449,7 +449,7 @@ fn dns(settings: &Value, rules_dir: &Path) -> Value {
     let domestic_id = settings["domestic_dns_id"].as_str().unwrap_or("");
     let remote_item = crate::dns_items::item_by_id(&settings, remote_id);
     let domestic_item = crate::dns_items::item_by_id(&settings, domestic_id);
-    let mut domestic = dns_server(settings["domestic_dns"].as_str().unwrap_or("223.5.5.5"), "dns-direct", None, domestic_item);
+    let domestic = dns_server(settings["domestic_dns"].as_str().unwrap_or("223.5.5.5"), "dns-direct", None, domestic_item);
     let mut remote = dns_server(
         settings["remote_dns"].as_str().unwrap_or("https://1.1.1.1/dns-query"),
         "dns-remote",
@@ -552,6 +552,12 @@ fn dns_server(raw: &str, tag: &str, detour: Option<&str>, item: Option<&Value>) 
     } else if let Some(body) = first.strip_prefix("tls://") {
         let (host, port) = split_host_port(body, 853);
         server["type"] = json!("tls");
+        server["server"] = json!(host.clone());
+        server["server_port"] = json!(port);
+        server["tls"] = json!({"enabled": true, "server_name": host});
+    } else if let Some(body) = first.strip_prefix("quic://") {
+        let (host, port) = split_host_port(body, 853);
+        server["type"] = json!("quic");
         server["server"] = json!(host.clone());
         server["server_port"] = json!(port);
         server["tls"] = json!({"enabled": true, "server_name": host});
@@ -658,9 +664,34 @@ fn user_rule(rule: &Value) -> Vec<Value> {
     let behavior = rule["behavior"].as_str().unwrap_or("proxy");
     let mut base = json!({"action": if behavior == "block" { "reject" } else { "route" }});
     if behavior != "block" {
-        base["outbound"] = json!(if behavior == "direct" { "direct" } else { "proxy" });
+        let balancer = rule["balancer_tag"].as_str().unwrap_or("").trim();
+        if !balancer.is_empty() {
+            base["outbound"] = json!(balancer);
+        } else {
+            base["outbound"] = json!(if behavior == "direct" { "direct" } else { "proxy" });
+        }
     }
     let mut extras = json!({});
+    let inbounds = list(&rule["inbounds"]);
+    if !inbounds.is_empty() {
+        extras["inbound"] = json!(inbounds);
+    }
+    let sources = list(&rule["sources"]);
+    if !sources.is_empty() {
+        extras["source_ip_cidr"] = json!(sources);
+    }
+    let source_port = rule["source_port"].as_str().unwrap_or("").trim();
+    if !source_port.is_empty() {
+        if source_port.contains('-') || source_port.contains(':') {
+            extras["source_port_range"] = json!(source_port.replace('-', ":"));
+        } else if let Ok(n) = source_port.parse::<u64>() {
+            extras["source_port"] = json!(n);
+        }
+    }
+    let users = list(&rule["users"]);
+    if !users.is_empty() {
+        extras["auth_user"] = json!(users);
+    }
     let port = rule["port"].as_str().unwrap_or("").trim();
     if !port.is_empty() && port != "0-65535" {
         if port.contains('-') || port.contains(':') {

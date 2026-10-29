@@ -199,7 +199,8 @@ final class Model: ObservableObject {
 
     func connectTunnel() {
         var id = settings["selected_id"] as? String ?? ""
-        if settings["auto_connect_best"] as? Bool == true {
+        let smart = settings["smart_connect"] as? Bool == true
+        if !smart, settings["auto_connect_best"] as? Bool == true {
             let pick = call("pick_best")
             if pick["ok"] as? Bool != false, let best = (pick["data"] as? [String: Any])?["id"] as? String, !best.isEmpty {
                 id = best
@@ -215,18 +216,18 @@ final class Model: ObservableObject {
 
         // Dev / unsigned builds have no PacketTunnel; NE "connected" would not run sing-box.
         guard Self.hasPacketTunnelExtension else {
-            startCoreConnect(id: id)
+            startCoreConnect(id: id, smart: smart)
             return
         }
 
-        let prepared = call("prepare", ["id": id, "smart": false])
+        let prepared = call("prepare", ["id": id, "smart": smart])
         let data = prepared["data"] as? [String: Any] ?? [:]
         let path = data["path"] as? String ?? ""
         guard (prepared["ok"] as? Bool) == true, !path.isEmpty else {
             if let err = prepared["error"] as? String, !err.isEmpty {
                 DevLog.error("connect", "prepare: \(err)")
             }
-            startCoreConnect(id: id)
+            startCoreConnect(id: id, smart: smart)
             return
         }
         let tunnel = TunnelManager.shared
@@ -243,13 +244,13 @@ final class Model: ObservableObject {
             rules: data["on_demand_text"] as? String ?? ""
         ) { [weak self] system in
             Task { @MainActor in
-                self?.finishTunnelConnect(id: id, system: system)
+                self?.finishTunnelConnect(id: id, smart: smart, system: system)
             }
         }
     }
 
-    private func startCoreConnect(id: String) {
-        let response = call("connect", ["id": id, "smart": false])
+    private func startCoreConnect(id: String, smart: Bool) {
+        let response = call("connect", ["id": id, "smart": smart])
         refresh()
         if response["ok"] as? Bool == false {
             let err = response["error"] as? String ?? t("failed")
@@ -260,7 +261,7 @@ final class Model: ObservableObject {
         }
     }
 
-    private func finishTunnelConnect(id: String, system: Bool) {
+    private func finishTunnelConnect(id: String, smart: Bool, system: Bool) {
         if system {
             _ = call("mark_connected", ["id": id])
             refresh()
@@ -268,7 +269,7 @@ final class Model: ObservableObject {
                 showToast(t("connected"), tone: .success)
             }
         } else {
-            startCoreConnect(id: id)
+            startCoreConnect(id: id, smart: smart)
         }
     }
 

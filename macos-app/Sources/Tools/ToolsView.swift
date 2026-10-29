@@ -51,7 +51,7 @@ struct ToolsView: View {
                             SettingsDivider()
                             SettingsToggleRow(title: model.t("kill"), isOn: model.settings["kill_switch"] as? Bool ?? false) { model.set("kill_switch", $0) }
                             SettingsDivider()
-                            SettingsToggleRow(title: model.t("combiner"), isOn: model.settings["net_combiner"] as? Bool ?? false) { model.set("net_combiner", $0) }
+                            SettingsToggleRow(title: model.t("combiner"), hint: model.t("combinerHint"), isOn: model.settings["net_combiner"] as? Bool ?? false) { model.set("net_combiner", $0) }
                             SettingsDivider()
                             SettingsToggleRow(title: model.t("demand"), isOn: model.settings["on_demand"] as? Bool ?? false) { model.set("on_demand", $0) }
                             SettingsDivider()
@@ -59,27 +59,11 @@ struct ToolsView: View {
                         }
                         SettingsCard {
                             SettingsNavRow(icon: "slider.horizontal.3", title: model.t("xrayAdvanced"), action: { model.push("xray_advanced") })
-                            SettingsDivider(inset: 58)
-                            VStack(alignment: .leading, spacing: 12) {
-                                Mix(
-                                    text: model.fa ? "هر خط: wifi,نام,connect یا cellular,*,disconnect" : "Each line: wifi,Name,connect or cellular,*,disconnect",
-                                    size: 12,
-                                    color: C.muted
-                                )
-                                V2Field(
-                                    label: model.t("demand"),
-                                    placeholder: "wifi,*,connect",
-                                    text: $demand,
-                                    latin: true,
-                                    icon: "wifi",
-                                    axis: .vertical
-                                )
-                                SheetActionButton(title: model.t("save"), primary: true, icon: "checkmark") {
-                                    model.set("on_demand_text", demand)
-                                    model.showToast(model.t("saved"), tone: .success)
-                                }
-                            }
-                            .padding(14)
+                        }
+                        SettingsSectionLabel(text: model.t("onDemandRules"))
+                        OnDemandRulesEditor(text: $demand) {
+                            model.set("on_demand_text", demand)
+                            model.showToast(model.t("saved"), tone: .success)
                         }
                     }
 
@@ -137,5 +121,62 @@ struct ToolsView: View {
         let response = model.call(locking ? "lock_group" : "unlock_group", ["id": id, "password": password])
         result = (response["ok"] as? Bool) == false ? (response["error"] as? String ?? "") : (locking ? model.t("lock") : model.t("unlock"))
         model.refresh()
+    }
+}
+
+struct OnDemandRulesEditor: View {
+    @EnvironmentObject var model: Model
+    @Binding var text: String
+    var onSave: () -> Void
+    @State private var iface = "wifi"
+    @State private var ssid = "*"
+    @State private var action = "connect"
+
+    private var rows: [String] {
+        text.split(separator: "\n").map(String.init).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+    }
+
+    var body: some View {
+        SettingsCard {
+            if rows.isEmpty {
+                Mix(text: model.t("empty"), size: 13, color: C.muted)
+                    .frame(maxWidth: .infinity)
+                    .padding(14)
+            } else {
+                ForEach(Array(rows.enumerated()), id: \.offset) { index, line in
+                    if index > 0 { SettingsDivider() }
+                    HStack {
+                        Mix(text: line, size: 13)
+                        Spacer()
+                        Button {
+                            var next = rows
+                            next.remove(at: index)
+                            text = next.joined(separator: "\n")
+                        } label: {
+                            Image(systemName: "trash")
+                                .foregroundStyle(C.muted)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                }
+            }
+            SettingsDivider()
+            SettingsSelectRow(title: model.t("demandInterface"), icon: "wifi", value: iface, options: [("wifi", "Wi-Fi"), ("ethernet", "Ethernet"), ("any", "Any")]) { iface = $0 }
+            V2Field(label: model.t("demandSsid"), placeholder: "*", text: $ssid, latin: true, icon: "tag")
+                .padding(.horizontal, 14)
+            SettingsSelectRow(title: model.t("demandAction"), icon: "bolt", value: action, options: [("connect", model.t("connect")), ("disconnect", model.t("disconnect"))]) { action = $0 }
+            SheetActionButton(title: model.t("addOnDemand"), icon: "plus") {
+                let line = "\(iface),\(ssid.isEmpty ? "*" : ssid),\(action)"
+                var next = rows
+                next.append(line)
+                text = next.joined(separator: "\n")
+            }
+            .padding(.horizontal, 14)
+            SheetActionButton(title: model.t("save"), primary: true, icon: "checkmark", action: onSave)
+                .padding(.horizontal, 14)
+                .padding(.bottom, 14)
+        }
     }
 }

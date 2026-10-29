@@ -63,6 +63,16 @@ pub fn matcher_text(rule: &Value) -> String {
     if !protocol.is_empty() {
         parts.push(protocol.to_string());
     }
+    parts.extend(list(&rule["inbounds"]));
+    parts.extend(list(&rule["sources"]));
+    let source_port = rule["source_port"].as_str().unwrap_or("").trim();
+    if !source_port.is_empty() {
+        parts.push(source_port.to_string());
+    }
+    let balancer = rule["balancer_tag"].as_str().unwrap_or("").trim();
+    if !balancer.is_empty() {
+        parts.push(format!("balancer:{balancer}"));
+    }
     parts.join(",")
 }
 
@@ -96,6 +106,11 @@ pub fn normalize_rule(raw: Value, fallback_id: Option<String>) -> Option<Value> 
     let port = first_str(&raw, &["port"]).unwrap_or_default();
     let network = first_str(&raw, &["network"]).unwrap_or_default();
     let protocol = protocol_of(&raw);
+    let inbounds = first_list(&raw, &["inbounds", "inboundTag", "inbound"]);
+    let sources = first_list(&raw, &["sources", "source", "sourceIp", "sourceIPs"]);
+    let source_port = first_str(&raw, &["source_port", "sourcePort", "sourcePortList"]).unwrap_or_default();
+    let users = first_list(&raw, &["users", "user"]);
+    let balancer_tag = first_str(&raw, &["balancer_tag", "balancerTag"]).unwrap_or_default();
     Some(json!({
         "id": id,
         "enabled": enabled,
@@ -105,7 +120,12 @@ pub fn normalize_rule(raw: Value, fallback_id: Option<String>) -> Option<Value> 
         "ips": ips,
         "port": port,
         "network": network,
-        "protocol": protocol
+        "protocol": protocol,
+        "inbounds": inbounds,
+        "sources": sources,
+        "source_port": source_port,
+        "users": users,
+        "balancer_tag": balancer_tag
     }))
 }
 
@@ -187,12 +207,38 @@ fn to_v2box(rule: &Value) -> Value {
     if !protocol.is_empty() {
         item["protocol"] = json!([protocol]);
     }
+    let inbounds = list(&rule["inbounds"]);
+    if !inbounds.is_empty() {
+        item["inboundTag"] = json!(inbounds);
+    }
+    let sources = list(&rule["sources"]);
+    if !sources.is_empty() {
+        item["source"] = json!(sources);
+    }
+    let source_port = rule["source_port"].as_str().unwrap_or("").trim();
+    if !source_port.is_empty() {
+        item["sourcePort"] = json!(source_port);
+    }
+    let users = list(&rule["users"]);
+    if !users.is_empty() {
+        item["user"] = json!(users);
+    }
+    let balancer = rule["balancer_tag"].as_str().unwrap_or("").trim();
+    if !balancer.is_empty() {
+        item["balancerTag"] = json!(balancer);
+        item.as_object_mut().map(|o| o.remove("outboundTag"));
+    }
     item
 }
 
 fn is_final_catch_all(rule: &Value) -> bool {
     list(&rule["domains"]).is_empty()
         && list(&rule["ips"]).is_empty()
+        && list(&rule["inbounds"]).is_empty()
+        && list(&rule["sources"]).is_empty()
+        && list(&rule["users"]).is_empty()
+        && rule["balancer_tag"].as_str().unwrap_or("").is_empty()
+        && rule["source_port"].as_str().unwrap_or("").is_empty()
         && rule["protocol"].as_str().unwrap_or("").is_empty()
         && rule["network"].as_str().unwrap_or("").is_empty()
         && matches!(rule["port"].as_str().unwrap_or(""), "0-65535" | "0:65535" | "")
@@ -228,7 +274,17 @@ fn first_str(value: &Value, keys: &[&str]) -> Option<String> {
     None
 }
 
-fn list(value: &Value) -> Vec<String> {
+fn first_list(raw: &Value, keys: &[&str]) -> Vec<String> {
+    for key in keys {
+        let items = list(&raw[key]);
+        if !items.is_empty() {
+            return items;
+        }
+    }
+    Vec::new()
+}
+
+pub fn list(value: &Value) -> Vec<String> {
     if let Some(arr) = value.as_array() {
         return arr.iter().flat_map(list).collect();
     }
@@ -293,5 +349,19 @@ mod tests {
             "protocol": ""
         });
         assert_eq!(matcher_text(&rule), "domain:ir,geosite:category-ir");
+    }
+
+    #[test]
+    fn parses_advanced_v2box_fields() {
+        let text = r#"[{"remarks":"in","inboundTag":["socks"],"source":["10.0.0.1"],"sourcePort":"443","user":["alice"],"balancerTag":"b1","domain":["domain:example.com"]}]"#;
+        let rules = parse_routes(text).unwrap();
+        assert_eq!(rules[0]["inbounds"], json!(["socks"]));
+        assert_eq!(rules[0]["sources"], json!(["10.0.0.1"]));
+        assert_eq!(rules[0]["source_port"], "443");
+        assert_eq!(rules[0]["users"], json!(["alice"]));
+        assert_eq!(rules[0]["balancer_tag"], "b1");
+        let exported = export_routes(&rules);
+        assert!(exported.contains("balancerTag"));
+        assert!(exported.contains("inboundTag"));
     }
 }

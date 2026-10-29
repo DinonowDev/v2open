@@ -9,6 +9,11 @@ struct RouteEditorView: View {
     @State private var port = ""
     @State private var network = ""
     @State private var protocolName = ""
+    @State private var inbounds = ""
+    @State private var sources = ""
+    @State private var sourcePort = ""
+    @State private var users = ""
+    @State private var balancerTag = ""
     @State private var error = ""
 
     var body: some View {
@@ -40,6 +45,13 @@ struct RouteEditorView: View {
                         )
                         V2Field(label: model.t("protocol"), placeholder: "bittorrent", text: $protocolName, latin: true, icon: "point.3.connected.trianglepath.dotted")
                     }
+                    EditorSection(title: model.t("routeAdvanced")) {
+                        V2Field(label: model.t("inboundTag"), placeholder: "socks", text: $inbounds, latin: true, icon: "arrow.down.circle", axis: .vertical)
+                        V2Field(label: model.t("sourceIps"), placeholder: "10.0.0.0/24", text: $sources, latin: true, icon: "network", axis: .vertical)
+                        V2Field(label: model.t("sourcePort"), placeholder: "443", text: $sourcePort, latin: true, icon: "number")
+                        V2Field(label: model.t("routeUsers"), placeholder: "alice", text: $users, latin: true, icon: "person", axis: .vertical)
+                        V2Field(label: model.t("balancerTag"), placeholder: "balancer", text: $balancerTag, latin: true, icon: "shuffle")
+                    }
                     if !error.isEmpty {
                         Mix(text: error, size: 13, color: Color(red: 1, green: 0.36, blue: 0.45))
                     }
@@ -52,6 +64,11 @@ struct RouteEditorView: View {
                             "port": port,
                             "network": network,
                             "protocol": protocolName,
+                            "inbounds": inbounds,
+                            "sources": sources,
+                            "source_port": sourcePort,
+                            "users": users,
+                            "balancer_tag": balancerTag,
                             "enabled": model.draft["enabled"] as? Bool ?? true
                         ]
                         if let id = model.draft["id"] as? String, !id.isEmpty {
@@ -87,6 +104,11 @@ struct RouteEditorView: View {
                 port = model.draft["port"] as? String ?? ""
                 network = model.draft["network"] as? String ?? ""
                 protocolName = model.draft["protocol"] as? String ?? ""
+                inbounds = model.draft["inbounds"] as? String ?? ""
+                sources = model.draft["sources"] as? String ?? ""
+                sourcePort = model.draft["source_port"] as? String ?? ""
+                users = model.draft["users"] as? String ?? ""
+                balancerTag = model.draft["balancer_tag"] as? String ?? ""
             }
         }
     }

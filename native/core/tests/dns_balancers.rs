@@ -80,6 +80,41 @@ fn xray_exports_multiple_balancers() {
     assert!(rules.iter().any(|r| r.get("balancerTag") == Some(&json!("b2"))));
 }
 
+#[test]
+fn xray_rule_and_observatory_export() {
+    let mut settings = base_settings();
+    settings["observatory_enabled"] = json!(true);
+    settings["probe_url"] = json!("https://www.gstatic.com/generate_204");
+    settings["probe_interval"] = json!("30s");
+    let routes = vec![json!({
+        "enabled": true,
+        "behavior": "proxy",
+        "domains": ["domain:example.com"],
+        "ips": [],
+        "inbounds": ["socks"],
+        "sources": ["10.0.0.1"],
+        "source_port": "443",
+        "users": ["alice"],
+        "balancer_tag": "b1",
+        "port": "",
+        "network": "",
+        "protocol": ""
+    })];
+    let profile = json!({
+        "protocol": "vmess",
+        "address": "127.0.0.1",
+        "port": 443,
+        "uuid": "00000000-0000-0000-0000-000000000099",
+        "security": "auto"
+    });
+    let doc = xray_document(&settings, &profile, &routes);
+    assert!(doc.get("observatory").is_some());
+    let rules = doc["routing"]["rules"].as_array().unwrap();
+    let rule = rules.iter().find(|r| r.get("balancerTag") == Some(&json!("b1"))).expect("balancer rule");
+    assert_eq!(rule["inboundTag"], json!(["socks"]));
+    assert_eq!(rule["source"], json!(["10.0.0.1"]));
+}
+
 fn base_settings() -> serde_json::Value {
     json!({
         "language": "en",

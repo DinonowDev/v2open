@@ -35,6 +35,12 @@ struct HomeView: View {
                 .frame(maxWidth: .infinity)
                 .frame(minHeight: connected ? 292 : 252)
                 .padding(.top, 24)
+                SettingsToggleRow(
+                    title: model.t("smartConnect"),
+                    hint: model.t("smartConnectHint"),
+                    isOn: model.settings["smart_connect"] as? Bool ?? false
+                ) { model.set("smart_connect", $0) }
+                .padding(.top, 8)
 
                 if let profile = model.selectedProfile {
                     SelectedConfigCard(profile: profile)

@@ -30,6 +30,7 @@ struct RootView: View {
                 case "subscription_settings": SubscriptionSettingsView()
                 case "backup_settings": BackupSettingsView()
                 case "logs": LogsView()
+                case "diagnostics": DiagnosticsView()
                 case "about": AboutView()
                 case "editor": EditorView()
                 case "more": ToolsView()

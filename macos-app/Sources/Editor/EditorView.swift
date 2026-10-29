@@ -4,7 +4,7 @@ struct EditorView: View {
     @EnvironmentObject var model: Model
 
     private var proto: String { model.draft["protocol"] as? String ?? "vless" }
-    private var isProxy: Bool { ["vless", "vmess", "trojan"].contains(proto) }
+    private var isProxy: Bool { ["vless", "vmess", "trojan", "hysteria", "hysteria2"].contains(proto) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -70,7 +70,7 @@ struct EditorView: View {
             edit("uuid", "UUID", latin: true, icon: "key.fill")
             edit("flow", "Flow", latin: true, icon: "wind")
         }
-        if ["trojan", "shadowsocks", "hysteria2", "ssh", "socks", "http", "ping"].contains(proto) {
+        if ["trojan", "shadowsocks", "hysteria2", "hysteria", "ssh", "socks", "http", "ping"].contains(proto) {
             edit("password", "Password", latin: true, secure: true, icon: "lock.fill")
         }
         if proto == "shadowsocks" {
@@ -88,6 +88,13 @@ struct EditorView: View {
         if proto == "masterdns" {
             edit("key", "Key", latin: true, icon: "key.fill")
             edit("encryption_method", "Encryption 0-5", latin: true, icon: "lock.rotation")
+        }
+        if proto == "hysteria" || proto == "hysteria2" {
+            edit("up_mbps", "Up Mbps", latin: true, icon: "arrow.up")
+            edit("down_mbps", "Down Mbps", latin: true, icon: "arrow.down")
+        }
+        if proto == "chain" {
+            edit("chain", "Hops (JSON)", latin: true, icon: "link")
         }
         if proto == "wireguard" {
             edit("private_key", "Private key", latin: true, secure: true, icon: "key.fill")
@@ -124,6 +131,7 @@ struct EditorView: View {
     }
 
     @ViewBuilder private var securityFields: some View {
+        edit("alpn", "ALPN", latin: true, icon: "textformat")
         edit("sni", "SNI", latin: true, icon: "text.alignleft")
         edit("fp", "Fingerprint", latin: true, icon: "touchid")
         edit("pbk", "Reality public key", latin: true, icon: "key")
@@ -131,7 +139,7 @@ struct EditorView: View {
     }
 
     private var hasCredentials: Bool {
-        ["vless", "vmess", "trojan", "shadowsocks", "shadowsocksr", "hysteria2", "ssh", "socks", "http", "ping", "dnstt", "masterdns", "wireguard"].contains(proto)
+        ["vless", "vmess", "trojan", "shadowsocks", "shadowsocksr", "hysteria2", "hysteria", "ssh", "socks", "http", "ping", "dnstt", "masterdns", "wireguard", "chain"].contains(proto)
     }
 
     func edit(_ key: String, _ title: String, latin: Bool, secure: Bool = false, icon: String? = nil) -> some View {

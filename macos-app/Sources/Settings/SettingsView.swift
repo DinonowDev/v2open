@@ -53,6 +53,8 @@ struct SettingsView: View {
                         SettingsDivider()
                         SettingsToggleRow(title: model.t("sleep"), hint: model.t("sleepSub"), isOn: model.settings["stop_on_sleep"] as? Bool ?? true) { model.set("stop_on_sleep", $0) }
                         SettingsDivider()
+                        SettingsToggleRow(title: model.t("persistTunnel"), isOn: model.settings["persist_tunnel"] as? Bool ?? false) { model.set("persist_tunnel", $0) }
+                        SettingsDivider()
                         SettingsToggleRow(title: "Mux", isOn: model.settings["mux_enabled"] as? Bool ?? false) { model.set("mux_enabled", $0) }
                         if model.settings["mux_enabled"] as? Bool == true {
                             SettingsDivider()
@@ -83,8 +85,15 @@ struct SettingsView: View {
                         SettingsDivider()
                         SettingsToggleRow(
                             title: model.t("autoConnectBest"),
+                            hint: model.t("autoConnectBestHint"),
                             isOn: model.settings["auto_connect_best"] as? Bool ?? false
                         ) { model.set("auto_connect_best", $0) }
+                        SettingsDivider()
+                        SettingsToggleRow(
+                            title: model.t("smartConnect"),
+                            hint: model.t("smartConnectHint"),
+                            isOn: model.settings["smart_connect"] as? Bool ?? false
+                        ) { model.set("smart_connect", $0) }
                     }
                 }
 
@@ -128,6 +137,8 @@ struct SettingsView: View {
                     SettingsNavRow(icon: "wrench.and.screwdriver", title: model.t("more"), action: { model.push("more") })
                     SettingsDivider(inset: 58)
                     SettingsNavRow(icon: "doc.text", title: model.t("logs"), action: { model.push("logs") })
+                    SettingsDivider(inset: 58)
+                    SettingsNavRow(icon: "stethoscope", title: model.t("diagnostics"), action: { model.push("diagnostics") })
                     SettingsDivider(inset: 58)
                     SettingsNavRow(icon: "info.circle", title: model.t("about"), action: { model.push("about") })
                     }

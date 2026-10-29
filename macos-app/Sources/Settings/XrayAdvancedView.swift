@@ -5,6 +5,9 @@ struct XrayAdvancedView: View {
     @State private var policyLevel = ""
     @State private var uplinkOnly = ""
     @State private var downlinkOnly = ""
+    @State private var probeUrl = ""
+    @State private var probeInterval = ""
+    @State private var smartInterval = ""
     @State private var sheetBalancer: [String: Any]?
 
     private var balancers: [[String: Any]] {
@@ -35,6 +38,27 @@ struct XrayAdvancedView: View {
                             title: model.t("policyStatsDownlink"),
                             isOn: model.settings["xray_policy_stats_user_downlink"] as? Bool ?? false
                         ) { model.set("xray_policy_stats_user_downlink", $0) }
+                    }
+                    SheetActionButton(title: model.t("save"), primary: true, icon: "checkmark") { savePolicy() }
+
+                    SettingsSectionLabel(text: model.t("observatory"))
+                    SettingsCard {
+                        SettingsToggleRow(title: model.t("observatoryEnabled"), isOn: model.settings["observatory_enabled"] as? Bool ?? false) {
+                            model.set("observatory_enabled", $0)
+                        }
+                        SettingsDivider()
+                        SettingsToggleRow(title: model.t("burstObservatory"), isOn: model.settings["burst_observatory"] as? Bool ?? false) {
+                            model.set("burst_observatory", $0)
+                        }
+                        SettingsDivider()
+                        V2Field(label: model.t("probeUrl"), placeholder: "https://www.gstatic.com/generate_204", text: $probeUrl, latin: true, icon: "link")
+                            .padding(14)
+                        SettingsDivider()
+                        V2Field(label: model.t("probeInterval"), placeholder: "1m", text: $probeInterval, latin: true, icon: "clock")
+                            .padding(14)
+                        SettingsDivider()
+                        V2Field(label: model.t("smartInterval"), placeholder: "1m", text: $smartInterval, latin: true, icon: "timer")
+                            .padding(14)
                     }
                     SheetActionButton(title: model.t("save"), primary: true, icon: "checkmark") { savePolicy() }
 
@@ -127,6 +151,9 @@ struct XrayAdvancedView: View {
         policyLevel = stringInt("xray_policy_level", default: 0)
         uplinkOnly = stringInt("xray_policy_uplink_only", default: 0)
         downlinkOnly = stringInt("xray_policy_downlink_only", default: 0)
+        probeUrl = model.settings["probe_url"] as? String ?? (model.settings["speed_endpoint"] as? String ?? "")
+        probeInterval = model.settings["probe_interval"] as? String ?? "1m"
+        smartInterval = model.settings["smart_interval"] as? String ?? "1m"
     }
 
     func stringInt(_ key: String, default def: Int) -> String {
@@ -141,7 +168,12 @@ struct XrayAdvancedView: View {
             "xray_policy_uplink_only": Int(uplinkOnly) ?? 0,
             "xray_policy_downlink_only": Int(downlinkOnly) ?? 0,
             "xray_policy_stats_user_uplink": model.settings["xray_policy_stats_user_uplink"] as? Bool ?? false,
-            "xray_policy_stats_user_downlink": model.settings["xray_policy_stats_user_downlink"] as? Bool ?? false
+            "xray_policy_stats_user_downlink": model.settings["xray_policy_stats_user_downlink"] as? Bool ?? false,
+            "observatory_enabled": model.settings["observatory_enabled"] as? Bool ?? false,
+            "burst_observatory": model.settings["burst_observatory"] as? Bool ?? false,
+            "probe_url": probeUrl.trimmingCharacters(in: .whitespacesAndNewlines),
+            "probe_interval": probeInterval.trimmingCharacters(in: .whitespacesAndNewlines),
+            "smart_interval": smartInterval.trimmingCharacters(in: .whitespacesAndNewlines)
         ]
         let response = model.call("save_xray_advanced", payload)
         model.mergeState(from: response)

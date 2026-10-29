@@ -46,7 +46,37 @@ fn core(settings: &Value, routes: &[Value], proxy: Value) -> Value {
     if settings["fake_dns"].as_bool().unwrap_or(false) {
         doc["fakedns"] = json!([{"ipPool":"198.18.0.0/15","poolSize":65535}]);
     }
+    if let Some(obs) = observatory(settings) {
+        doc["observatory"] = obs;
+    }
+    if settings["burst_observatory"].as_bool().unwrap_or(false) {
+        doc["burstObservatory"] = json!({
+            "subjectSelector": ["proxy"],
+            "pingConfig": {
+                "destination": settings["probe_url"].as_str().unwrap_or("https://www.gstatic.com/generate_204"),
+                "interval": settings["probe_interval"].as_str().unwrap_or("1m"),
+                "timeout": "5s",
+                "sampling": 3
+            }
+        });
+    }
     doc
+}
+
+fn observatory(settings: &Value) -> Option<Value> {
+    let least = settings["xray_balancers"]
+        .as_array()
+        .map(|a| a.iter().any(|b| b["strategy"].as_str() == Some("leastPing") && b["enabled"].as_bool().unwrap_or(true)))
+        .unwrap_or(false);
+    if !settings["observatory_enabled"].as_bool().unwrap_or(false) && !least {
+        return None;
+    }
+    Some(json!({
+        "subjectSelector": ["proxy"],
+        "probeURL": settings["probe_url"].as_str().filter(|s| !s.is_empty()).unwrap_or_else(|| settings["speed_endpoint"].as_str().unwrap_or("https://www.gstatic.com/generate_204")),
+        "probeInterval": settings["probe_interval"].as_str().unwrap_or("1m"),
+        "enableConcurrency": true
+    }))
 }
 
 fn sniffing(settings: &Value) -> Value {
@@ -159,12 +189,18 @@ fn push_rule(rules: &mut Vec<Value>, rule: &Value) {
     if rule["enabled"].as_bool() == Some(false) {
         return;
     }
+    let balancer = rule["balancer_tag"].as_str().unwrap_or("").trim();
     let tag = match rule["behavior"].as_str().unwrap_or("proxy") {
         "direct" => "direct",
         "block" => "block",
         _ => "proxy",
     };
     let mut extras = json!({});
+    if balancer.is_empty() {
+        extras["outboundTag"] = json!(tag);
+    } else {
+        extras["balancerTag"] = json!(balancer);
+    }
     let port = rule["port"].as_str().unwrap_or("").trim();
     if !port.is_empty() && port != "0-65535" {
         extras["port"] = json!(port);
@@ -177,23 +213,39 @@ fn push_rule(rules: &mut Vec<Value>, rule: &Value) {
     if !protocol.is_empty() {
         extras["protocol"] = json!([protocol]);
     }
+    let inbounds = list(&rule["inbounds"]);
+    if !inbounds.is_empty() {
+        extras["inboundTag"] = json!(inbounds);
+    }
+    let sources = list(&rule["sources"]);
+    if !sources.is_empty() {
+        extras["source"] = json!(sources);
+    }
+    let source_port = rule["source_port"].as_str().unwrap_or("").trim();
+    if !source_port.is_empty() {
+        extras["sourcePort"] = json!(source_port);
+    }
+    let users = list(&rule["users"]);
+    if !users.is_empty() {
+        extras["user"] = json!(users);
+    }
     let domains = list(&rule["domains"]);
     let ips = list(&rule["ips"]);
     if domains.is_empty() && ips.is_empty() {
-        if extras.as_object().map(|o| !o.is_empty()).unwrap_or(false) {
-            let mut item = json!({"type":"field","outboundTag": tag});
+        if extras.as_object().map(|o| o.keys().any(|k| k != "outboundTag" && k != "balancerTag")).unwrap_or(false) || !balancer.is_empty() {
+            let mut item = json!({"type":"field"});
             merge(&mut item, &extras);
             rules.push(item);
         }
         return;
     }
     if !domains.is_empty() {
-        let mut item = json!({"type":"field","domain": domains, "outboundTag": tag});
+        let mut item = json!({"type":"field","domain": domains});
         merge(&mut item, &extras);
         rules.push(item);
     }
     if !ips.is_empty() {
-        let mut item = json!({"type":"field","ip": ips, "outboundTag": tag});
+        let mut item = json!({"type":"field","ip": ips});
         merge(&mut item, &extras);
         rules.push(item);
     }

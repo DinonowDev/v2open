@@ -6,6 +6,7 @@ compile_error!("v2core is macOS-only");
 mod app;
 mod builder;
 mod dns_items;
+mod migrate;
 mod parser;
 mod platform;
 mod routing;
@@ -17,6 +18,7 @@ mod xray_balancers;
 
 pub use app::{locate_core, support_dir, Core};
 pub use builder::{build_config, preset};
+pub use migrate::migrate_settings;
 pub use parser::parse_link;
 pub use routing::{export_routes, parse_routes};
 pub use xray::document as xray_document;

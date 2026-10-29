@@ -117,6 +117,7 @@ struct DnsItemsView: View {
         switch kind {
         case "https": return "lock.shield"
         case "tls": return "lock"
+        case "quic": return "bolt.shield"
         default: return "antenna.radiowaves.left.and.right"
         }
     }
@@ -125,6 +126,7 @@ struct DnsItemsView: View {
         switch kind {
         case "https": return "DoH"
         case "tls": return "DoT"
+        case "quic": return "DoQ"
         default: return "UDP"
         }
     }
@@ -191,7 +193,7 @@ struct DnsItemEditorView: View {
                 title: model.t("dnsType"),
                 icon: "list.bullet",
                 value: kind,
-                options: [("https", "DoH"), ("tls", "DoT"), ("udp", "UDP")]
+                options: [("https", "DoH"), ("tls", "DoT"), ("udp", "UDP"), ("quic", "DoQ")]
             ) { kind = $0 }
             V2Field(label: model.t("server"), placeholder: "1.1.1.1", text: $server, latin: true, icon: "server.rack")
             if kind == "https" {

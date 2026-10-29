@@ -234,6 +234,8 @@ struct ProtocolChipPicker: View {
         ("shadowsocks", "SS"),
         ("shadowsocksr", "SSR"),
         ("hysteria2", "Hy2"),
+        ("hysteria", "Hy1"),
+        ("chain", "Chain"),
         ("wireguard", "WG"),
         ("ssh", "SSH"),
         ("socks", "SOCKS"),

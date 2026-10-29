@@ -25,6 +25,8 @@ struct AboutView: View {
                         if let core = model.runtime["core"] as? String, !core.isEmpty {
                             Mix(text: core, size: 12, color: C.muted.opacity(0.9))
                         }
+                        Mix(text: model.t("macosOnlyNote"), size: 12, color: C.muted)
+                            .multilineTextAlignment(.center)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(20)

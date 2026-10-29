@@ -222,8 +222,22 @@ fn defaults() -> Value {
         "send_hwid": false,
         "hwid": id(),
         "auto_update": false,
+        "geo_auto_update": false,
         "geo_auto_interval_hours": 24,
         "geo_last_auto_update": 0,
+        "sub_auto_update": false,
+        "sub_auto_interval_hours": 24,
+        "sub_last_auto_update": 0,
+        "sub_last_error": "",
+        "smart_connect": false,
+        "smart_interval": "1m",
+        "smart_tolerance": 50,
+        "probe_url": "https://www.gstatic.com/generate_204",
+        "probe_interval": "1m",
+        "observatory_enabled": false,
+        "burst_observatory": false,
+        "speed_mode": "http",
+        "persist_tunnel": false,
         "remote_dns_id": "",
         "domestic_dns_id": "",
         "dns_items": [],
@@ -282,6 +296,7 @@ impl Core {
             bypass: Vec::new(),
         };
         core.load();
+        crate::migrate::migrate_settings(&mut core.settings);
         crate::dns_items::ensure_dns_items(&mut core.settings);
         crate::xray_balancers::ensure_balancers(&mut core.settings);
         core.ensure_unique_profile_ids();
@@ -307,6 +322,7 @@ impl Core {
             }));
             self.save();
         }
+        crate::migrate::migrate_settings(&mut self.settings);
         crate::dns_items::ensure_dns_items(&mut self.settings);
         crate::xray_balancers::ensure_balancers(&mut self.settings);
     }
@@ -518,7 +534,7 @@ impl Core {
                 Ok(self.state())
             }
             "pick_best" => {
-                let id = self.pick_best_profile()?;
+                let id = self.pick_best_profile(true)?;
                 self.settings["selected_id"] = json!(id);
                 self.save();
                 Ok(json!({"id": id}))
@@ -623,6 +639,12 @@ impl Core {
                     "xray_policy_downlink_only",
                     "xray_policy_stats_user_uplink",
                     "xray_policy_stats_user_downlink",
+                    "observatory_enabled",
+                    "burst_observatory",
+                    "probe_url",
+                    "probe_interval",
+                    "smart_interval",
+                    "smart_tolerance",
                 ] {
                     if let Some(value) = args.get(key) {
                         self.settings[key] = value.clone();
@@ -687,6 +709,78 @@ impl Core {
             "clear_logs" => {
                 let _ = fs::write(self.path.parent().unwrap_or(Path::new(".")).join("core.log"), "");
                 Ok(json!({"ok": true}))
+            }
+            "sidecar_logs" => Ok(json!({"text": self.sidecar_logs()})),
+            "delete_backup" => {
+                let id = args["id"].as_str().unwrap_or("");
+                self.backups.retain(|b| b["id"].as_str() != Some(id));
+                self.save();
+                Ok(self.state())
+            }
+            "rename_backup" => {
+                let id = args["id"].as_str().unwrap_or("");
+                let name = args["name"].as_str().unwrap_or("").trim();
+                if name.is_empty() {
+                    return Err("backup name is required".into());
+                }
+                if let Some(item) = self.backups.iter_mut().find(|b| b["id"].as_str() == Some(id)) {
+                    item["name"] = json!(name);
+                    self.save();
+                }
+                Ok(self.state())
+            }
+            "export_backup" => {
+                let id = args["id"].as_str().unwrap_or("");
+                let path = args["path"].as_str().unwrap_or("");
+                if path.is_empty() {
+                    return Err("path is required".into());
+                }
+                let item = self.backups.iter().find(|b| b["id"].as_str() == Some(id)).ok_or("backup not found")?;
+                fs::write(path, serde_json::to_string_pretty(item).unwrap_or_else(|_| "{}".into())).map_err(|e| e.to_string())?;
+                Ok(json!({"path": path}))
+            }
+            "import_backup" => {
+                let path = args["path"].as_str().unwrap_or("");
+                let text = fs::read_to_string(path).map_err(|e| e.to_string())?;
+                let data: Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+                if data.get("payload").is_some() {
+                    let mut item = data;
+                    if item["id"].as_str().unwrap_or("").is_empty() {
+                        item["id"] = json!(id());
+                    }
+                    if item["name"].as_str().unwrap_or("").is_empty() {
+                        item["name"] = json!(now().to_string());
+                    }
+                    self.backups.insert(0, item);
+                } else {
+                    self.restore_payload(&data);
+                    self.backups.insert(0, json!({"id": id(), "name": now().to_string(), "payload": data}));
+                }
+                self.save();
+                Ok(self.state())
+            }
+            "export_package" => {
+                let path = args["path"].as_str().unwrap_or("");
+                if path.is_empty() {
+                    return Err("path is required".into());
+                }
+                let payload = json!({
+                    "settings": self.settings,
+                    "groups": self.groups,
+                    "routes": self.routes,
+                    "dns_items": self.settings["dns_items"],
+                    "xray_balancers": self.settings["xray_balancers"]
+                });
+                fs::write(path, serde_json::to_string_pretty(&payload).unwrap_or_else(|_| "{}".into())).map_err(|e| e.to_string())?;
+                Ok(json!({"path": path}))
+            }
+            "import_package" => {
+                let path = args["path"].as_str().unwrap_or("");
+                let text = fs::read_to_string(path).map_err(|e| e.to_string())?;
+                let data: Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+                let payload = if data.get("payload").is_some() { &data["payload"] } else { &data };
+                self.restore_payload(payload);
+                Ok(self.state())
             }
             "update_group" => {
                 self.update_group(args["id"].as_str().unwrap_or(""))?;
@@ -1751,26 +1845,44 @@ impl Core {
         (((down_bytes as f64) / secs) as u64, ((up_bytes as f64) / secs) as u64)
     }
 
-    fn pick_best_profile(&self) -> Result<String, String> {
+    fn pick_best_profile(&mut self, measure: bool) -> Result<String, String> {
+        let ids: Vec<String> = self
+            .groups
+            .iter()
+            .flat_map(|g| g["profiles"].as_array().cloned().unwrap_or_default())
+            .filter_map(|p| {
+                if p["protocol"].as_str() == Some("subscription") {
+                    None
+                } else {
+                    p["id"].as_str().map(|s| s.to_string())
+                }
+            })
+            .collect();
+        if ids.is_empty() {
+            return Err("no profile".into());
+        }
+        if measure {
+            for id in &ids {
+                let ping = self.ping_one(id);
+                self.set_ping(id, ping);
+            }
+        }
         let mut items: Vec<Value> = self
             .groups
             .iter()
             .flat_map(|g| g["profiles"].as_array().cloned().unwrap_or_default())
             .collect();
-        if items.is_empty() {
-            return Err("no profile".into());
-        }
-        let sort = self.settings["sort_by"].as_str().unwrap_or("default");
-        items.sort_by(|a, b| match sort {
-            "name" => a["remark"].as_str().unwrap_or("").cmp(b["remark"].as_str().unwrap_or("")),
-            "ping" => Self::cmp_asc_metric(a["ping"].as_i64().unwrap_or(-1), b["ping"].as_i64().unwrap_or(-1)),
-            "download" => Self::cmp_desc_metric(a["download_bps"].as_i64().unwrap_or(-1), b["download_bps"].as_i64().unwrap_or(-1)),
-            "upload" => Self::cmp_desc_metric(a["upload_bps"].as_i64().unwrap_or(-1), b["upload_bps"].as_i64().unwrap_or(-1)),
-            "time" => b["created_at"].as_u64().unwrap_or(0).cmp(&a["created_at"].as_u64().unwrap_or(0)),
-            _ => std::cmp::Ordering::Equal,
+        items.sort_by(|a, b| {
+            let ping = Self::cmp_asc_metric(a["ping"].as_i64().unwrap_or(-1), b["ping"].as_i64().unwrap_or(-1));
+            if ping != std::cmp::Ordering::Equal {
+                return ping;
+            }
+            Self::cmp_desc_metric(a["download_bps"].as_i64().unwrap_or(-1), b["download_bps"].as_i64().unwrap_or(-1))
         });
         items
-            .first()
+            .iter()
+            .find(|p| p["ping"].as_i64().unwrap_or(-1) > 0)
+            .or_else(|| items.first())
             .and_then(|p| p["id"].as_str())
             .map(String::from)
             .ok_or_else(|| "no profile".into())
@@ -1790,6 +1902,41 @@ impl Core {
 
     fn logs(&self) -> String {
         let path = self.path.parent().unwrap_or(Path::new(".")).join("core.log");
+        Self::tail_log(&path)
+    }
+
+    fn sidecar_logs(&self) -> String {
+        let dir = self.path.parent().unwrap_or(Path::new(".")).join("bridges");
+        let mut chunks = Vec::new();
+        if let Ok(entries) = fs::read_dir(&dir) {
+            let mut files: Vec<PathBuf> = entries
+                .flatten()
+                .flat_map(|e| fs::read_dir(e.path()).ok())
+                .flatten()
+                .flatten()
+                .map(|e| e.path())
+                .filter(|p| {
+                    let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
+                    name.ends_with(".log") || name.contains("mtu") || name.contains("masterdns")
+                })
+                .collect();
+            files.sort();
+            for path in files {
+                let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("log");
+                let body = Self::tail_log(&path);
+                if !body.trim().is_empty() {
+                    chunks.push(format!("----- {name} -----\n{body}"));
+                }
+            }
+        }
+        if chunks.is_empty() {
+            "no sidecar logs".into()
+        } else {
+            chunks.join("\n\n")
+        }
+    }
+
+    fn tail_log(path: &Path) -> String {
         strip_ansi(&fs::read_to_string(path).unwrap_or_default())
             .lines()
             .rev()
@@ -1926,18 +2073,62 @@ impl Core {
             let smart = self.runtime.smart;
             let _ = self.connect(&id, smart);
         }
-        if self.settings["auto_update"].as_bool().unwrap_or(false) {
-            let hours = self.settings["geo_auto_interval_hours"].as_u64().unwrap_or(24).max(1);
-            let interval = hours * 3600;
-            let last = self.settings["geo_last_auto_update"].as_u64().unwrap_or(0);
-            if now().saturating_sub(last) >= interval {
-                if self.update_all_geo_assets().is_ok() {
-                    self.settings["geo_last_auto_update"] = json!(now());
-                    self.save();
-                }
+        self.run_schedulers();
+        Ok(())
+    }
+
+    fn scheduler_due(last: u64, hours: u64) -> bool {
+        now().saturating_sub(last) >= hours.max(1) * 3600
+    }
+
+    fn geo_auto_enabled(&self) -> bool {
+        self.settings["geo_auto_update"]
+            .as_bool()
+            .unwrap_or_else(|| self.settings["auto_update"].as_bool().unwrap_or(false))
+    }
+
+    fn run_schedulers(&mut self) {
+        let geo_due = self.geo_auto_enabled()
+            && Self::scheduler_due(
+                self.settings["geo_last_auto_update"].as_u64().unwrap_or(0),
+                self.settings["geo_auto_interval_hours"].as_u64().unwrap_or(24),
+            );
+        let sub_due = self.settings["sub_auto_update"].as_bool().unwrap_or(false)
+            && Self::scheduler_due(
+                self.settings["sub_last_auto_update"].as_u64().unwrap_or(0),
+                self.settings["sub_auto_interval_hours"].as_u64().unwrap_or(24),
+            );
+        if geo_due {
+            if self.update_all_geo_assets().is_ok() {
+                self.settings["geo_last_auto_update"] = json!(now());
+                self.save();
+            }
+            return;
+        }
+        if sub_due {
+            self.refresh_due_subscriptions();
+        }
+    }
+
+    fn refresh_due_subscriptions(&mut self) {
+        let ids: Vec<String> = self
+            .groups
+            .iter()
+            .filter(|g| {
+                let url = g["url"].as_str().unwrap_or("").trim();
+                !url.is_empty()
+            })
+            .filter_map(|g| g["id"].as_str().map(|s| s.to_string()))
+            .collect();
+        let mut last_err = String::new();
+        for id in ids {
+            if let Err(err) = self.update_group(&id) {
+                last_err = err;
             }
         }
-        Ok(())
+        self.settings["sub_last_auto_update"] = json!(now());
+        self.settings["sub_last_error"] = json!(last_err);
+        self.save();
     }
 
     fn optimize_mtu(&mut self) -> Result<Value, String> {
@@ -1987,6 +2178,14 @@ impl Core {
     }
 
     fn speed_test(&mut self) -> Result<Value, String> {
+        if self.settings["speed_mode"].as_str() == Some("tcp") {
+            let url = self.settings["speed_endpoint"].as_str().unwrap_or("https://www.gstatic.com/generate_204");
+            let host = url.trim_start_matches("https://").trim_start_matches("http://").split('/').next().unwrap_or(url);
+            let (host, port) = crate::parser::split_host_port(host, 443);
+            let prefer_ipv6 = self.settings["prefer_ipv6"].as_bool().unwrap_or(false);
+            let ms = tcp_connect_ms(&host, port, Duration::from_secs(self.settings["speed_timeout"].as_u64().unwrap_or(8)), prefer_ipv6).unwrap_or(0);
+            return Ok(json!({"mode": "tcp", "tcp_ms": ms, "host": host, "port": port}));
+        }
         run_speed_probe(&self.speed_plan())
     }
 
@@ -1999,6 +2198,9 @@ impl Core {
                 }
             }
             self.settings = merged;
+            crate::migrate::migrate_settings(&mut self.settings);
+            crate::dns_items::ensure_dns_items(&mut self.settings);
+            crate::xray_balancers::ensure_balancers(&mut self.settings);
         }
         if data.get("groups").is_some() {
             self.groups = data["groups"].as_array().cloned().unwrap_or_default();

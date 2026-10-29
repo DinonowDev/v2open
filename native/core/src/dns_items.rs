@@ -59,6 +59,13 @@ pub fn item_to_uri(item: &Value) -> String {
                 format!("tls://{server}:853")
             }
         }
+        "quic" => {
+            if server.starts_with("quic://") {
+                server.to_string()
+            } else {
+                format!("quic://{server}:853")
+            }
+        }
         _ => {
             if server.contains(':') {
                 server.to_string()
@@ -136,7 +143,7 @@ pub fn apply_to_server(server: &mut Value, item: &Value) {
     let host = resolver_host(item);
     let dial = &addrs[0];
     match server["type"].as_str().unwrap_or("") {
-        "https" | "tls" => {
+        "https" | "tls" | "quic" => {
             if !host.is_empty() && !is_ip(&host) {
                 server["server"] = json!(dial);
                 if let Some(tls) = server.get_mut("tls") {
@@ -181,8 +188,8 @@ pub fn save_dns_item(settings: &mut Value, item: &Value) -> Result<(), String> {
         return Err("dns item id is required".into());
     }
     let kind = item["type"].as_str().unwrap_or("udp");
-    if !matches!(kind, "udp" | "tls" | "https") {
-        return Err("dns type must be udp, tls, or https".into());
+    if !matches!(kind, "udp" | "tls" | "https" | "quic") {
+        return Err("dns type must be udp, tls, https, or quic".into());
     }
     if item["server"].as_str().unwrap_or("").trim().is_empty() {
         return Err("dns server is required".into());

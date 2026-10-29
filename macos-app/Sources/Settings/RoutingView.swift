@@ -241,6 +241,11 @@ struct RoutingView: View {
         var draft = rule
         draft["domains"] = ((rule["domains"] as? [String]) ?? []).joined(separator: "\n")
         draft["ips"] = ((rule["ips"] as? [String]) ?? []).joined(separator: "\n")
+        draft["inbounds"] = ((rule["inbounds"] as? [String]) ?? []).joined(separator: "\n")
+        draft["sources"] = ((rule["sources"] as? [String]) ?? []).joined(separator: "\n")
+        draft["users"] = ((rule["users"] as? [String]) ?? []).joined(separator: "\n")
+        draft["source_port"] = rule["source_port"] as? String ?? ""
+        draft["balancer_tag"] = rule["balancer_tag"] as? String ?? ""
         model.draft = draft
         model.push("route_editor")
     }

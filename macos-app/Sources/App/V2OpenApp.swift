@@ -28,6 +28,11 @@ struct V2OpenApp: App {
                         model.disconnectTunnel()
                     }
                 }
+                .onReceive(NotificationCenter.default.publisher(for: NSWorkspace.didWakeNotification)) { _ in
+                    if model.settings["persist_tunnel"] as? Bool == true {
+                        model.connectTunnel()
+                    }
+                }
         }
         .defaultSize(width: AppFrame.width, height: AppFrame.height)
         .windowResizability(.contentSize)

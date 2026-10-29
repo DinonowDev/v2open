@@ -14,10 +14,30 @@ jobs:
       - name: Locale keys and version copies
         run: ./scripts/check-docs.sh
 
-  swift:
-    name: Swift tests
+  macos:
+    name: macOS build and test
     runs-on: macos-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-      - name: Compile and run helper tests
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust tests
+        working-directory: native
+        run: cargo test -p v2core
+
+      - name: Swift tests
         run: ./scripts/test-swift.sh
+
+      - name: Release build
+        run: ./build-macos.sh
+
+      - name: Upload build artifact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: V2Open-macos-arm64
+          path: V2Open.app
+          retention-days: 14
+          if-no-files-found: error

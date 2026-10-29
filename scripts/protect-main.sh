@@ -27,7 +27,7 @@ gh api "repos/{owner}/{repo}/branches/main/protection" \
 {
   "required_status_checks": {
     "strict": true,
-    "contexts": ["Docs and version", "Swift tests"]
+    "contexts": ["Docs and version", "macOS build and test"]
   },
   "enforce_admins": false,
   "required_pull_request_reviews": {

@@ -90,6 +90,22 @@ Runtime data lives in `~/Library/Application Support/V2Open/` (`library.json`, `
 
 ---
 
+## Download
+
+Pre-built **Apple Silicon (arm64)** `.app` bundles ship on **[GitHub Releases](https://github.com/DinonowDev/v2open/releases)** when you push a version tag (`v1.2.3` must match [`VERSION`](VERSION) line 1). CI runs [`.github/workflows/release.yml`](.github/workflows/release.yml): tests, `./build-macos.sh`, then uploads `V2Open-{version}-build{N}-macos-arm64.zip`.
+
+1. Open [Releases](https://github.com/DinonowDev/v2open/releases) and download the latest zip for your Mac (Apple Silicon).
+2. Unzip and move `V2Open.app` to Applications.
+3. First launch: **Right-click → Open** if macOS blocks an unsigned build, or clear quarantine: `xattr -cr /path/to/V2Open.app`
+
+**Intel Macs:** CI currently bundles **arm64** engines only. Build locally with `./build-macos.sh` after placing matching `binaries/macos/*` for your architecture ([docs/binaries.md](docs/binaries.md)).
+
+**Bleeding edge:** each push to `main` also publishes a **`V2Open-macos-arm64`** workflow artifact (14 days) on the [Actions](https://github.com/DinonowDev/v2open/actions) tab — same unsigned ad-hoc build as releases.
+
+Cut a release: [docs/release.md](docs/release.md).
+
+---
+
 ## Repository layout
 
 ```

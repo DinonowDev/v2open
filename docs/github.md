@@ -18,7 +18,7 @@ In GitHub: **Settings → Rules → Rulesets** (or **Branches → Branch protect
 | Required approvals | 1 when a second collaborator exists; 0 is acceptable for a solo maintainer |
 | Dismiss stale reviews on new commits | On if you have reviewers |
 | Require conversation resolution | On |
-| Required status checks | `Docs and version` (`check` job) and `Swift tests` (`swift` job) once those workflows have run once |
+| Required status checks | `Docs and version` (`check` job) and `macOS build and test` (`macos` job) once those workflows have run once |
 | Require linear history | Optional; squash-merge already keeps `main` linear |
 | Do not allow bypassing | On for everyone except the repo owner if you need an emergency hatch |
 

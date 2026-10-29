@@ -59,6 +59,22 @@ V2Open سرویس VPN نمی‌فروشد و سرورهای کانفیگ شما 
 
 ---
 
+## دانلود
+
+بیلد آماده **Apple Silicon (arm64)** روی **[GitHub Releases](https://github.com/DinonowDev/v2open/releases)** منتشر می‌شود؛ با push تگ `v1.2.3` (باید با خط اول [`VERSION`](VERSION) یکی باشد) workflow [release.yml](.github/workflows/release.yml) zip را می‌سازد.
+
+1. از [Releases](https://github.com/DinonowDev/v2open/releases) آخرین `V2Open-*-macos-arm64.zip` را بگیرید.
+2. از zip خارج کنید و `V2Open.app` را به Programs ببرید.
+3. بار اول: **Right-click → Open** یا `xattr -cr /path/to/V2Open.app`
+
+**مک Intel:** فعلاً CI فقط arm64 دارد؛ برای Intel خودتان `./build-macos.sh` بزنید ([binaries.md](docs/binaries.md)).
+
+**نسخهٔ آزمایشی:** بعد از هر push به `main`، artifact **`V2Open-macos-arm64`** در تب [Actions](https://github.com/DinonowDev/v2open/actions) (۱۴ روز) موجود است.
+
+راهنمای انتشار: [docs/release.md](docs/release.md).
+
+---
+
 ## مشارکت
 
 قبل از پول‌ریکوئست [CONTRIBUTING.fa.md](CONTRIBUTING.fa.md) را بخوانید. خلاصه:

@@ -31,6 +31,17 @@ Do not copy compiler flags into a new script; extend `macos-env.sh`.
 
 ---
 
+## Continuous integration
+
+| Workflow | Trigger | What it does |
+| --- | --- | --- |
+| [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) | PR + push to `main` | `check-docs.sh`, `cargo test -p v2core`, `test-swift.sh`, `./build-macos.sh`. On `main`, uploads artifact `V2Open-macos-arm64` (14 days). |
+| [`.github/workflows/release.yml`](../.github/workflows/release.yml) | Push tag `v*` | Same tests + build, zip, GitHub Release. Tag must match [`VERSION`](../VERSION) (e.g. `v1.1.0`). |
+
+Release process: [release.md](release.md).
+
+---
+
 ## Debug loop
 
 ```bash

@@ -11,6 +11,7 @@ How to edit this file: [docs/versioning.md](docs/versioning.md).
 
 ### Added
 
+- GitHub Actions: CI builds and tests on macOS (`cargo test`, Swift tests, `./build-macos.sh`); main-branch workflow artifacts; tag-triggered Releases with downloadable zip.
 - App tunnel can pick installed Mac apps from a searchable list with their icons instead of typing process names.
 - Project documentation, contributing rules, branching / PR guide, SemVer source file (`VERSION`), GitHub issue/PR templates, locale/version check scripts, MIT `LICENSE`, third-party `NOTICE`, Swift helper tests, and CI for docs + Swift tests.
 

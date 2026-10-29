@@ -1,0 +1,58 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Tag matches VERSION
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          VER="$(sed -n '1p' VERSION | tr -d '[:space:]')"
+          if [[ "$TAG" != "$VER" ]]; then
+            echo "Git tag v$TAG does not match VERSION ($VER). Bump VERSION before tagging." >&2
+            exit 1
+          fi
+          ./scripts/check-version.sh
+
+      - name: Rust tests
+        working-directory: native
+        run: cargo test -p v2core
+
+      - name: Swift tests
+        run: ./scripts/test-swift.sh
+
+      - name: Build app bundle
+        run: ./build-macos.sh
+
+      - name: Package zip
+        run: |
+          VERSION="$(sed -n '1p' VERSION | tr -d '[:space:]')"
+          BUILD="$(sed -n '2p' VERSION | tr -d '[:space:]')"
+          ZIP="V2Open-${VERSION}-build${BUILD}-macos-arm64.zip"
+          ditto -c -k --keepParent V2Open.app "$ZIP"
+          echo "ZIP=$ZIP" >> "$GITHUB_ENV"
+
+      - name: Release notes from CHANGELOG
+        run: ./scripts/changelog-section.sh "${GITHUB_REF_NAME#v}" > release-notes.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ZIP }}
+          body_path: release-notes.md
+          draft: false
+          prerelease: false

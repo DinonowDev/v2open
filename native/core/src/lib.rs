@@ -5,6 +5,7 @@ compile_error!("v2core is macOS-only");
 
 mod app;
 mod builder;
+mod diagnostics;
 mod dns_items;
 mod migrate;
 mod parser;

@@ -5,10 +5,12 @@ struct ConfigActionBar: View {
     var addTitle: String
     var qrTitle: String
     var pingTitle: String
+    var updateTitle: String
     var onAdd: () -> Void
     var onQR: () -> Void
     var onSort: () -> Void
     var onPing: () -> Void
+    var onUpdate: () -> Void
 
     var body: some View {
         HStack(spacing: 0) {
@@ -19,6 +21,8 @@ struct ConfigActionBar: View {
             sortButton
             barDivider
             iconButton("dot.radiowaves.left.and.right", help: pingTitle, action: onPing)
+            barDivider
+            iconButton("arrow.triangle.2.circlepath", help: updateTitle, action: onUpdate)
         }
         .frame(height: 40)
         .background(C.cardElevated)

@@ -8,6 +8,7 @@ final class AppTerminator: NSObject, NSApplicationDelegate {
         let keep = (settings["geo_auto_update"] as? Bool == true)
             || (settings["on_demand"] as? Bool == true)
             || (settings["persist_tunnel"] as? Bool == true)
+            || (settings["sub_auto_update"] as? Bool == true)
         return !keep
     }
 
@@ -24,7 +25,8 @@ final class AppTerminator: NSObject, NSApplicationDelegate {
         BackgroundScheduler.installIfNeeded(
             geoAuto: settings["geo_auto_update"] as? Bool == true,
             onDemand: onDemand,
-            persist: persist || wake
+            persist: persist || wake,
+            groupAuto: settings["sub_auto_update"] as? Bool == true
         )
         if !persist && !onDemand {
             _ = v2RPC(method: "disconnect")

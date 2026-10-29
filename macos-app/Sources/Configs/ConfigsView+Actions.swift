@@ -172,4 +172,48 @@ extension ConfigsView {
         filePassword = ""
         model.showToast(model.t("imported"), tone: .success)
     }
+
+    func groupSubtitle(_ group: [String: Any]) -> String {
+        let url = (group["url"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if url.isEmpty { return model.t("custom") }
+        var parts = [model.t("remoteGroup")]
+        let expire = jsonUInt(group["expire"])
+        if expire > 0 {
+            let left = Int64(expire) - Int64(Date().timeIntervalSince1970)
+            if left <= 0 {
+                parts.append(model.t("expired"))
+            } else {
+                parts.append("\(left / 86_400) \(model.t("daysLeft"))")
+            }
+        }
+        let updated = jsonUInt(group["updated_at"])
+        if updated > 0 {
+            let formatter = DateFormatter()
+            formatter.dateStyle = .short
+            formatter.timeStyle = .short
+            parts.append(formatter.string(from: Date(timeIntervalSince1970: TimeInterval(updated))))
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    func updateGroup(gid: String) {
+        if let err = model.invoke("update_group", ["id": gid]) {
+            model.showToast(err, tone: .error)
+            return
+        }
+        model.showToast(model.t("subRefreshed"), tone: .success)
+    }
+
+    func updateAllGroups() {
+        if let err = model.invoke("update_group", [:]) {
+            model.showToast(err, tone: .error)
+            return
+        }
+        model.showToast(model.t("subRefreshed"), tone: .success)
+    }
+
+    func openGroupUrl(_ group: [String: Any]) {
+        groupUrlDraft = group["url"] as? String ?? ""
+        groupUrlTarget = group
+    }
 }

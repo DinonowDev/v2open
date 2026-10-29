@@ -102,4 +102,31 @@ extension ConfigsView {
             }
         }
     }
+
+    var groupUrlOverlay: some View {
+        SheetBackdrop(onDismiss: { groupUrlTarget = nil }) {
+            SheetCard {
+                VStack(alignment: .leading, spacing: 0) {
+                    SheetHeader(
+                        title: model.t("setGroupUrl"),
+                        subtitle: model.t("groupUrl"),
+                        close: { groupUrlTarget = nil },
+                        closeLabel: model.t("cancel")
+                    )
+                    V2Field(placeholder: "https://", text: $groupUrlDraft, latin: true, icon: "link")
+                        .padding(.bottom, 14)
+                    SheetActionButton(title: model.t("save"), primary: true, icon: "checkmark") {
+                        let gid = groupUrlTarget?["id"] as? String ?? ""
+                        if let err = model.invoke("set_group_url", ["id": gid, "url": groupUrlDraft]) {
+                            model.showToast(err, tone: .error)
+                            return
+                        }
+                        groupUrlTarget = nil
+                        model.showToast(model.t("saved"), tone: .success)
+                    }
+                    SheetActionButton(title: model.t("cancel"), quiet: true) { groupUrlTarget = nil }
+                }
+            }
+        }
+    }
 }

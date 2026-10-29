@@ -10,7 +10,7 @@ extension ConfigsView {
             let raw = group["name"] as? String ?? ""
             return raw.isEmpty ? model.t("local") : raw
         }()
-        let subtitle = model.t("custom")
+        let subtitle = groupSubtitle(group)
         let expanded = !collapsedGroups.contains(gid)
         return VStack(alignment: .leading, spacing: 0) {
             Button { toggleGroup(gid) } label: {
@@ -69,6 +69,9 @@ extension ConfigsView {
                 ConfigRowIconButton(systemName: "dot.radiowaves.left.and.right", label: model.t("pingAll")) {
                     runPing(profileIds: profileIds(in: group), args: pingArgs(groupId: gid))
                 }
+                ConfigRowIconButton(systemName: "arrow.triangle.2.circlepath", label: model.t("update")) {
+                    updateGroup(gid: gid)
+                }
                 ConfigRowIconButton(systemName: group["pinned"] as? Bool == true ? "pin.slash" : "pin", label: model.t("pinGroup")) {
                     _ = model.call("pin_group", ["id": gid, "pinned": !(group["pinned"] as? Bool == true)])
                     model.refresh()
@@ -93,6 +96,8 @@ extension ConfigsView {
                 }
                 Button(model.t("copyAllLinks")) { copyGroupLinks(gid: gid) }
                 Button(model.t("exportGroup")) { exportGroup(gid: gid, name: name) }
+                Button(model.t("update")) { updateGroup(gid: gid) }
+                Button(model.t("setGroupUrl")) { openGroupUrl(group) }
                 Divider()
                 Button(model.t("deleteAllLocal"), role: .destructive) { clearGroup(gid: gid) }
             }

@@ -10,6 +10,8 @@ struct ConfigsView: View {
     @State var shareProfile: [String: Any]?
     @State var shareGroupId = ""
     @State var qrProfile: [String: Any]?
+    @State var groupUrlTarget: [String: Any]?
+    @State var groupUrlDraft = ""
 
     var body: some View {
         let groups = filteredGroups()
@@ -28,10 +30,12 @@ struct ConfigsView: View {
                         addTitle: model.t("add"),
                         qrTitle: model.t("qr"),
                         pingTitle: model.t("pingAll"),
+                        updateTitle: model.t("updateAll"),
                         onAdd: { addStep = .menu },
                         onQR: { addStep = .scan },
                         onSort: { cycleSort() },
-                        onPing: { runPing(profileIds: Set(model.allProfileIds()), args: pingArgs()) }
+                        onPing: { runPing(profileIds: Set(model.allProfileIds()), args: pingArgs()) },
+                        onUpdate: { updateAllGroups() }
                     )
                     .padding(.top, 10)
                 }
@@ -87,6 +91,9 @@ struct ConfigsView: View {
             }
             if let profile = qrProfile {
                 ProfileQRSheet(profile: profile) { qrProfile = nil }
+            }
+            if groupUrlTarget != nil {
+                groupUrlOverlay
             }
         }
         .animation(.spring(response: 0.34, dampingFraction: 0.88), value: addStep)

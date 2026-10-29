@@ -1,5 +1,6 @@
 import CloudKit
 import Foundation
+import Security
 
 struct CloudBackupItem: Identifiable {
     var id: String
@@ -11,11 +12,20 @@ final class CloudSync {
     static let shared = CloudSync()
     private let queue = DispatchQueue(label: "v2open.cloud")
     private var last = Date.distantPast
-    private let container = CKContainer(identifier: "iCloud.local.v2open.desktop")
+    private let containerID = "iCloud.local.v2open.desktop"
+    private let container: CKContainer?
 
     enum AccountKind { case available, noAccount, restricted, unknown }
 
+    private init() {
+        container = Self.makeContainer(id: containerID)
+    }
+
     func account(completion: @escaping (AccountKind) -> Void) {
+        guard let container else {
+            DispatchQueue.main.async { completion(.unknown) }
+            return
+        }
         container.accountStatus { status, _ in
             let kind: AccountKind
             switch status {
@@ -29,6 +39,10 @@ final class CloudSync {
     }
 
     func syncServers(completion: @escaping (Bool) -> Void) {
+        guard container != nil else {
+            DispatchQueue.main.async { completion(false) }
+            return
+        }
         queue.async {
             self.syncLibrary()
             DispatchQueue.main.async { completion(true) }
@@ -52,6 +66,7 @@ final class CloudSync {
     }
 
     func kick(force: Bool = false) {
+        guard container != nil else { return }
         queue.async { [weak self] in
             guard let self else { return }
             if !force, Date().timeIntervalSince(self.last) < 45 { return }
@@ -61,8 +76,12 @@ final class CloudSync {
     }
 
     func listNamed(completion: @escaping ([CloudBackupItem]) -> Void) {
+        guard let container else {
+            DispatchQueue.main.async { completion([]) }
+            return
+        }
         queue.async {
-            let database = self.container.privateCloudDatabase
+            let database = container.privateCloudDatabase
             let query = CKQuery(recordType: "NamedBackup", predicate: NSPredicate(value: true))
             query.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
             database.fetch(withQuery: query, inZoneWith: nil, desiredKeys: nil, resultsLimit: CKQueryOperation.maximumResults) { result in
@@ -86,6 +105,10 @@ final class CloudSync {
     }
 
     func saveNamed(name: String, completion: @escaping (Bool) -> Void) {
+        guard let container else {
+            DispatchQueue.main.async { completion(false) }
+            return
+        }
         queue.async {
             guard let local = self.libraryURL(), FileManager.default.fileExists(atPath: local.path) else {
                 DispatchQueue.main.async { completion(false) }
@@ -96,16 +119,20 @@ final class CloudSync {
             record["name"] = name as CKRecordValue
             record["createdAt"] = Date() as CKRecordValue
             record["payload"] = CKAsset(fileURL: local)
-            self.container.privateCloudDatabase.save(record) { _, error in
+            container.privateCloudDatabase.save(record) { _, error in
                 DispatchQueue.main.async { completion(error == nil) }
             }
         }
     }
 
     func restoreNamed(id: String, completion: @escaping (Bool) -> Void) {
+        guard let container else {
+            DispatchQueue.main.async { completion(false) }
+            return
+        }
         queue.async {
             let recordID = CKRecord.ID(recordName: id)
-            self.container.privateCloudDatabase.fetch(withRecordID: recordID) { record, _ in
+            container.privateCloudDatabase.fetch(withRecordID: recordID) { record, _ in
                 guard let asset = record?["payload"] as? CKAsset, let file = asset.fileURL, let local = self.libraryURL() else {
                     DispatchQueue.main.async { completion(false) }
                     return
@@ -119,14 +146,19 @@ final class CloudSync {
     }
 
     func deleteNamed(id: String, completion: @escaping (Bool) -> Void) {
+        guard let container else {
+            DispatchQueue.main.async { completion(false) }
+            return
+        }
         queue.async {
-            self.container.privateCloudDatabase.delete(withRecordID: CKRecord.ID(recordName: id)) { _, error in
+            container.privateCloudDatabase.delete(withRecordID: CKRecord.ID(recordName: id)) { _, error in
                 DispatchQueue.main.async { completion(error == nil) }
             }
         }
     }
 
     private func syncLibrary() {
+        guard let container else { return }
         let group = DispatchGroup()
         var available = false
         group.enter()
@@ -167,5 +199,39 @@ final class CloudSync {
     private func driveURL() -> URL? {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs/V2Open/library.json")
+    }
+
+    private static func makeContainer(id: String) -> CKContainer? {
+        guard cloudKitAllowed(containerID: id) else { return nil }
+        return CKContainer(identifier: id)
+    }
+
+    private static func cloudKitAllowed(containerID: String) -> Bool {
+        let ents = signingEntitlements()
+        guard !ents.isEmpty else { return false }
+        let team = ents["com.apple.developer.team-identifier"] as? String ?? ""
+        guard !team.isEmpty else { return false }
+        let services = ents["com.apple.developer.icloud-services"]
+        let hasCloudKit: Bool
+        if let list = services as? [String] {
+            hasCloudKit = list.contains("CloudKit")
+        } else if let list = services as? [Any] {
+            hasCloudKit = list.contains { "\($0)" == "CloudKit" }
+        } else {
+            hasCloudKit = false
+        }
+        let ids = ents["com.apple.developer.icloud-container-identifiers"] as? [String] ?? []
+        return hasCloudKit && ids.contains(containerID)
+    }
+
+    private static func signingEntitlements() -> [String: Any] {
+        var code: SecStaticCode?
+        guard SecStaticCodeCreateWithPath(Bundle.main.bundleURL as CFURL, [], &code) == errSecSuccess,
+              let code else { return [:] }
+        var info: CFDictionary?
+        let flags = SecCSFlags(rawValue: kSecCSSigningInformation)
+        guard SecCodeCopySigningInformation(code, flags, &info) == errSecSuccess,
+              let dict = info as? [String: Any] else { return [:] }
+        return dict[kSecCodeInfoEntitlementsDict as String] as? [String: Any] ?? [:]
     }
 }

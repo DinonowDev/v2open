@@ -50,8 +50,8 @@ enum BackgroundScheduler {
         }
     }
 
-    static func installIfNeeded(geoAuto: Bool, onDemand: Bool, persist: Bool) {
-        syncLaunchAgent(enabled: geoAuto || onDemand || persist)
+    static func installIfNeeded(geoAuto: Bool, onDemand: Bool, persist: Bool, groupAuto: Bool = false) {
+        syncLaunchAgent(enabled: geoAuto || onDemand || persist || groupAuto)
     }
 
     private static func plistURL() -> URL {

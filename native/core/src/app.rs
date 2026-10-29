@@ -1,6 +1,6 @@
 use crate::builder::{build_config, build_pipe, exclude_tunnel_addresses, preset};
 use crate::routing::{builtin_geo_assets, export_routes, geoip_download_url, geosite_download_url, matcher_text, normalize_rule, parse_routes};
-use crate::parser::{build_link, parse_text};
+use crate::parser::{build_link, parse_link, parse_text, parse_userinfo};
 use serde_json::{json, Value};
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Read, Write};
@@ -492,21 +492,6 @@ impl Core {
         crate::migrate::migrate_settings(&mut self.settings);
         crate::dns_items::ensure_dns_items(&mut self.settings);
         crate::xray_balancers::ensure_balancers(&mut self.settings);
-        self.flatten_subscription_groups();
-    }
-
-    fn flatten_subscription_groups(&mut self) {
-        let mut changed = false;
-        for group in &mut self.groups {
-            if group["kind"].as_str() == Some("subscription") {
-                group["kind"] = json!("local");
-                group["url"] = json!("");
-                changed = true;
-            }
-        }
-        if changed {
-            self.save();
-        }
     }
 
     fn merge_icloud(&mut self) {
@@ -726,7 +711,10 @@ impl Core {
                 self.import_text(args["text"].as_str().unwrap_or(""), args["group_id"].as_str())?;
                 Ok(self.state())
             }
-            "subscribe" => Err("subscriptions were removed".into()),
+            "subscribe" => {
+                self.subscribe(args["name"].as_str().unwrap_or("Group"), args["url"].as_str().unwrap_or(""))?;
+                Ok(self.state())
+            }
             "connect" => {
                 if let Err(err) = self.connect(
                     args["id"].as_str().unwrap_or(""),
@@ -971,7 +959,14 @@ impl Core {
                 self.save();
                 Ok(self.state())
             }
-            "logs" => Ok(json!({"text": self.logs_kind(args["kind"].as_str().unwrap_or("error"))})),
+            "logs" => {
+                let kind = args["kind"].as_str().unwrap_or("error");
+                if kind == "sidecar" {
+                    Ok(self.sidecar_logs_payload())
+                } else {
+                    Ok(self.logs_payload(kind))
+                }
+            }
             "clear_logs" => {
                 let dir = self.path.parent().unwrap_or(Path::new("."));
                 for name in ["core.log", "error.log", "access.log", "dns.log", "tunnel.log"] {
@@ -979,7 +974,7 @@ impl Core {
                 }
                 Ok(json!({"ok": true}))
             }
-            "sidecar_logs" => Ok(json!({"text": self.sidecar_logs()})),
+            "sidecar_logs" => Ok(self.sidecar_logs_payload()),
             "delete_backup" => {
                 let id = args["id"].as_str().unwrap_or("");
                 self.backups.retain(|b| b["id"].as_str() != Some(id));
@@ -1162,7 +1157,19 @@ impl Core {
                 write_v2box_zip(path, password, &catalog)?;
                 Ok(json!({"path": path, "format": "v2box", "text": text, "password": !password.is_empty()}))
             }
-            "update_group" => Err("subscriptions were removed".into()),
+            "update_group" => {
+                let id = args["id"].as_str().unwrap_or("");
+                if id.is_empty() {
+                    self.refresh_remote_groups()?;
+                } else {
+                    self.update_group(id)?;
+                }
+                Ok(self.state())
+            }
+            "set_group_url" => {
+                self.set_group_url(args["id"].as_str().unwrap_or(""), args["url"].as_str().unwrap_or(""))?;
+                Ok(self.state())
+            }
             "prepare" => self.prepare(
                 args["id"].as_str().unwrap_or(""),
                 args["smart"].as_bool().unwrap_or(false),
@@ -1248,8 +1255,8 @@ impl Core {
                 } else if bytes.starts_with(b"PK") {
                     match unzip_library(password, &bytes)? {
                         ZipPayload::Json(plain) => {
-                            let data: Value = serde_json::from_slice(&plain).map_err(|_| "locked file did not contain a library".to_string())?;
-                            self.restore_payload(&data);
+                let data: Value = serde_json::from_slice(&plain).map_err(|_| "locked file did not contain a library".to_string())?;
+                self.restore_payload(&data);
                         }
                         ZipPayload::Links(text) => {
                             self.import_text(&text, None)?;
@@ -1294,14 +1301,18 @@ impl Core {
 
     fn import_text(&mut self, text: &str, group_id: Option<&str>) -> Result<(), String> {
         let trimmed = text.trim();
+        if trimmed.starts_with("v2box://") || trimmed.starts_with("v2open://") {
+            if let Ok(node) = parse_link(trimmed) {
+                if node["protocol"].as_str() == Some("subscription") {
+                    let url = node["address"].as_str().unwrap_or("");
+                    if !url.is_empty() {
+                        return self.subscribe(node["remark"].as_str().unwrap_or("Group"), url);
+                    }
+                }
+            }
+        }
         if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
-            let body = ureq::get(trimmed)
-                .timeout(Duration::from_secs(20))
-                .call()
-                .map_err(|e| e.to_string())?
-                .into_string()
-                .map_err(|e| e.to_string())?;
-            return self.import_nodes(&body, group_id);
+            return self.subscribe("Group", trimmed);
         }
         if trimmed.starts_with('{') {
             if let Ok(payload) = serde_json::from_str::<Value>(trimmed) {
@@ -1326,9 +1337,13 @@ impl Core {
         let gid = group_id.map(|s| s.to_string()).unwrap_or_else(|| self.groups[self.local_group_index()]["id"].as_str().unwrap_or("").to_string());
         for node in nodes {
             if node["protocol"].as_str() == Some("subscription") {
-                continue;
+                let url = node["address"].as_str().unwrap_or("");
+                if !url.is_empty() {
+                    self.subscribe(node["remark"].as_str().unwrap_or("Group"), url)?;
+                }
+            } else {
+                self.insert_profile(&gid, node);
             }
-            self.insert_profile(&gid, node);
         }
         Ok(())
     }
@@ -1359,6 +1374,150 @@ impl Core {
             }));
         }
         self.save();
+    }
+
+    fn fetch_group_body(&self, url: &str) -> Result<(String, String, String, String), String> {
+        if !url.starts_with("http://") && !url.starts_with("https://") {
+            return Err("group url must be http or https".into());
+        }
+        let mut req = ureq::get(url)
+            .timeout(Duration::from_secs(30))
+            .set("User-Agent", self.settings["user_agent"].as_str().unwrap_or("V2Open"));
+        if self.settings["send_hwid"].as_bool().unwrap_or(false) {
+            req = req.set("X-HWID", self.settings["hwid"].as_str().unwrap_or(""));
+        }
+        let response = req.call().map_err(|e| e.to_string())?;
+        let info = response.header("subscription-userinfo").unwrap_or("").to_string();
+        let title = response.header("profile-title").unwrap_or("").to_string();
+        let announce = response.header("announce").unwrap_or("").to_string();
+        let body = response.into_string().map_err(|e| e.to_string())?;
+        Ok((body, info, title, announce))
+    }
+
+    fn apply_group_fetch(&mut self, group_id: &str, body: &str, info_header: &str, title: &str, announce: &str) -> Result<(), String> {
+        let info = parse_userinfo(info_header);
+        let nodes = parse_text(body);
+        let nodes: Vec<Value> = nodes.into_iter().filter(|n| n["protocol"].as_str() != Some("subscription")).collect();
+        if nodes.is_empty() {
+            return Err("the group url did not include any configs".into());
+        }
+        if let Some(group) = self.groups.iter_mut().find(|g| g["id"].as_str() == Some(group_id)) {
+            group["profiles"] = json!([]);
+            group["updated_at"] = json!(now());
+            group["kind"] = json!("remote");
+            if !title.is_empty() {
+                group["name"] = json!(title);
+            }
+            if !announce.is_empty() {
+                group["announcement"] = json!(announce);
+            }
+            if !info_header.is_empty() {
+                group["expire"] = json!(info.3);
+                group["upload"] = json!(info.0);
+                group["download"] = json!(info.1);
+                group["total"] = json!(info.2);
+            }
+        }
+        self.save();
+        for node in nodes {
+            self.insert_profile(group_id, node);
+        }
+        Ok(())
+    }
+
+    fn subscribe(&mut self, name: &str, url: &str) -> Result<(), String> {
+        let url = url.trim();
+        if let Some(gid) = self
+            .groups
+            .iter()
+            .find(|g| g["url"].as_str() == Some(url))
+            .and_then(|g| g["id"].as_str().map(|s| s.to_string()))
+        {
+            return self.update_group(&gid);
+        }
+        let (body, info, title, announce) = self.fetch_group_body(url)?;
+        let preview = parse_text(&body);
+        if preview.iter().all(|n| n["protocol"].as_str() == Some("subscription")) {
+            return Err("the group url did not include any configs".into());
+        }
+        let gid = id();
+        self.groups.push(json!({
+            "id": gid,
+            "name": if title.is_empty() { name.to_string() } else { title.clone() },
+            "kind": "remote",
+            "url": url,
+            "pinned": false,
+            "expanded": true,
+            "locked": false,
+            "announcement": announce,
+            "expire": 0,
+            "upload": 0,
+            "download": 0,
+            "total": 0,
+            "updated_at": now(),
+            "profiles": []
+        }));
+        self.apply_group_fetch(&gid, &body, &info, &title, &announce)
+    }
+
+    fn update_group(&mut self, group_id: &str) -> Result<(), String> {
+        let url = self
+            .groups
+            .iter()
+            .find(|g| g["id"].as_str() == Some(group_id))
+            .and_then(|g| g["url"].as_str())
+            .unwrap_or("")
+            .to_string();
+        if url.is_empty() {
+            return Err("this group has no update url".into());
+        }
+        let (body, info, title, announce) = self.fetch_group_body(&url)?;
+        self.apply_group_fetch(group_id, &body, &info, &title, &announce)
+    }
+
+    fn set_group_url(&mut self, group_id: &str, url: &str) -> Result<(), String> {
+        let url = url.trim().to_string();
+        {
+            let group = self
+                .groups
+                .iter_mut()
+                .find(|g| g["id"].as_str() == Some(group_id))
+                .ok_or_else(|| "group not found".to_string())?;
+            group["url"] = json!(url.clone());
+            group["kind"] = json!(if url.is_empty() { "local" } else { "remote" });
+        }
+        self.save();
+        if url.is_empty() {
+            return Ok(());
+        }
+        self.update_group(group_id)
+    }
+
+    fn refresh_remote_groups(&mut self) -> Result<(), String> {
+        let ids: Vec<String> = self
+            .groups
+            .iter()
+            .filter(|g| !g["url"].as_str().unwrap_or("").trim().is_empty())
+            .filter_map(|g| g["id"].as_str().map(|s| s.to_string()))
+            .collect();
+        if ids.is_empty() {
+            return Err("no groups with an update url".into());
+        }
+        let mut last_err = String::new();
+        let mut ok = 0u32;
+        for id in ids {
+            match self.update_group(&id) {
+                Ok(()) => ok += 1,
+                Err(err) => last_err = err,
+            }
+        }
+        self.settings["sub_last_auto_update"] = json!(now());
+        self.settings["sub_last_error"] = json!(last_err.clone());
+        self.save();
+        if ok == 0 {
+            return Err(if last_err.is_empty() { "group update failed".into() } else { last_err });
+        }
+        Ok(())
     }
 
     fn public_routes(&self) -> Vec<Value> {
@@ -1782,7 +1941,7 @@ impl Core {
             self.settings["smart_group_id"] = json!(group_id);
         }
         if !keep_alive {
-            self.disconnect()?;
+        self.disconnect()?;
         }
         let dir = self.path.parent().unwrap_or(Path::new(".")).to_path_buf();
         let _ = fs::create_dir_all(&dir);
@@ -2398,6 +2557,40 @@ impl Core {
         }
     }
 
+    fn logs_payload(&self, kind: &str) -> Value {
+        let dir = self.path.parent().unwrap_or(Path::new("."));
+        let path = match kind {
+            "access" => dir.join("access.log"),
+            "dns" => dir.join("dns.log"),
+            "error" => dir.join("error.log"),
+            _ => dir.join("core.log"),
+        };
+        let text = self.logs_kind(kind);
+        let meta = fs::metadata(&path).ok();
+        json!({
+            "text": text,
+            "path": path.display().to_string(),
+            "size": meta.as_ref().map(|m| m.len()).unwrap_or(0),
+            "lines": text.lines().filter(|line| !line.trim().is_empty()).count(),
+            "kind": kind,
+            "exists": meta.is_some()
+        })
+    }
+
+    fn sidecar_logs_payload(&self) -> Value {
+        let dir = self.path.parent().unwrap_or(Path::new(".")).join("bridges");
+        let text = self.sidecar_logs();
+        let empty = text.trim().is_empty() || text.trim() == "no sidecar logs";
+        json!({
+            "text": if empty { String::new() } else { text.clone() },
+            "path": dir.display().to_string(),
+            "size": 0,
+            "lines": if empty { 0 } else { text.lines().filter(|line| !line.trim().is_empty() && !line.starts_with("-----")).count() },
+            "kind": "sidecar",
+            "exists": dir.is_dir()
+        })
+    }
+
     fn sidecar_logs(&self) -> String {
         let dir = self.path.parent().unwrap_or(Path::new(".")).join("bridges");
         let mut chunks = Vec::new();
@@ -2605,6 +2798,14 @@ impl Core {
                 self.save();
             }
         }
+        let groups_due = self.settings["sub_auto_update"].as_bool().unwrap_or(false)
+            && Self::scheduler_due(
+                self.settings["sub_last_auto_update"].as_u64().unwrap_or(0),
+                self.settings["sub_auto_interval_hours"].as_u64().unwrap_or(24),
+            );
+        if groups_due {
+            let _ = self.refresh_remote_groups();
+        }
     }
 
     fn optimize_mtu(&mut self) -> Result<Value, String> {
@@ -2651,25 +2852,14 @@ impl Core {
             http_enabled: self.settings["http_enabled"].as_bool().unwrap_or(true),
             socks_enabled: self.settings["socks_enabled"].as_bool().unwrap_or(true),
             concurrency: self.settings["speed_concurrency"].as_u64().unwrap_or(2).clamp(1, 8) as usize,
+            mode: self.settings["speed_mode"].as_str().unwrap_or("http").to_string(),
+            endpoint: self.settings["speed_endpoint"].as_str().unwrap_or("https://www.gstatic.com/generate_204").to_string(),
+            timeout_secs: self.settings["speed_timeout"].as_u64().unwrap_or(8).clamp(2, 60),
+            prefer_ipv6: self.settings["prefer_ipv6"].as_bool().unwrap_or(false),
         }
     }
 
     fn speed_test(&mut self) -> Result<Value, String> {
-        let url = self.settings["speed_endpoint"].as_str().unwrap_or("https://www.gstatic.com/generate_204");
-        let host = url.trim_start_matches("https://").trim_start_matches("http://").split('/').next().unwrap_or(url);
-        let (host, port) = crate::parser::split_host_port(host, 443);
-        match self.settings["speed_mode"].as_str().unwrap_or("http") {
-            "tcp" => {
-                let prefer_ipv6 = self.settings["prefer_ipv6"].as_bool().unwrap_or(false);
-                let ms = tcp_connect_ms(&host, port, Duration::from_secs(self.settings["speed_timeout"].as_u64().unwrap_or(8)), prefer_ipv6).unwrap_or(0);
-                return Ok(json!({"mode": "tcp", "tcp_ms": ms, "icmp_ms": icmp_ping_ms(&host), "host": host, "port": port}));
-            }
-            "icmp" => {
-                let ms = icmp_ping_ms(&host);
-                return Ok(json!({"mode": "icmp", "tcp_ms": -1, "icmp_ms": ms, "host": host}));
-            }
-            _ => {}
-        }
         run_speed_probe(&self.speed_plan())
     }
 
@@ -2693,7 +2883,6 @@ impl Core {
             self.routes = data["routes"].as_array().cloned().unwrap_or_default();
         }
         self.unlocked.clear();
-        self.flatten_subscription_groups();
         self.save();
     }
 
@@ -2706,29 +2895,118 @@ impl Core {
         } else {
             live
         };
-        let routes_text = cmd_text("netstat", &["-nr", "-f", "inet"]);
+        let net = crate::platform::status();
+        let ifconfig = cmd_text("ifconfig", &["-u"]);
+        let iface_rows = crate::diagnostics::parse_ifconfig(&ifconfig, &net.wifi_iface);
+        let mut ifaces = crate::diagnostics::iface_names_from_rows(&iface_rows);
+        if ifaces.is_empty() {
+            ifaces = crate::platform::iface_names();
+        }
+        let tun = crate::diagnostics::tun_from_rows(&iface_rows);
+        let proxy_raw = cmd_text("scutil", &["--proxy"]);
+        let proxy = crate::diagnostics::parse_scutil_proxy(&proxy_raw);
         let dns_text = cmd_text("scutil", &["--dns"]);
-        let route_rows: Vec<Value> = routes_text
-            .lines()
-            .filter(|l| l.contains('.') || l.contains("default"))
-            .take(40)
-            .map(|l| json!(l.trim()))
-            .collect();
-        let dns_servers: Vec<Value> = dns_text
-            .lines()
-            .filter(|l| l.contains("nameserver[") || l.contains("DNS"))
-            .take(24)
-            .map(|l| json!(l.trim()))
-            .collect();
+        let dns_servers = crate::diagnostics::parse_dns_nameservers(&dns_text);
+        let routes_text = cmd_text("netstat", &["-nr", "-f", "inet"]);
+        let route_rows = crate::diagnostics::parse_route_rows(&routes_text);
+        let route_get = cmd_text("route", &["-n", "get", "default"]);
+        let (gateway, route_iface) = crate::diagnostics::parse_default_route(&route_get);
+        let selected = self.find_profile(self.settings["selected_id"].as_str().unwrap_or(""));
+        let proto = selected
+            .as_ref()
+            .and_then(|p| p["protocol"].as_str())
+            .unwrap_or("")
+            .to_string();
+        let host = selected
+            .as_ref()
+            .and_then(|p| p["address"].as_str())
+            .unwrap_or("")
+            .to_string();
+        let port = selected
+            .as_ref()
+            .and_then(|p| p["port"].as_u64().or_else(|| p["port"].as_i64().map(|v| v as u64)))
+            .unwrap_or(0);
+        let endpoint = if host.is_empty() {
+            String::new()
+        } else if port == 0 {
+            host.clone()
+        } else {
+            format!("{host}:{port}")
+        };
+        let profile_name = if !self.runtime.profile_name.is_empty() {
+            self.runtime.profile_name.clone()
+        } else {
+            selected
+                .as_ref()
+                .and_then(|p| p["remark"].as_str())
+                .unwrap_or("")
+                .to_string()
+        };
+        let remote_id = self.settings["remote_dns_id"].as_str().unwrap_or("");
+        let remote_item = crate::dns_items::item_by_id(&self.settings, remote_id).cloned();
+        let vpn_dns = self.settings["remote_dns"].as_str().unwrap_or("").to_string();
+        let vpn_dns_name = remote_item
+            .as_ref()
+            .and_then(|item| item["name"].as_str())
+            .unwrap_or("")
+            .to_string();
+        let vpn_dns_type = remote_item
+            .as_ref()
+            .and_then(|item| item["type"].as_str())
+            .unwrap_or("")
+            .to_string();
+        let mut bootstrap: Vec<String> = remote_item
+            .as_ref()
+            .map(|item| crate::dns_items::normalized_addresses(item))
+            .unwrap_or_default();
+        if let Some(item) = remote_item.as_ref() {
+            let host = crate::dns_items::resolver_host(item);
+            if crate::dns_items::is_ip(&host) && !bootstrap.iter().any(|ip| ip == &host) {
+                bootstrap.push(host);
+            }
+        }
+        if let Some(item) = crate::dns_items::item_by_id(
+            &self.settings,
+            self.settings["domestic_dns_id"].as_str().unwrap_or(""),
+        ) {
+            for ip in crate::dns_items::normalized_addresses(item) {
+                if !bootstrap.iter().any(|existing| existing == &ip) {
+                    bootstrap.push(ip);
+                }
+            }
+        }
+        if bootstrap.is_empty() {
+            bootstrap = dns_servers.clone();
+        }
+        let files = [
+            ("config.json", config.clone()),
+            ("xray.json", dir.join("xray.json")),
+            ("library.json", self.path.clone()),
+            ("error.log", dir.join("error.log")),
+            ("access.log", dir.join("access.log")),
+            ("dns.log", dir.join("dns.log")),
+            ("core.log", dir.join("core.log")),
+            ("geoip.dat", dir.join("geoip.dat")),
+            ("geosite.dat", dir.join("geosite.dat")),
+        ]
+        .into_iter()
+        .map(|(name, path)| crate::diagnostics::file_entry(name, &path))
+        .collect::<Vec<_>>();
         Ok(json!({
-            "ssid": self.runtime.ssid,
-            "network": self.runtime.net_kind,
-            "interface": self.runtime.net_iface,
+            "ssid": if self.runtime.ssid.is_empty() { net.ssid } else { self.runtime.ssid.clone() },
+            "network": if self.runtime.net_kind.is_empty() { net.kind } else { self.runtime.net_kind.clone() },
+            "interface": if self.runtime.net_iface.is_empty() { net.iface.clone() } else { self.runtime.net_iface.clone() },
+            "wifi_iface": net.wifi_iface,
+            "gateway": gateway,
+            "route_iface": route_iface,
             "core": self.runtime.core,
             "engine": self.runtime.engine,
             "phase": self.runtime.phase,
             "connected": self.runtime.connected,
-            "profile": self.runtime.profile_name,
+            "tunnel": self.runtime.tunnel,
+            "profile": profile_name,
+            "profile_proto": proto,
+            "endpoint": endpoint,
             "config_path": config.display().to_string(),
             "log_path": dir.join("core.log").display().to_string(),
             "error_log": dir.join("error.log").display().to_string(),
@@ -2736,22 +3014,29 @@ impl Core {
             "route_rows": route_rows,
             "dns": dns_text,
             "dns_servers": dns_servers,
-            "ifconfig": cmd_text("ifconfig", &["-u"]),
-            "addresses": cmd_text("ifconfig", &["-u"])
-                .lines()
-                .filter(|l| l.contains("inet "))
-                .take(16)
-                .map(|l| json!(l.trim()))
-                .collect::<Vec<_>>(),
+            "ifconfig": ifconfig,
+            "addresses": iface_rows.iter().filter_map(|row| {
+                let ip = row["ipv4"].as_str().unwrap_or("");
+                if ip.is_empty() { None } else { Some(json!(format!("{} {}", row["name"].as_str().unwrap_or(""), ip))) }
+            }).collect::<Vec<_>>(),
             "config": live,
             "xray_path": dir.join("xray.json").display().to_string(),
             "access_log": dir.join("access.log").display().to_string(),
             "dns_log": dir.join("dns.log").display().to_string(),
-            "proxy": cmd_text("scutil", &["--proxy"]),
-            "bootstrap": dns_servers.clone(),
-            "vpn_dns": self.settings["remote_dns"].clone(),
+            "proxy": proxy_raw,
+            "proxy_info": proxy,
+            "bootstrap": bootstrap.clone(),
+            "bootstrap_servers": bootstrap,
+            "vpn_dns": vpn_dns,
+            "vpn_dns_name": vpn_dns_name,
+            "vpn_dns_type": vpn_dns_type,
+            "domestic_dns": self.settings["domestic_dns"].clone(),
             "hwid": self.settings["hwid"].clone(),
-            "ifaces": crate::platform::iface_names(),
+            "ifaces": ifaces,
+            "iface_rows": iface_rows,
+            "tun": tun,
+            "files": files,
+            "logging_enabled": self.settings["logging_enabled"].clone(),
             "updated_at": now()
         }))
     }
@@ -2854,6 +3139,10 @@ pub struct SpeedPlan {
     pub http_enabled: bool,
     pub socks_enabled: bool,
     pub concurrency: usize,
+    pub mode: String,
+    pub endpoint: String,
+    pub timeout_secs: u64,
+    pub prefer_ipv6: bool,
 }
 
 enum SpeedProxyKind {
@@ -3007,9 +3296,20 @@ fn speed_agent(plan: &SpeedPlan, kind: SpeedProxyKind, timeout: Duration) -> Res
     }
 }
 
+fn speed_target(endpoint: &str) -> (String, u16) {
+    let raw = endpoint.trim();
+    let fallback = if raw.starts_with("http://") { 80 } else { 443 };
+    let stripped = raw
+        .trim_start_matches("https://")
+        .trim_start_matches("http://")
+        .trim_start_matches("tls://");
+    let hostport = stripped.split('/').next().unwrap_or(stripped);
+    crate::parser::split_host_port(hostport, fallback)
+}
+
 fn speed_agents(plan: &SpeedPlan) -> Result<(ureq::Agent, ureq::Agent), String> {
     let transfer_timeout = speed_transfer_timeout();
-    let quick_timeout = Duration::from_secs(4);
+    let quick_timeout = Duration::from_secs(plan.timeout_secs.clamp(2, 60));
     if plan.connected {
         if plan.http_enabled {
             if let Ok(quick) = speed_agent(plan, SpeedProxyKind::Http, quick_timeout) {
@@ -3133,16 +3433,22 @@ fn measure_speed(
         p.live_bps = 0;
     });
     let exit = geo_via(&quick);
+    let ping_url = if plan.endpoint.trim().is_empty() {
+        "https://www.gstatic.com/generate_204"
+    } else {
+        plan.endpoint.trim()
+    };
     let mut samples = Vec::new();
     for _ in 0..2 {
         let began = Instant::now();
-        if quick.get("https://www.gstatic.com/generate_204").call().is_ok() {
+        if quick.get(ping_url).call().is_ok() {
             samples.push(began.elapsed().as_millis().max(1) as u64);
         }
     }
     let ping = samples.iter().copied().min().unwrap_or(0);
     let jitter = samples.iter().copied().max().unwrap_or(ping).saturating_sub(ping);
-    let icmp = icmp_ping_ms("1.1.1.1");
+    let (icmp_host, _) = speed_target(ping_url);
+    let icmp = icmp_ping_ms(&icmp_host);
     speed_touch(report, |p| {
         p.tcp_ms = ping as i64;
         p.icmp_ms = icmp;
@@ -3205,7 +3511,52 @@ fn measure_speed(
     Ok((ping, icmp, jitter, bytes, download_bps, upload_bps, geo))
 }
 
+fn latency_result(tcp_ms: i64, icmp_ms: i64, vpn_active: bool) -> Value {
+    json!({
+        "tcp_ms": tcp_ms,
+        "icmp_ms": icmp_ms,
+        "jitter_ms": 0,
+        "bytes": 0,
+        "download_bps": -1,
+        "upload_bps": -1,
+        "exit_ip": "",
+        "exit_country": "",
+        "country_code": "",
+        "vpn_active": vpn_active
+    })
+}
+
+fn run_latency_probe(plan: &SpeedPlan, report: bool, mode: &str) -> Result<Value, String> {
+    let (host, port) = speed_target(&plan.endpoint);
+    if host.is_empty() {
+        return Err("speed endpoint is empty".into());
+    }
+    speed_touch(report, |p| {
+        p.phase = "ping".into();
+        p.live_bps = 0;
+        p.vpn_active = plan.connected;
+    });
+    let timeout = Duration::from_secs(plan.timeout_secs.clamp(2, 60));
+    let tcp = tcp_connect_ms(&host, port, timeout, plan.prefer_ipv6).map(|ms| ms as i64).unwrap_or(-1);
+    let icmp = icmp_ping_ms(&host);
+    let (tcp_ms, icmp_ms) = if mode == "icmp" { (icmp, icmp) } else { (tcp, icmp) };
+    speed_touch(report, |p| {
+        p.tcp_ms = tcp_ms;
+        p.icmp_ms = icmp_ms;
+        p.jitter_ms = 0;
+        p.download_bps = -1;
+        p.upload_bps = -1;
+        p.live_bps = 0;
+    });
+    Ok(latency_result(tcp_ms, icmp_ms, plan.connected))
+}
+
 fn run_speed_probe_inner(plan: &SpeedPlan, report: bool) -> Result<Value, String> {
+    match plan.mode.as_str() {
+        "tcp" => return run_latency_probe(plan, report, "tcp"),
+        "icmp" => return run_latency_probe(plan, report, "icmp"),
+        _ => {}
+    }
     let vpn_path = if plan.connected {
         match measure_speed(plan, report) {
             Ok(result) => Some(result),
@@ -3222,6 +3573,10 @@ fn run_speed_probe_inner(plan: &SpeedPlan, report: bool) -> Result<Value, String
         http_enabled: plan.http_enabled,
         socks_enabled: plan.socks_enabled,
         concurrency: plan.concurrency,
+        mode: plan.mode.clone(),
+        endpoint: plan.endpoint.clone(),
+        timeout_secs: plan.timeout_secs,
+        prefer_ipv6: plan.prefer_ipv6,
     };
 
     let (ping, icmp, jitter, bytes, download_bps, upload_bps, (exit_ip, exit_country, country_code), vpn_active) =
@@ -3848,7 +4203,7 @@ mod v2box_zip_tests {
 
 #[cfg(test)]
 mod speed_probe_tests {
-    use super::{rate_bps, run_speed_probe, SpeedPlan};
+    use super::{rate_bps, SpeedPlan};
     use std::time::Duration;
 
     #[test]
@@ -3860,8 +4215,19 @@ mod speed_probe_tests {
             http_enabled: true,
             socks_enabled: true,
             concurrency: 2,
+            mode: "http".into(),
+            endpoint: "https://www.gstatic.com/generate_204".into(),
+            timeout_secs: 8,
+            prefer_ipv6: false,
         };
         assert!(!plan.connected);
+    }
+
+    #[test]
+    fn speed_target_strips_url() {
+        assert_eq!(super::speed_target("https://www.gstatic.com/generate_204"), ("www.gstatic.com".into(), 443));
+        assert_eq!(super::speed_target("http://example.com:8080/path"), ("example.com".into(), 8080));
+        assert_eq!(super::speed_target("1.1.1.1"), ("1.1.1.1".into(), 443));
     }
 
     #[test]

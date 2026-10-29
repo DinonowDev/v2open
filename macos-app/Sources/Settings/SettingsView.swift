@@ -126,6 +126,19 @@ struct SettingsView: View {
                     SettingsSectionLabel(text: model.t("configs"))
                     SettingsCard {
                         SettingsToggleRow(
+                            title: model.t("subAutoUpdate"),
+                            hint: model.t("subLastUpdate"),
+                            isOn: model.settings["sub_auto_update"] as? Bool ?? false
+                        ) { model.set("sub_auto_update", $0) }
+                        SettingsDivider()
+                        SettingsSelectRow(
+                            title: model.t("subAutoInterval"),
+                            icon: "clock",
+                            value: String(model.settings["sub_auto_interval_hours"] as? Int ?? Int(model.settings["sub_auto_interval_hours"] as? Double ?? 24)),
+                            options: [("6", "6"), ("12", "12"), ("24", "24"), ("48", "48"), ("72", "72")]
+                        ) { model.set("sub_auto_interval_hours", Int($0) ?? 24) }
+                        SettingsDivider()
+                        SettingsToggleRow(
                             title: model.t("throughputTest"),
                             hint: model.t("benchHint"),
                             isOn: model.settings["throughput_test"] as? Bool ?? false
@@ -164,6 +177,13 @@ struct SettingsView: View {
                         SettingsDivider(inset: 58)
                         SettingsNavRow(icon: "antenna.radiowaves.left.and.right", title: model.t("inbounds"), action: { model.push("network_settings") })
                         SettingsDivider(inset: 58)
+                        SettingsNavRow(
+                            icon: "gauge.with.dots.needle.67percent",
+                            title: model.t("speedTestSettings"),
+                            value: speedMethodLabel,
+                            action: { model.push("speed_settings") }
+                        )
+                        SettingsDivider(inset: 58)
                         SettingsNavRow(icon: "bolt.horizontal.circle", title: model.t("onDemandTitle"), action: { model.push("on_demand") })
                         SettingsDivider(inset: 58)
                         SettingsNavRow(icon: "point.3.connected.trianglepath.dotted", title: model.t("clashApi"), action: { model.push("clash_status") })
@@ -171,6 +191,13 @@ struct SettingsView: View {
                         SettingsNavRow(icon: "square.stack.3d.up.fill", title: model.t("apps"), value: appsModeLabel, action: { model.push("apps") })
                         SettingsDivider(inset: 58)
                         SettingsToggleRow(title: model.t("proxy"), isOn: model.settings["apply_system_proxy"] as? Bool ?? true) { model.set("apply_system_proxy", $0) }
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    SettingsSectionLabel(text: model.t("advancedTitle"))
+                    SettingsCard {
+                        SettingsNavRow(icon: "slider.horizontal.3", title: model.t("advancedTitle"), action: { model.push("advanced") })
                     }
                 }
 
@@ -214,6 +241,14 @@ struct SettingsView: View {
         case "include": return model.t("appsOnly")
         case "exclude": return model.t("appsExcept")
         default: return model.t("appsAll")
+        }
+    }
+
+    var speedMethodLabel: String {
+        switch model.settings["speed_mode"] as? String ?? "http" {
+        case "tcp": return model.t("speedModeTcp")
+        case "icmp": return model.t("speedModeIcmp")
+        default: return model.t("speedModeHttp")
         }
     }
 }

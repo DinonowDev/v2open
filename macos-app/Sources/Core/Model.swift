@@ -184,7 +184,7 @@ final class Model: ObservableObject {
         if key == "app_icon" {
             AppIconStore.apply(value as? String ?? "default")
         }
-        if ["geo_auto_update", "on_demand", "persist_tunnel", "reconnect_after_wake", "on_demand_text"].contains(key) {
+        if ["geo_auto_update", "on_demand", "persist_tunnel", "reconnect_after_wake", "on_demand_text", "sub_auto_update"].contains(key) {
             syncBackgroundScheduler()
             armSystemOnDemand()
         }
@@ -198,7 +198,8 @@ final class Model: ObservableObject {
         BackgroundScheduler.installIfNeeded(
             geoAuto: settings["geo_auto_update"] as? Bool == true,
             onDemand: settings["on_demand"] as? Bool == true,
-            persist: (settings["persist_tunnel"] as? Bool == true) || (settings["reconnect_after_wake"] as? Bool == true)
+            persist: (settings["persist_tunnel"] as? Bool == true) || (settings["reconnect_after_wake"] as? Bool == true),
+            groupAuto: settings["sub_auto_update"] as? Bool == true
         )
     }
 

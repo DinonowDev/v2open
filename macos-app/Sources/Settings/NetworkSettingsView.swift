@@ -14,9 +14,6 @@ struct NetworkSettingsView: View {
     @State private var mtuParallel = ""
     @State private var mtuRetries = ""
     @State private var mtuTimeout = ""
-    @State private var speedConcurrency = ""
-    @State private var speedTimeout = ""
-    @State private var speedEndpoint = ""
     @State private var lanIface = ""
     @State private var lanIfaces: [String] = []
 
@@ -111,39 +108,6 @@ struct NetworkSettingsView: View {
                             .padding(.bottom, 14)
                     }
 
-                    SettingsSectionLabel(text: model.t("speedMode"))
-                    SettingsCard {
-                        SettingsSelectRow(
-                            title: model.t("speedMode"),
-                            icon: "gauge",
-                            value: model.settings["speed_mode"] as? String ?? "http",
-                            options: [
-                                ("http", model.t("speedModeHttp")),
-                                ("tcp", model.t("speedModeTcp")),
-                                ("icmp", model.t("speedModeIcmp"))
-                            ]
-                        ) { model.set("speed_mode", $0) }
-                        SettingsDivider()
-                        V2Field(label: model.t("speedConcurrency"), placeholder: "2", text: $speedConcurrency, latin: true, icon: "square.stack.3d.up")
-                            .padding(.horizontal, 14)
-                        V2Field(label: model.t("speedTimeout"), placeholder: "8", text: $speedTimeout, latin: true, icon: "clock")
-                            .padding(.horizontal, 14)
-                        V2Field(label: model.t("speedEndpoint"), placeholder: "https://www.gstatic.com/generate_204", text: $speedEndpoint, latin: true, icon: "link")
-                            .padding(.horizontal, 14)
-                        SheetActionButton(title: model.t("save"), icon: "checkmark") {
-                            if let v = Int(speedConcurrency), v >= 1, v <= 8 { model.set("speed_concurrency", v) }
-                            if let v = Int(speedTimeout), v >= 2, v <= 60 { model.set("speed_timeout", v) }
-                            let endpoint = speedEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
-                            if !endpoint.isEmpty {
-                                model.set("speed_endpoint", endpoint)
-                                model.set("probe_url", endpoint)
-                            }
-                            model.showToast(model.t("saved"), tone: .success)
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.bottom, 12)
-                    }
-
                     SettingsSectionLabel(text: model.t("tunnelOptions"))
                     SettingsCard {
                         SettingsToggleRow(title: model.t("enforceRoutes"), isOn: model.settings["enforce_routes"] as? Bool ?? false) {
@@ -226,9 +190,6 @@ struct NetworkSettingsView: View {
         mtuParallel = num("mtu_test_parallelism", 16)
         mtuRetries = num("mtu_test_retries", 2)
         mtuTimeout = num("mtu_test_timeout", 2)
-        speedConcurrency = num("speed_concurrency", 2)
-        speedTimeout = num("speed_timeout", 8)
-        speedEndpoint = model.settings["speed_endpoint"] as? String ?? (model.settings["probe_url"] as? String ?? "https://www.gstatic.com/generate_204")
         lanIface = model.settings["lan_iface"] as? String ?? ""
         let diag = model.call("diagnostics")["data"] as? [String: Any] ?? [:]
         if let rows = diag["ifaces"] as? [String] {

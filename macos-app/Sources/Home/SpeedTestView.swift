@@ -67,11 +67,32 @@ struct SpeedTestView: View {
 
         VStack(alignment: .leading, spacing: 0) {
             PageHeader(title: model.t("speed")) {
-                SpeedUnitSwitch(
-                    useMegabit: $useMegabit,
-                    mbps: model.t("unitMbps"),
-                    mBps: model.t("unitMBps")
-                )
+                HStack(spacing: 8) {
+                    Button(action: openSpeedSettings) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "gearshape.fill")
+                                .font(.system(size: 12, weight: .bold))
+                            Mix(text: speedMethodShort, size: 11, weight: .bold, color: C.cyan)
+                        }
+                        .foregroundStyle(C.cyan)
+                        .padding(.horizontal, 10)
+                        .frame(height: 32)
+                        .background(C.cyan.opacity(0.14))
+                        .clipShape(Capsule())
+                        .overlay(
+                            Capsule()
+                                .strokeBorder(C.cyan.opacity(0.22), lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(QuietPressStyle())
+                    .accessibilityLabel(model.t("speedTestSettings"))
+                    .help(model.t("speedTestSettings"))
+                    SpeedUnitSwitch(
+                        useMegabit: $useMegabit,
+                        mbps: model.t("unitMbps"),
+                        mBps: model.t("unitMBps")
+                    )
+                }
             }
 
             speedLatencyStrip
@@ -392,13 +413,29 @@ struct SpeedTestView: View {
             if up >= 0 { testUp = up }
         }
         let ping = jsonInt(data["icmp_ms"])
-        if ping > 0 {
-            icmpMs = ping
-            tcpMs = jsonInt(data["tcp_ms"])
-            if tcpMs <= 0 { tcpMs = ping }
+        if ping > 0 { icmpMs = ping }
+        let tcp = jsonInt(data["tcp_ms"])
+        if tcp > 0 {
+            tcpMs = tcp
+        } else if ping > 0, tcpMs <= 0 {
+            tcpMs = ping
         }
         let jit = jsonInt(data["jitter_ms"])
         if jit >= 0 { jitterMs = jit }
+    }
+
+    private var speedMethodShort: String {
+        switch model.settings["speed_mode"] as? String ?? "http" {
+        case "tcp": return model.t("speedModeTcp")
+        case "icmp": return model.t("speedModeIcmp")
+        default: return model.t("speedModeHttp")
+        }
+    }
+
+    func openSpeedSettings() {
+        if model.current != "speed_settings" {
+            model.push("speed_settings")
+        }
     }
 
     func applySpeedFinal(_ data: [String: Any]) {

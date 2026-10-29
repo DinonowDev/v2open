@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="560" height="200" viewBox="0 0 560 200" role="img" aria-label="/'FDH/ V2Open (1'Ì macOS" direction="rtl">
+  <defs>
+    <linearGradient id="bg" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0c1929"/>
+      <stop offset="100%" stop-color="#0f2744"/>
+    </linearGradient>
+    <linearGradient id="btn" x1="100%" y1="0%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#06b6d4"/>
+      <stop offset="100%" stop-color="#0891b2"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="560" height="200" rx="20" fill="url(#bg)" stroke="#1e3a5f" stroke-width="2"/>
+  <circle cx="80" cy="40" r="60" fill="#06b6d4" opacity="0.08"/>
+  <circle cx="480" cy="160" r="50" fill="#22d3ee" opacity="0.06"/>
+  <text x="520" y="52" fill="#e2e8f0" font-family="system-ui,-apple-system,sans-serif" font-size="28" font-weight="700" text-anchor="end">V2OPEN</text>
+  <text x="520" y="78" fill="#94a3b8" font-family="system-ui,-apple-system,sans-serif" font-size="14" text-anchor="end">©D'ÌF* VPN / ~1H©3Ì (1'Ì macOS</text>
+  <g filter="url(#glow)">
+    <rect x="240" y="100" width="280" height="52" rx="26" fill="url(#btn)"/>
+  </g>
+  <text x="380" y="133" fill="#ffffff" font-family="system-ui,-apple-system,sans-serif" font-size="17" font-weight="600" text-anchor="middle">/'FDH/ (1'Ì macOS</text>
+  <path d="M252 126 L238 133 L252 140 Z" fill="#ffffff" opacity="0.9"/>
+  <text x="520" y="178" fill="#64748b" font-family="system-ui,-apple-system,sans-serif" font-size="12" text-anchor="end">Apple Silicon · 1'Ì¯'F H E*F('2 · GitHub Releases</text>
+</svg>

@@ -4,6 +4,32 @@
 
 V2Open سرویس VPN نمی‌فروشد و سرورهای کانفیگ شما را اداره نمی‌کند. اپ هسته‌های [sing-box](https://github.com/SagerNet/sing-box) یا [Xray](https://github.com/XTLS/Xray-core) را روی مک شما اجرا می‌کند.
 
+<p align="center">
+  <a href="https://github.com/DinonowDev/v2open/releases/latest">
+    <img src="docs/screenshots/download-cta-fa.svg" alt="دانلود V2Open برای macOS — آخرین نسخه در GitHub" width="520">
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/DinonowDev/v2open/releases/latest"><img src="https://img.shields.io/github/v/release/DinonowDev/v2open?label=دانلود%20آخرین%20نسخه&style=for-the-badge&color=0891b2&logo=apple&logoColor=white" alt="دانلود آخرین نسخه"></a>
+  &nbsp;
+  <a href="#دانلود"><img src="https://img.shields.io/badge/راهنمای%20نصب-↓%20پایین-334155?style=for-the-badge" alt="پرش به راهنمای نصب"></a>
+  &nbsp;
+  <a href="README.md#download"><img src="https://img.shields.io/badge/English-README-0891b2?style=for-the-badge" alt="English README"></a>
+</p>
+
+## دانلود {#دانلود}
+
+**[→ دریافت آخرین نسخه (zip مک)](https://github.com/DinonowDev/v2open/releases/latest)**
+
+1. از [GitHub Releases](https://github.com/DinonowDev/v2open/releases) فایل `V2Open-*-macos-arm64.zip` را بگیرید.
+2. از zip خارج کنید و **V2Open.app** را به **Programs** بکشید.
+3. بار اول: **Right-click → Open** اگر macOS هشدار امضا داد، یا `xattr -cr /Applications/V2Open.app`.
+
+برای **Apple Silicon** zip آماده کافی است. **مک Intel:** با `./build-macos.sh` و [باینری‌های](docs/binaries.md) مناسب arch خودتان بیلد بگیرید. گاهی نسخهٔ آزمایشی در artifact **`V2Open-macos-arm64`** داخل [Actions](https://github.com/DinonowDev/v2open/actions) (۱۴ روز) هست.
+
+سند انگلیسی: [README.md](README.md)
+
 | | |
 | --- | --- |
 | **نسخه فعلی** | `1.1.0` (بیلد `2`) — فایل [`VERSION`](VERSION) |
@@ -15,8 +41,6 @@ V2Open سرویس VPN نمی‌فروشد و سرورهای کانفیگ شما 
 | **تاریخچه** | [CHANGELOG.md](CHANGELOG.md) |
 | **باگ و انتشار** | [Issues](https://github.com/DinonowDev/v2open/issues) · [Releases](https://github.com/DinonowDev/v2open/releases) |
 | **امنیت** | [SECURITY.md](SECURITY.md) · [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) |
-
-سند انگلیسی پروژه: [README.md](README.md)
 
 ---
 
@@ -56,22 +80,6 @@ V2Open سرویس VPN نمی‌فروشد و سرورهای کانفیگ شما 
 ```
 
 داده زمان اجرا در `~/Library/Application Support/V2Open/` ذخیره می‌شود.
-
----
-
-## دانلود
-
-بیلد آماده **Apple Silicon (arm64)** روی **[GitHub Releases](https://github.com/DinonowDev/v2open/releases)** منتشر می‌شود؛ با push تگ `v1.2.3` (باید با خط اول [`VERSION`](VERSION) یکی باشد) workflow [release.yml](.github/workflows/release.yml) zip را می‌سازد.
-
-1. از [Releases](https://github.com/DinonowDev/v2open/releases) آخرین `V2Open-*-macos-arm64.zip` را بگیرید.
-2. از zip خارج کنید و `V2Open.app` را به Programs ببرید.
-3. بار اول: **Right-click → Open** یا `xattr -cr /path/to/V2Open.app`
-
-**مک Intel:** فعلاً CI فقط arm64 دارد؛ برای Intel خودتان `./build-macos.sh` بزنید ([binaries.md](docs/binaries.md)).
-
-**نسخهٔ آزمایشی:** بعد از هر push به `main`، artifact **`V2Open-macos-arm64`** در تب [Actions](https://github.com/DinonowDev/v2open/actions) (۱۴ روز) موجود است.
-
-راهنمای انتشار: [docs/release.md](docs/release.md).
 
 ---
 

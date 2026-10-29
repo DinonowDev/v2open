@@ -4,6 +4,32 @@ Local macOS VPN / proxy client. Configs, routes, DNS items, and backups stay on 
 
 V2Open is **not** a VPN service. It does not sell bandwidth and does not operate the servers in your configs. It runs [sing-box](https://github.com/SagerNet/sing-box) or [Xray](https://github.com/XTLS/Xray-core) on your machine and lets you manage a local catalog of share links, subscriptions, and routing rules.
 
+<p align="center">
+  <a href="https://github.com/DinonowDev/v2open/releases/latest">
+    <img src="docs/screenshots/download-cta.svg" alt="Download V2Open for macOS — latest release on GitHub" width="520">
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/DinonowDev/v2open/releases/latest"><img src="https://img.shields.io/github/v/release/DinonowDev/v2open?label=Download%20latest&style=for-the-badge&color=0891b2&logo=apple&logoColor=white" alt="Download latest release"></a>
+  &nbsp;
+  <a href="#download"><img src="https://img.shields.io/badge/Install%20guide-↓%20below-334155?style=for-the-badge" alt="Jump to install guide"></a>
+  &nbsp;
+  <a href="README.fa.md#دانلود"><img src="https://img.shields.io/badge/فارسی-README.fa-0891b2?style=for-the-badge" alt="Persian README"></a>
+</p>
+
+## Download {#download}
+
+**[→ Get the latest release (macOS zip)](https://github.com/DinonowDev/v2open/releases/latest)**
+
+1. Download `V2Open-*-macos-arm64.zip` from [GitHub Releases](https://github.com/DinonowDev/v2open/releases).
+2. Unzip and drag **V2Open.app** to **Applications**.
+3. First open: **Right-click → Open** if Gatekeeper warns about an unsigned app, or run `xattr -cr /Applications/V2Open.app`.
+
+Apple Silicon Macs use the pre-built zip. **Intel Macs:** build from source with `./build-macos.sh` and matching [engine binaries](docs/binaries.md). Pre-release builds sometimes appear as the **`V2Open-macos-arm64`** artifact on [Actions](https://github.com/DinonowDev/v2open/actions) (14-day retention). Maintainers: [docs/release.md](docs/release.md).
+
+Persian overview: [README.fa.md](README.fa.md)
+
 | | |
 | --- | --- |
 | **Current version** | `1.1.0` (build `2`) — see [`VERSION`](VERSION) |
@@ -19,8 +45,6 @@ V2Open is **not** a VPN service. It does not sell bandwidth and does not operate
 | **Changelog** | [CHANGELOG.md](CHANGELOG.md) |
 | **Issues & releases** | [Issues](https://github.com/DinonowDev/v2open/issues) · [Releases](https://github.com/DinonowDev/v2open/releases) |
 | **Security** | [SECURITY.md](SECURITY.md) · [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) |
-
-Persian overview: [README.fa.md](README.fa.md)
 
 ---
 
@@ -87,22 +111,6 @@ Useful debug commands:
 ```
 
 Runtime data lives in `~/Library/Application Support/V2Open/` (`library.json`, `config.json`, `core.log`, rulesets). Dev UI logs also go to `dev-logs/runtime.log` in the repo.
-
----
-
-## Download
-
-Pre-built **Apple Silicon (arm64)** `.app` bundles ship on **[GitHub Releases](https://github.com/DinonowDev/v2open/releases)** when you push a version tag (`v1.2.3` must match [`VERSION`](VERSION) line 1). CI runs [`.github/workflows/release.yml`](.github/workflows/release.yml): tests, `./build-macos.sh`, then uploads `V2Open-{version}-build{N}-macos-arm64.zip`.
-
-1. Open [Releases](https://github.com/DinonowDev/v2open/releases) and download the latest zip for your Mac (Apple Silicon).
-2. Unzip and move `V2Open.app` to Applications.
-3. First launch: **Right-click → Open** if macOS blocks an unsigned build, or clear quarantine: `xattr -cr /path/to/V2Open.app`
-
-**Intel Macs:** CI currently bundles **arm64** engines only. Build locally with `./build-macos.sh` after placing matching `binaries/macos/*` for your architecture ([docs/binaries.md](docs/binaries.md)).
-
-**Bleeding edge:** each push to `main` also publishes a **`V2Open-macos-arm64`** workflow artifact (14 days) on the [Actions](https://github.com/DinonowDev/v2open/actions) tab — same unsigned ad-hoc build as releases.
-
-Cut a release: [docs/release.md](docs/release.md).
 
 ---
 

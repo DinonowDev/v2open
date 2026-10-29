@@ -1,0 +1,40 @@
+name: Feature request
+description: Propose a user-visible change
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: Large changes (new protocol, RPC, Network Extension) need agreement here before a PR.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is hard or impossible today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What should the app do? Name settings or screens if you know them.
+    validations:
+      required: true
+  - type: textarea
+    id: docs
+    attributes:
+      label: Docs impact
+      description: Which pages in docs/ would need an update? See docs/README.md.
+      placeholder: user-guide.md settings table, rpc.md, locales
+    validations:
+      required: true
+  - type: dropdown
+    id: version_guess
+    attributes:
+      label: Likely SemVer impact
+      options:
+        - PATCH (fix / small copy)
+        - MINOR (new feature)
+        - MAJOR (breaking library or RPC)
+        - none (docs/tests only)
+    validations:
+      required: true

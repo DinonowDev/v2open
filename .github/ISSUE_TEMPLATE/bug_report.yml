@@ -1,0 +1,70 @@
+name: Bug report
+description: Something in V2Open does not work as documented
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not paste real share links, UUIDs, or passwords. Use `example.com`.
+        Vulnerabilities go to Security advisories, not here.
+  - type: input
+    id: version
+    attributes:
+      label: V2Open version and build
+      description: Settings → About, or the VERSION file (for example 1.1.0 (2)).
+      placeholder: 1.1.0 (2)
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: 15.1 arm64
+    validations:
+      required: true
+  - type: dropdown
+    id: bundle
+    attributes:
+      label: Bundle
+      options:
+        - V2Open.app (release)
+        - V2Open-Dev.app (debug)
+        - Unknown
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Connection mode
+      options:
+        - tun (VPN)
+        - proxy
+        - not connected
+        - unknown
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs (redacted)
+      description: Core log snippet or diagnostics copy. Strip configs.

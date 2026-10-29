@@ -1,0 +1,14 @@
+name: Docs and version
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Locale keys and version copies
+        run: ./scripts/check-docs.sh

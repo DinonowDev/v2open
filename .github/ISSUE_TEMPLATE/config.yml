@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security report
+    url: https://github.com/DinonowDev/v2open/security/advisories/new
+    about: Private vulnerability reports only. Do not file a public issue.
+  - name: Contributing guide
+    url: https://github.com/DinonowDev/v2open/blob/main/CONTRIBUTING.md
+    about: Branching, PRs, docs, and versioning rules.

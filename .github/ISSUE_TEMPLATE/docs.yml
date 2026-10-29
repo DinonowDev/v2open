@@ -1,0 +1,35 @@
+name: Documentation
+description: Missing, wrong, or outdated docs
+labels: ["documentation"]
+body:
+  - type: dropdown
+    id: page
+    attributes:
+      label: Page
+      options:
+        - README.md
+        - CONTRIBUTING.md
+        - docs/user-guide.md
+        - docs/architecture.md
+        - docs/development.md
+        - docs/rpc.md
+        - docs/localization.md
+        - docs/testing.md
+        - docs/versioning.md
+        - docs/branching.md
+        - docs/release.md
+        - CHANGELOG.md
+        - other / missing page
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What is wrong or missing
+    validations:
+      required: true
+  - type: textarea
+    id: code
+    attributes:
+      label: Related code (optional)
+      placeholder: macos-app/Sources/… or native/core/src/…

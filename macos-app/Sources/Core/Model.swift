@@ -12,6 +12,7 @@ final class Model: ObservableObject {
 
     private var booted = false
     private var pingLoopTask: Task<Void, Never>?
+    private let tickActivity = TickActivity()
     private static let autoPingInterval: TimeInterval = 60
 
     var fa: Bool { (settings["language"] as? String) != "en" }
@@ -54,8 +55,17 @@ final class Model: ObservableObject {
             }
         }
         if code != 0 { DevLog.error("boot", "init failed: \(code)") }
+        UILock.acquire()
+        BackgroundScheduler.syncLaunchAgent(enabled: false)
         refresh()
         startAutoPing()
+        tickActivity.start { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                let response = self.call("tick")
+                if let data = response["data"] as? [String: Any] { self.state = data }
+            }
+        }
         DevLog.event("boot", "ready")
     }
 
@@ -197,9 +207,9 @@ final class Model: ObservableObject {
         )
     }
 
-    func connectTunnel() {
-        var id = settings["selected_id"] as? String ?? ""
-        let smart = settings["smart_connect"] as? Bool == true
+    func connectTunnel(id: String? = nil, groupId: String = "", smart: Bool? = nil) {
+        var id = id ?? (settings["selected_id"] as? String ?? "")
+        let smart = smart ?? (settings["smart_connect"] as? Bool == true) || !groupId.isEmpty
         if !smart, settings["auto_connect_best"] as? Bool == true {
             let pick = call("pick_best")
             if pick["ok"] as? Bool != false, let best = (pick["data"] as? [String: Any])?["id"] as? String, !best.isEmpty {
@@ -207,7 +217,10 @@ final class Model: ObservableObject {
                 refresh()
             }
         }
-        if id.isEmpty {
+        if id.isEmpty, smart {
+            id = firstProfileId(in: groupId)
+        }
+        if !smart, id.isEmpty {
             DevLog.error("connect", "no config selected")
             showToast(t("none"), tone: .warning)
             refresh()
@@ -216,18 +229,20 @@ final class Model: ObservableObject {
 
         // Dev / unsigned builds have no PacketTunnel; NE "connected" would not run sing-box.
         guard Self.hasPacketTunnelExtension else {
-            startCoreConnect(id: id, smart: smart)
+            startCoreConnect(id: id, smart: smart, groupId: groupId)
             return
         }
 
-        let prepared = call("prepare", ["id": id, "smart": smart])
+        var args: [String: Any] = ["id": id, "smart": smart]
+        if !groupId.isEmpty { args["group_id"] = groupId }
+        let prepared = call("prepare", args)
         let data = prepared["data"] as? [String: Any] ?? [:]
         let path = data["path"] as? String ?? ""
         guard (prepared["ok"] as? Bool) == true, !path.isEmpty else {
             if let err = prepared["error"] as? String, !err.isEmpty {
                 DevLog.error("connect", "prepare: \(err)")
             }
-            startCoreConnect(id: id, smart: smart)
+            startCoreConnect(id: id, smart: smart, groupId: groupId)
             return
         }
         let tunnel = TunnelManager.shared
@@ -244,13 +259,23 @@ final class Model: ObservableObject {
             rules: data["on_demand_text"] as? String ?? ""
         ) { [weak self] system in
             Task { @MainActor in
-                self?.finishTunnelConnect(id: id, smart: smart, system: system)
+                self?.finishTunnelConnect(id: id, smart: smart, groupId: groupId, system: system)
             }
         }
     }
 
-    private func startCoreConnect(id: String, smart: Bool) {
-        let response = call("connect", ["id": id, "smart": smart])
+    private func firstProfileId(in groupId: String) -> String {
+        if !groupId.isEmpty, let group = groups.first(where: { ($0["id"] as? String) == groupId }) {
+            let profiles = group["profiles"] as? [[String: Any]] ?? []
+            return profiles.first?["id"] as? String ?? ""
+        }
+        return allProfileIds().first ?? ""
+    }
+
+    private func startCoreConnect(id: String, smart: Bool, groupId: String = "") {
+        var args: [String: Any] = ["id": id, "smart": smart]
+        if !groupId.isEmpty { args["group_id"] = groupId }
+        let response = call("connect", args)
         refresh()
         if response["ok"] as? Bool == false {
             let err = response["error"] as? String ?? t("failed")
@@ -261,7 +286,7 @@ final class Model: ObservableObject {
         }
     }
 
-    private func finishTunnelConnect(id: String, smart: Bool, system: Bool) {
+    private func finishTunnelConnect(id: String, smart: Bool, groupId: String, system: Bool) {
         if system {
             _ = call("mark_connected", ["id": id])
             refresh()
@@ -269,7 +294,7 @@ final class Model: ObservableObject {
                 showToast(t("connected"), tone: .success)
             }
         } else {
-            startCoreConnect(id: id, smart: smart)
+            startCoreConnect(id: id, smart: smart, groupId: groupId)
         }
     }
 

@@ -4,9 +4,6 @@ struct ConfigsView: View {
     @EnvironmentObject var model: Model
     @State var addStep: ConfigAddStep = .none
     @State var query = ""
-    @State var subName = ""
-    @State var subURL = ""
-    @State var subURLError = false
     @State var lockedImportB64: String?
     @State var filePassword = ""
     @State var collapsedGroups: Set<String> = []
@@ -27,12 +24,10 @@ struct ConfigsView: View {
                         sortTitle: "\(model.t("sort")) · \(sortLabel())",
                         addTitle: model.t("add"),
                         qrTitle: model.t("qr"),
-                        updateTitle: model.t("updateAll"),
                         pingTitle: model.t("pingAll"),
                         onAdd: { addStep = .menu },
                         onQR: { addStep = .scan },
                         onSort: { cycleSort() },
-                        onUpdate: { updateAllSubs() },
                         onPing: { runPing(profileIds: Set(model.allProfileIds()), args: pingArgs()) }
                     )
                     .padding(.top, 10)
@@ -82,7 +77,6 @@ struct ConfigsView: View {
             }
 
             if addStep == .menu { addMenuOverlay }
-            if addStep == .subscribe { addSubOverlay }
             if addStep == .scan { addScanOverlay }
             if lockedImportB64 != nil { filePasswordOverlay }
         }

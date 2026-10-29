@@ -41,6 +41,10 @@ pub fn migrate_settings(settings: &mut Value) {
     if settings.get("persist_tunnel").is_none() {
         settings["persist_tunnel"] = json!(false);
     }
+    if settings.get("enabledDnsServer").is_none() {
+        settings["enabledDnsServer"] = json!(settings["remote_dns_id"].as_str().unwrap_or(""));
+    }
+    settings["sub_auto_update"] = json!(false);
 }
 
 #[cfg(test)]

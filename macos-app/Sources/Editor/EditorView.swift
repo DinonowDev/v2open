@@ -88,13 +88,18 @@ struct EditorView: View {
         if proto == "masterdns" {
             edit("key", "Key", latin: true, icon: "key.fill")
             edit("encryption_method", "Encryption 0-5", latin: true, icon: "lock.rotation")
+            edit("arq_window_size", "ARQ window", latin: true, icon: "square.grid.3x3")
+            edit("arq_initial_rto_seconds", "ARQ initial RTO", latin: true, icon: "timer")
+            edit("arq_max_rto_seconds", "ARQ max RTO", latin: true, icon: "timer")
+            edit("arq_max_data_retries", "ARQ data retries", latin: true, icon: "arrow.clockwise")
+            edit("arq_inactivity_timeout_seconds", "ARQ inactivity", latin: true, icon: "clock")
         }
         if proto == "hysteria" || proto == "hysteria2" {
             edit("up_mbps", "Up Mbps", latin: true, icon: "arrow.up")
             edit("down_mbps", "Down Mbps", latin: true, icon: "arrow.down")
         }
         if proto == "chain" {
-            edit("chain", "Hops (JSON)", latin: true, icon: "link")
+            chainHopsEditor
         }
         if proto == "wireguard" {
             edit("private_key", "Private key", latin: true, secure: true, icon: "key.fill")
@@ -125,6 +130,8 @@ struct EditorView: View {
                 options: ["auto", "packet-up", "stream-up", "stream-one"].map { ($0, $0) },
                 wide: true
             ) { model.draft["mode"] = $0 }
+            edit("x_padding", "XHTTP padding", latin: true, icon: "arrow.left.and.right")
+            edit("xhttp_extra", "XHTTP extra JSON", latin: true, icon: "curlybraces")
         }
         edit("host", "Host", latin: true, icon: "globe")
         edit("path", "Path", latin: true, icon: "slash.forward")
@@ -136,6 +143,70 @@ struct EditorView: View {
         edit("fp", "Fingerprint", latin: true, icon: "touchid")
         edit("pbk", "Reality public key", latin: true, icon: "key")
         edit("sid", "Short ID", latin: true, icon: "number")
+        if (model.draft["tls"] as? String) == "reality" {
+            edit("spx", "SpiderX", latin: true, icon: "ant")
+            edit("pqv", "ML-DSA verify", latin: true, icon: "checkmark.seal")
+        }
+    }
+
+    @ViewBuilder private var chainHopsEditor: some View {
+        let hops = hopsList()
+        ForEach(hops.indices, id: \.self) { index in
+            VStack(alignment: .leading, spacing: 8) {
+                Mix(text: "\(model.t("hop")) \(index + 1)", size: 12, weight: .semibold)
+                hopField(index, "protocol", "Protocol")
+                hopField(index, "address", model.fa ? "آدرس" : "Address")
+                hopField(index, "port", model.fa ? "پورت" : "Port")
+                hopField(index, "uuid", "UUID")
+                hopField(index, "password", "Password")
+                SheetActionButton(title: model.t("deleteRule"), danger: true, icon: "trash") {
+                    var next = hopsList()
+                    if next.indices.contains(index) {
+                        next.remove(at: index)
+                        model.draft["chain"] = next
+                    }
+                }
+            }
+            .padding(.bottom, 8)
+        }
+        SheetActionButton(title: model.t("addHop"), icon: "plus") {
+            var next = hopsList()
+            next.append(["protocol": "vless", "address": "", "port": 443, "uuid": "", "password": ""])
+            model.draft["chain"] = next
+        }
+    }
+
+    private func hopsList() -> [[String: Any]] {
+        if let arr = model.draft["chain"] as? [[String: Any]] { return arr }
+        if let arr = model.draft["chain"] as? [Any] {
+            return arr.compactMap { $0 as? [String: Any] }
+        }
+        if let text = model.draft["chain"] as? String, let data = text.data(using: .utf8),
+           let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
+            return arr
+        }
+        return []
+    }
+
+    func hopField(_ index: Int, _ key: String, _ title: String) -> some View {
+        V2Field(
+            label: title,
+            placeholder: title,
+            text: Binding(
+                get: {
+                    let hops = hopsList()
+                    guard hops.indices.contains(index) else { return "" }
+                    return "\(hops[index][key] ?? "")"
+                },
+                set: { value in
+                    var hops = hopsList()
+                    guard hops.indices.contains(index) else { return }
+                    hops[index][key] = key == "port" ? (Int(value) ?? 0) : value
+                    model.draft["chain"] = hops
+                }
+            ),
+            latin: true
+        )
     }
 
     private var hasCredentials: Bool {

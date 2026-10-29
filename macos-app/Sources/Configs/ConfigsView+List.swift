@@ -6,8 +6,11 @@ extension ConfigsView {
     func groupCard(_ group: [String: Any]) -> some View {
         let profiles = group["profiles"] as? [[String: Any]] ?? []
         let gid = group["id"] as? String ?? ""
-        let name = (group["kind"] as? String) == "local" ? model.t("local") : (group["name"] as? String ?? "")
-        let subtitle = (group["kind"] as? String) == "local" ? model.t("custom") : (group["url"] as? String ?? "")
+        let name = {
+            let raw = group["name"] as? String ?? ""
+            return raw.isEmpty ? model.t("local") : raw
+        }()
+        let subtitle = model.t("custom")
         let expanded = !collapsedGroups.contains(gid)
         return VStack(alignment: .leading, spacing: 0) {
             Button { toggleGroup(gid) } label: {
@@ -40,24 +43,31 @@ extension ConfigsView {
             }
             .buttonStyle(.plain)
 
-            if (group["kind"] as? String) == "subscription" {
-                SubscriptionQuotaView(group: group)
-                HStack(spacing: 8) {
-                    ConfigRowIconButton(systemName: "arrow.clockwise", label: model.t("update")) {
-                        if let err = model.invoke("update_group", ["id": gid]) {
-                            model.showToast(err, tone: .error)
-                        } else {
-                            model.showToast(model.t("subRefreshed"), tone: .success)
+            HStack(spacing: 8) {
+                if !profiles.isEmpty {
+                    Button {
+                        model.connectTunnel(groupId: gid, smart: true)
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 10, weight: .bold))
+                            Mix(text: model.t("smartConnect"), size: 11, weight: .semibold)
                         }
+                        .foregroundStyle(C.cyan)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(C.cyan.opacity(0.14))
+                        .clipShape(Capsule())
                     }
-                    ConfigRowIconButton(systemName: "dot.radiowaves.left.and.right", label: model.t("pingAll")) {
-                        runPing(profileIds: profileIds(in: group), args: pingArgs(groupId: gid))
-                    }
-                    Spacer(minLength: 0)
+                    .buttonStyle(.plain)
                 }
-                .padding(.horizontal, 12)
-                .padding(.bottom, 8)
+                ConfigRowIconButton(systemName: "dot.radiowaves.left.and.right", label: model.t("pingAll")) {
+                    runPing(profileIds: profileIds(in: group), args: pingArgs(groupId: gid))
+                }
+                Spacer(minLength: 0)
             }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 8)
 
             if expanded {
                 Rectangle().fill(C.line).frame(height: 1)

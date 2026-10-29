@@ -19,7 +19,7 @@ struct SelectedConfigCard: View {
         let port = jsonInt(profile["port"])
         let endpoint = port > 0 ? "\(address):\(port)" : address
 
-        HStack(alignment: .center, spacing: 10) {
+        HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Mix(text: name, size: 13, weight: .semibold)
@@ -31,40 +31,43 @@ struct SelectedConfigCard: View {
                             .shadow(color: C.lime.opacity(0.6), radius: 3)
                     }
                 }
-                if !endpoint.isEmpty || !proto.isEmpty {
-                    Mix(
-                        text: [proto, endpoint].filter { !$0.isEmpty }.joined(separator: " · "),
-                        size: 11,
-                        color: C.muted
-                    )
-                    .lineLimit(1)
+                if !proto.isEmpty {
+                    Mix(text: proto, size: 11, weight: .medium, color: C.muted)
+                        .lineLimit(1)
                 }
-                HStack(spacing: 10) {
-                    HStack(spacing: 4) {
-                        Image(systemName: ping == 0 ? "wifi.slash" : "dot.radiowaves.left.and.right")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(PingMark.color(ping))
-                        Mix(text: PingMark.label(ping, timeout: model.t("pingTimeout")), size: 11, weight: .bold, color: PingMark.color(ping))
-                    }
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.down")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(C.lime.opacity(0.9))
-                        Text(formatBps(down))
-                            .font(.custom("Inter", size: 11).weight(.semibold))
-                            .foregroundStyle(C.muted)
-                    }
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.up")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(C.lime.opacity(0.9))
-                        Text(formatBps(up))
-                            .font(.custom("Inter", size: 11).weight(.semibold))
-                            .foregroundStyle(C.muted)
-                    }
+                if !endpoint.isEmpty {
+                    Mix(text: endpoint, size: 11, color: C.muted)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
             }
-            Spacer(minLength: 0)
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            VStack(alignment: .trailing, spacing: 4) {
+                HStack(spacing: 4) {
+                    Image(systemName: ping == 0 ? "wifi.slash" : "dot.radiowaves.left.and.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(PingMark.color(ping))
+                    Mix(text: PingMark.label(ping, timeout: model.t("pingTimeout")), size: 11, weight: .bold, color: PingMark.color(ping))
+                }
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.down")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(C.lime.opacity(0.9))
+                    Text(formatBps(down))
+                        .font(.custom("Inter", size: 11).weight(.semibold))
+                        .foregroundStyle(C.muted)
+                }
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(C.lime.opacity(0.9))
+                    Text(formatBps(up))
+                        .font(.custom("Inter", size: 11).weight(.semibold))
+                        .foregroundStyle(C.muted)
+                }
+            }
+
             if showPower {
                 PowerConnectButton(
                     connected: connected,
@@ -77,6 +80,7 @@ struct SelectedConfigCard: View {
                 )
             }
         }
+        .environment(\.layoutDirection, .leftToRight)
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
         .background(.ultraThinMaterial)

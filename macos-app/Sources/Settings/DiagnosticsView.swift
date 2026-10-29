@@ -3,6 +3,7 @@ import SwiftUI
 
 struct DiagnosticsView: View {
     @EnvironmentObject var model: Model
+    @State private var data: [String: Any] = [:]
 
     var body: some View {
         sub(model.t("diagnostics")) {
@@ -11,33 +12,53 @@ struct DiagnosticsView: View {
                     SettingsCard {
                         row(model.t("app"), "V2Open")
                         SettingsDivider()
-                        row("SSID", model.runtime["ssid"] as? String ?? "-")
+                        row("SSID", str("ssid"))
                         SettingsDivider()
-                        row(model.t("networkSection"), model.runtime["network"] as? String ?? "-")
+                        row(model.t("networkSection"), str("network"))
                         SettingsDivider()
-                        row("IFACE", model.runtime["interface"] as? String ?? "-")
+                        row("IFACE", str("interface"))
                         SettingsDivider()
-                        row("Core", model.runtime["core"] as? String ?? "-")
+                        row("Core", str("core"))
                         SettingsDivider()
-                        row("DNS", (model.settings["remote_dns"] as? String ?? "-"))
+                        row(model.t("connected"), (data["connected"] as? Bool == true) ? model.t("connected") : model.t("disconnected"))
                     }
+                    block(model.t("routeTable"), str("routes"))
+                    block(model.t("systemDns"), str("dns"))
+                    block(model.t("liveConfig"), str("config"))
                     SettingsCard {
-                        Mix(text: String(describing: model.runtime["config_path"] ?? ""), size: 12, color: C.muted)
+                        Mix(text: str("config_path"), size: 12, color: C.muted)
                             .textSelection(.enabled)
                             .padding(14)
-                        Mix(text: String(describing: model.runtime["log_path"] ?? ""), size: 12, color: C.muted)
+                        Mix(text: str("log_path"), size: 12, color: C.muted)
                             .textSelection(.enabled)
                             .padding(.horizontal, 14)
                             .padding(.bottom, 14)
                     }
                     SheetActionButton(title: model.t("copyDiagnostics"), primary: true, icon: "doc.on.clipboard") { copy() }
                     SheetActionButton(title: model.t("openSupport"), icon: "folder") { openSupport() }
+                    SheetActionButton(title: model.t("update"), icon: "arrow.clockwise") { load() }
                 }
                 .padding(.horizontal, PageLayout.horizontal)
                 .padding(.top, 8)
                 .padding(.bottom, PageLayout.bottom + PageLayout.tabBarClearance)
             }
             .scrollIndicators(.hidden)
+            .onAppear { load() }
+        }
+    }
+
+    func str(_ key: String) -> String {
+        data[key] as? String ?? ""
+    }
+
+    func block(_ title: String, _ body: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SettingsSectionLabel(text: title)
+            SettingsCard {
+                Mix(text: body.isEmpty ? "-" : body, size: 11, color: C.muted)
+                    .textSelection(.enabled)
+                    .padding(14)
+            }
         }
     }
 
@@ -53,13 +74,15 @@ struct DiagnosticsView: View {
 
     func copy() {
         let text = [
-            "ssid=\(model.runtime["ssid"] as? String ?? "")",
-            "network=\(model.runtime["network"] as? String ?? "")",
-            "iface=\(model.runtime["interface"] as? String ?? "")",
-            "core=\(model.runtime["core"] as? String ?? "")",
-            "dns=\(model.settings["remote_dns"] as? String ?? "")",
-            "config=\(model.runtime["config_path"] ?? "")",
-            "log=\(model.runtime["log_path"] ?? "")"
+            "ssid=\(str("ssid"))",
+            "network=\(str("network"))",
+            "iface=\(str("interface"))",
+            "core=\(str("core"))",
+            "config=\(str("config_path"))",
+            "log=\(str("log_path"))",
+            "routes=\n\(str("routes"))",
+            "dns=\n\(str("dns"))",
+            "live=\n\(str("config"))"
         ].joined(separator: "\n")
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
@@ -70,5 +93,10 @@ struct DiagnosticsView: View {
         let url = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/V2Open", isDirectory: true)
         NSWorkspace.shared.open(url)
+    }
+
+    func load() {
+        let response = model.call("diagnostics")
+        data = response["data"] as? [String: Any] ?? [:]
     }
 }

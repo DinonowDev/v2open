@@ -10,55 +10,52 @@ struct HomeView: View {
         let connected = runtime["connected"] as? Bool ?? false
         let phase = runtime["phase"] as? String ?? "idle"
         let connecting = phase == "connecting"
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 0) {
-                PageHeader(title: model.t("app"), subtitle: selectedName, caption: ssidCaption)
-                if let error = runtime["error"] as? String, !error.isEmpty {
-                    Mix(text: error, size: 13, color: Color(red: 1, green: 0.36, blue: 0.45))
-                        .padding(.top, 10)
-                }
-
-                VStack(spacing: 14) {
-                    if connected {
-                        ConnectionStatusPill(text: model.t("connected"))
-                        ConnectionTimer(since: connectedSince)
-                    }
-                    PowerConnectButton(
-                        connected: connected,
-                        connecting: connecting,
-                        action: {
-                            if connected { model.disconnectTunnel() }
-                            else { model.connectTunnel() }
-                        }
-                    )
-                }
-                .frame(maxWidth: .infinity)
-                .frame(minHeight: connected ? 292 : 252)
-                .padding(.top, 24)
-                SettingsToggleRow(
-                    title: model.t("smartConnect"),
-                    hint: model.t("smartConnectHint"),
-                    isOn: model.settings["smart_connect"] as? Bool ?? false
-                ) { model.set("smart_connect", $0) }
-                .padding(.top, 8)
-
-                if let profile = model.selectedProfile {
-                    SelectedConfigCard(profile: profile)
-                        .padding(.top, 16)
-                }
-
-                HomeStatsGrid(
-                    memory: homeMemoryLabel(runtime: runtime),
-                    upload: homeTrafficSpeed(runtime: runtime, kind: .upload),
-                    uploadTotal: homeTrafficTotal(runtime: runtime, kind: .upload),
-                    download: homeTrafficSpeed(runtime: runtime, kind: .download),
-                    downloadTotal: homeTrafficTotal(runtime: runtime, kind: .download)
-                )
-                .padding(.top, PageLayout.headerToContent)
-                .padding(.bottom, PageLayout.bottom)
+        VStack(alignment: .leading, spacing: 0) {
+            PageHeader(title: model.t("app"), subtitle: selectedName, caption: ssidCaption)
+            if let error = runtime["error"] as? String, !error.isEmpty {
+                Mix(text: error, size: 13, color: Color(red: 1, green: 0.36, blue: 0.45))
+                    .padding(.top, 8)
+                    .lineLimit(2)
             }
-            .padding(.horizontal, PageLayout.horizontal)
+
+            Spacer(minLength: 6)
+
+            VStack(spacing: 8) {
+                if connected {
+                    ConnectionTimer(since: connectedSince)
+                }
+                PowerConnectButton(
+                    connected: connected,
+                    connecting: connecting,
+                    action: {
+                        if connected { model.disconnectTunnel() }
+                        else { model.connectTunnel() }
+                    }
+                )
+            }
+            .frame(maxWidth: .infinity)
+
+            Spacer(minLength: 6)
+
+            smartConnectRow
+                .padding(.bottom, 10)
+
+            if let profile = model.selectedProfile {
+                SelectedConfigCard(profile: profile)
+                    .padding(.bottom, 10)
+            }
+
+            HomeStatsGrid(
+                memory: homeMemoryLabel(runtime: runtime),
+                upload: homeTrafficSpeed(runtime: runtime, kind: .upload),
+                uploadTotal: homeTrafficTotal(runtime: runtime, kind: .upload),
+                download: homeTrafficSpeed(runtime: runtime, kind: .download),
+                downloadTotal: homeTrafficTotal(runtime: runtime, kind: .download)
+            )
         }
+        .padding(.horizontal, PageLayout.horizontal)
+        .padding(.bottom, PageLayout.bottom + PageLayout.tabBarClearance)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
             guard model.runtime["connected"] as? Bool == true else { return }
             let response = model.call("tick")
@@ -87,6 +84,30 @@ struct HomeView: View {
     private func homeTrafficTotal(runtime: [String: Any], kind: HomeTrafficKind) -> String {
         let key = kind == .upload ? "upload_total" : "download_total"
         return formatBytes(jsonUInt(runtime[key]))
+    }
+
+    private var smartConnectRow: some View {
+        HStack(spacing: 6) {
+            Mix(text: model.t("smartConnect"), size: 13, weight: .medium)
+            InfoTip(text: model.t("smartConnectHint"))
+            Spacer(minLength: 8)
+            SoftSwitch(
+                isOn: Binding(
+                    get: { model.settings["smart_connect"] as? Bool ?? false },
+                    set: { model.set("smart_connect", $0) }
+                )
+            )
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(C.cardElevated)
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(C.line, lineWidth: 1)
+        )
     }
 
     var selectedName: String {
@@ -131,7 +152,7 @@ struct HomeStatsGrid: View {
                 accent: C.speedDown
             )
         }
-        .padding(.vertical, 14)
+        .padding(.vertical, 10)
         .background {
             ZStack {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -221,23 +242,6 @@ struct HomeStatTile: View {
     }
 }
 
-struct ConnectionStatusPill: View {
-    var text: String
-    var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(C.lime)
-            Mix(text: text, size: 13, weight: .semibold, color: C.lime)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 6)
-        .background(C.lime.opacity(0.12))
-        .clipShape(Capsule())
-        .overlay(Capsule().stroke(C.lime.opacity(0.35), lineWidth: 1))
-    }
-}
-
 struct ConnectionTimer: View {
     @Environment(\.themeLight) private var themeLight
     var since: Date?
@@ -246,7 +250,7 @@ struct ConnectionTimer: View {
             let _ = themeLight
             let elapsed = since.map { context.date.timeIntervalSince($0) } ?? 0
             Text(formatElapsed(elapsed))
-                .font(.custom("Inter", size: 34).weight(.bold))
+                .font(.custom("Inter", size: 24).weight(.bold))
                 .monospacedDigit()
                 .foregroundStyle(C.text)
         }
@@ -274,15 +278,15 @@ struct PowerConnectButton: View {
     private var diameter: CGFloat {
         if dock { return 34 }
         if compact { return 58 }
-        return 128
+        return 108
     }
     private var iconSize: CGFloat {
         if dock { return 14 }
         if compact { return 22 }
-        return 38
+        return 32
     }
     private var ringCount: Int { dock ? 0 : 3 }
-    private var ringStep: CGFloat { dock ? 0 : (compact ? 14 : 22) }
+    private var ringStep: CGFloat { dock ? 0 : (compact ? 14 : 16) }
 
     var body: some View {
         Button(action: action) {

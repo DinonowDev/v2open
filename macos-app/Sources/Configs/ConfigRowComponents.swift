@@ -4,12 +4,10 @@ struct ConfigActionBar: View {
     var sortTitle: String
     var addTitle: String
     var qrTitle: String
-    var updateTitle: String
     var pingTitle: String
     var onAdd: () -> Void
     var onQR: () -> Void
     var onSort: () -> Void
-    var onUpdate: () -> Void
     var onPing: () -> Void
 
     var body: some View {
@@ -19,8 +17,6 @@ struct ConfigActionBar: View {
             iconButton("qrcode.viewfinder", help: qrTitle, action: onQR)
             barDivider
             sortButton
-            barDivider
-            iconButton("arrow.clockwise", help: updateTitle, action: onUpdate)
             barDivider
             iconButton("dot.radiowaves.left.and.right", help: pingTitle, action: onPing)
         }

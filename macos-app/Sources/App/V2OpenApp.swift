@@ -3,7 +3,22 @@ import AppKit
 import CoreText
 
 final class AppTerminator: NSObject, NSApplicationDelegate {
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        let settings = (v2RPC(method: "state")["data"] as? [String: Any])?["settings"] as? [String: Any] ?? [:]
+        let keep = (settings["geo_auto_update"] as? Bool == true)
+            || (settings["on_demand"] as? Bool == true)
+            || (settings["persist_tunnel"] as? Bool == true)
+        return !keep
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        let settings = (v2RPC(method: "state")["data"] as? [String: Any])?["settings"] as? [String: Any] ?? [:]
+        UILock.release()
+        BackgroundScheduler.installIfNeeded(
+            geoAuto: settings["geo_auto_update"] as? Bool == true,
+            onDemand: settings["on_demand"] as? Bool == true,
+            persist: settings["persist_tunnel"] as? Bool == true
+        )
         _ = v2RPC(method: "disconnect")
         return .terminateNow
     }
@@ -15,6 +30,9 @@ struct V2OpenApp: App {
     @StateObject private var model = Model()
     init() {
         DevLog.install()
+        if BackgroundScheduler.agentRequested {
+            BackgroundScheduler.runIfRequested()
+        }
         registerFonts()
     }
     var body: some Scene {

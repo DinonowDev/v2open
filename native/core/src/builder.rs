@@ -396,7 +396,14 @@ fn transport(profile: &Value) -> Result<Option<Value>, String> {
         let mode = if mode.is_empty() { "auto".to_string() } else { mode };
         let padding = s(profile, "x_padding");
         let padding = if padding.is_empty() { "100-1000".to_string() } else { padding };
-        return Ok(Some(json!({"type":"xhttp","host": s(profile, "host"), "path": path, "mode": mode, "x_padding_bytes": padding})));
+        let mut xhttp = json!({"type":"xhttp","host": s(profile, "host"), "path": path, "mode": mode, "x_padding_bytes": padding});
+        let extra = s(profile, "xhttp_extra");
+        if !extra.is_empty() {
+            if let Ok(value) = serde_json::from_str::<Value>(&extra) {
+                xhttp["extra"] = value;
+            }
+        }
+        return Ok(Some(xhttp));
     }
     if network == "quic" {
         return Ok(Some(json!({"type":"quic"})));

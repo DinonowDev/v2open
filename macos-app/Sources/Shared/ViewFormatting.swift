@@ -3,7 +3,7 @@ import AppKit
 import SwiftUI
 
 enum ConfigAddStep {
-    case none, menu, subscribe, scan
+    case none, menu, clash, scan
 }
 
 func jsonInt(_ value: Any?) -> Int {

@@ -19,7 +19,7 @@ mod xray_balancers;
 pub use app::{locate_core, support_dir, Core};
 pub use builder::{build_config, preset};
 pub use migrate::migrate_settings;
-pub use parser::parse_link;
+pub use parser::{parse_clash_yaml, parse_link, parse_text};
 pub use routing::{export_routes, parse_routes};
 pub use xray::document as xray_document;
 

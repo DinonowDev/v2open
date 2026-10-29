@@ -52,6 +52,9 @@ struct ToolsView: View {
                             SettingsToggleRow(title: model.t("kill"), isOn: model.settings["kill_switch"] as? Bool ?? false) { model.set("kill_switch", $0) }
                             SettingsDivider()
                             SettingsToggleRow(title: model.t("combiner"), hint: model.t("combinerHint"), isOn: model.settings["net_combiner"] as? Bool ?? false) { model.set("net_combiner", $0) }
+                            Mix(text: model.t("combinerNotAvailable"), size: 11, color: C.muted)
+                                .padding(.horizontal, 14)
+                                .padding(.bottom, 8)
                             SettingsDivider()
                             SettingsToggleRow(title: model.t("demand"), isOn: model.settings["on_demand"] as? Bool ?? false) { model.set("on_demand", $0) }
                             SettingsDivider()

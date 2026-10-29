@@ -1,15 +1,24 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct BackupSettingsView: View {
     @EnvironmentObject var model: Model
     @State private var renameId = ""
     @State private var renameText = ""
+    @State private var packagePassword = ""
 
     var body: some View {
         sub(model.t("backup")) {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 16) {
+                    SettingsCard {
+                        V2Field(label: model.t("filePassword"), placeholder: "••••••••", text: $packagePassword, latin: true, secure: true, icon: "key.fill")
+                            .padding(14)
+                        Mix(text: model.t("v2boxPasswordHint"), size: 11, color: C.muted)
+                            .padding(.horizontal, 14)
+                            .padding(.bottom, 10)
+                    }
                     SettingsCard {
                         SettingsNavRow(icon: "square.and.arrow.up", title: model.t("backupNow"), chevron: false) {
                             _ = model.call("backup")
@@ -106,17 +115,19 @@ struct BackupSettingsView: View {
 
     func exportPackage() {
         let panel = NSSavePanel()
-        panel.nameFieldStringValue = "V2Open.v2box.json"
+        panel.nameFieldStringValue = "V2Open.v2box"
+        panel.allowedContentTypes = [UTType(filenameExtension: "v2box") ?? .data]
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        let response = model.call("export_package", ["path": url.path])
+        let response = model.call("export_package", ["path": url.path, "password": packagePassword])
         model.showToast(response["ok"] as? Bool == false ? (response["error"] as? String ?? model.t("failed")) : model.t("saved"), tone: response["ok"] as? Bool == false ? .error : .success)
     }
 
     func importPackage() {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [UTType(filenameExtension: "v2box") ?? .data, .json, .item]
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        let response = model.call("import_package", ["path": url.path])
+        let response = model.call("import_package", ["path": url.path, "password": packagePassword])
         model.mergeState(from: response)
         model.showToast(response["ok"] as? Bool == false ? (response["error"] as? String ?? model.t("failed")) : model.t("imported"), tone: response["ok"] as? Bool == false ? .error : .success)
     }

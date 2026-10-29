@@ -13,12 +13,7 @@ extension ConfigsView {
                 }
                 .padding(.bottom, 12)
                 VStack(spacing: 0) {
-                    AddActionRow(icon: "link", title: model.t("sub"), hint: model.t("subHint"), tint: C.ping) {
-                        subName = ""
-                        subURL = ""
-                        subURLError = false
-                        addStep = .subscribe
-                    }
+                    AddActionRow(icon: "doc.text", title: model.t("clashYaml"), hint: model.t("clashYamlHint"), tint: C.ping, action: importClashFile)
                     Rectangle().fill(C.line).frame(height: 1).padding(.leading, 64)
                     AddActionRow(icon: "slider.horizontal.3", title: model.t("manual"), hint: model.t("manualHint"), tint: C.cyan, action: openManualEditor)
                     Rectangle().fill(C.line).frame(height: 1).padding(.leading, 64)
@@ -57,38 +52,6 @@ extension ConfigsView {
                     .padding(.bottom, 14)
                 SheetActionButton(title: model.t("unlockFile"), primary: true, icon: "lock.open.fill") { confirmLockedImport() }
                 SheetActionButton(title: model.t("cancel"), quiet: true) { lockedImportB64 = nil }
-              }
-            }
-        }
-    }
-
-    var addSubOverlay: some View {
-        SheetBackdrop(onDismiss: { addStep = .none }) {
-            SheetCard {
-              VStack(alignment: .leading, spacing: 0) {
-                SheetHeader(
-                    title: model.t("sub"),
-                    subtitle: model.t("subHint"),
-                    back: { addStep = .menu },
-                    close: { addStep = .none },
-                    closeLabel: model.t("cancel")
-                )
-                V2Field(label: model.t("subName"), placeholder: model.t("subName"), text: $subName, latin: false, icon: "tag")
-                    .padding(.bottom, 10)
-                V2Field(
-                    label: model.t("subUrl"),
-                    placeholder: "https://",
-                    text: $subURL,
-                    latin: true,
-                    pasteable: true,
-                    invalid: subURLError,
-                    icon: "link",
-                    hint: model.t("subUrlHint")
-                )
-                .onChange(of: subURL) { _, _ in subURLError = false }
-                .padding(.bottom, 16)
-                SheetActionButton(title: model.t("save"), primary: true, icon: "checkmark") { saveSubscription() }
-                SheetActionButton(title: model.t("cancel"), quiet: true) { addStep = .none }
               }
             }
         }

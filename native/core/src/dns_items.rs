@@ -29,6 +29,7 @@ pub fn ensure_dns_items(settings: &mut Value) {
     settings["dns_items"] = json!(default_dns_items());
     settings["remote_dns_id"] = json!("cloudflare-doh");
     settings["domestic_dns_id"] = json!("ali-dns");
+    settings["enabledDnsServer"] = json!("cloudflare-doh");
     sync_legacy_dns(settings);
 }
 
@@ -112,15 +113,36 @@ pub fn resolver_host(item: &Value) -> String {
     server.split(':').next().unwrap_or(server).to_string()
 }
 
+fn address_value(value: &Value) -> Option<String> {
+    let raw = if let Some(s) = value.as_str() {
+        s.trim().to_string()
+    } else {
+        value.get("value").and_then(|v| v.as_str()).unwrap_or("").trim().to_string()
+    };
+    if raw.is_empty() || !is_ip(&raw) {
+        None
+    } else {
+        Some(raw)
+    }
+}
+
+fn address_row(value: &str, index: usize) -> Value {
+    let slug: String = value
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    json!({
+        "id": format!("ip-{index}-{slug}"),
+        "value": value
+    })
+}
+
 pub fn normalized_addresses(item: &Value) -> Vec<String> {
     let mut out = Vec::new();
     if let Some(arr) = item["addresses"].as_array() {
         for value in arr {
-            if let Some(raw) = value.as_str() {
-                let ip = raw.trim();
-                if !ip.is_empty() && is_ip(ip) {
-                    out.push(ip.to_string());
-                }
+            if let Some(ip) = address_value(value) {
+                out.push(ip);
             }
         }
     }
@@ -131,7 +153,8 @@ pub fn parse_addresses_text(text: &str) -> Vec<Value> {
     text.split(|c| c == '\n' || c == ',' || c == ';')
         .map(str::trim)
         .filter(|s| !s.is_empty() && is_ip(s))
-        .map(|s| json!(s))
+        .enumerate()
+        .map(|(i, s)| address_row(s, i))
         .collect()
 }
 
@@ -205,16 +228,19 @@ pub fn save_dns_item(settings: &mut Value, item: &Value) -> Result<(), String> {
     });
     let mut addresses = Vec::new();
     if let Some(text) = item.get("addresses_text").and_then(|v| v.as_str()) {
-        addresses = parse_addresses_text(text)
-            .into_iter()
-            .filter_map(|v| v.as_str().map(str::to_string))
-            .collect();
+        addresses = parse_addresses_text(text);
     } else if let Some(arr) = item["addresses"].as_array() {
-        for value in arr {
-            if let Some(raw) = value.as_str() {
-                let ip = raw.trim();
-                if is_ip(ip) {
-                    addresses.push(ip.to_string());
+        for (index, value) in arr.iter().enumerate() {
+            if let Some(ip) = address_value(value) {
+                if let Some(obj) = value.as_object() {
+                    let id = obj.get("id").and_then(|v| v.as_str()).unwrap_or("");
+                    if id.is_empty() {
+                        addresses.push(address_row(&ip, index));
+                    } else {
+                        addresses.push(json!({"id": id, "value": ip}));
+                    }
+                } else {
+                    addresses.push(address_row(&ip, index));
                 }
             }
         }
@@ -246,6 +272,9 @@ pub fn delete_dns_item(settings: &mut Value, id: &str) -> Result<(), String> {
     if settings["domestic_dns_id"].as_str() == Some(id) {
         settings["domestic_dns_id"] = json!("");
     }
+    if settings["enabledDnsServer"].as_str() == Some(id) {
+        settings["enabledDnsServer"] = json!("");
+    }
     sync_legacy_dns(settings);
     Ok(())
 }
@@ -256,8 +285,33 @@ pub fn set_active_dns(settings: &mut Value, role: &str, id: &str) -> Result<(), 
     }
     match role {
         "domestic" => settings["domestic_dns_id"] = json!(id),
-        _ => settings["remote_dns_id"] = json!(id),
+        "enabled" => {
+            settings["enabledDnsServer"] = json!(id);
+            settings["remote_dns_id"] = json!(id);
+        }
+        _ => {
+            settings["remote_dns_id"] = json!(id);
+            settings["enabledDnsServer"] = json!(id);
+        }
+    }
+    if settings["enabledDnsServer"].as_str().unwrap_or("").is_empty() {
+        settings["enabledDnsServer"] = json!(settings["remote_dns_id"].as_str().unwrap_or(""));
     }
     sync_legacy_dns(settings);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn structured_and_plain_addresses() {
+        let item = json!({"addresses": [{"id": "a", "value": "1.1.1.1"}, "8.8.8.8"]});
+        assert_eq!(normalized_addresses(&item), vec!["1.1.1.1".to_string(), "8.8.8.8".to_string()]);
+        let rows = parse_addresses_text("9.9.9.9\n1.0.0.1");
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0]["value"], "9.9.9.9");
+        assert!(rows[0]["id"].as_str().unwrap().starts_with("ip-"));
+    }
 }

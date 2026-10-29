@@ -108,6 +108,18 @@ fn masterdns(profile: &Value, singbox: &Path, work: &Path, settings: &Value) -> 
         .arg("-k").arg(&key)
         .arg("-data-encryption-method").arg(&method)
         .arg("-protocol-type").arg("SOCKS5");
+    for (key, flag) in [
+        ("arq_window_size", "-arq-window-size"),
+        ("arq_initial_rto_seconds", "-arq-initial-rto-seconds"),
+        ("arq_max_rto_seconds", "-arq-max-rto-seconds"),
+        ("arq_max_data_retries", "-arq-max-data-retries"),
+        ("arq_inactivity_timeout_seconds", "-arq-inactivity-timeout-seconds"),
+    ] {
+        let value = text(profile, key);
+        if !value.is_empty() {
+            cmd.arg(flag).arg(value);
+        }
+    }
     if settings["mtu_optimize"].as_bool().unwrap_or(false) {
         cmd.arg("-max-upload-mtu").arg(settings["max_upload_mtu"].as_u64().unwrap_or(150).to_string())
             .arg("-min-upload-mtu").arg(settings["min_upload_mtu"].as_u64().unwrap_or(38).to_string())

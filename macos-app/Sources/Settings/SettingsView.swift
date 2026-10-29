@@ -106,16 +106,11 @@ struct SettingsView: View {
                         SettingsDivider(inset: 58)
                         SettingsNavRow(icon: "antenna.radiowaves.left.and.right", title: model.t("inbounds"), action: { model.push("network_settings") })
                         SettingsDivider(inset: 58)
+                        SettingsNavRow(icon: "point.3.connected.trianglepath.dotted", title: model.t("clashApi"), action: { model.push("clash_status") })
+                        SettingsDivider(inset: 58)
                         SettingsNavRow(icon: "square.stack.3d.up.fill", title: model.t("apps"), value: appsModeLabel, action: { model.push("apps") })
                         SettingsDivider(inset: 58)
                         SettingsToggleRow(title: model.t("proxy"), isOn: model.settings["apply_system_proxy"] as? Bool ?? true) { model.set("apply_system_proxy", $0) }
-                    }
-                }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    SettingsSectionLabel(text: model.t("subscriptionSection"))
-                    SettingsCard {
-                        SettingsNavRow(icon: "link", title: model.t("subscriptionSection"), action: { model.push("subscription_settings") })
                     }
                 }
 

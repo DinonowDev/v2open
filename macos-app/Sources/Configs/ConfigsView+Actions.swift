@@ -42,16 +42,6 @@ extension ConfigsView {
         model.set("sort_by", order[(index + 1) % order.count])
     }
 
-    func updateAllSubs() {
-        for group in model.groups where (group["kind"] as? String) == "subscription" {
-            if let err = model.invoke("update_group", ["id": group["id"] as? String ?? ""]) {
-                model.showToast(err, tone: .error)
-                return
-            }
-        }
-        model.showToast(model.t("subRefreshed"), tone: .success)
-    }
-
     func filteredGroups() -> [[String: Any]] {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return model.groups.compactMap { group in
@@ -61,7 +51,7 @@ extension ConfigsView {
                     let hay = "\(profile["remark"] as? String ?? "") \(profile["address"] as? String ?? "") \(profile["protocol"] as? String ?? "")".lowercased()
                     return hay.contains(q)
                 }
-                let name = ((group["kind"] as? String) == "local" ? model.t("local") : (group["name"] as? String ?? "")).lowercased()
+                let name = (group["name"] as? String ?? model.t("local")).lowercased()
                 if profiles.isEmpty && !name.contains(q) { return nil }
             }
             var copy = group
@@ -108,21 +98,17 @@ extension ConfigsView {
         finishImport(text: text)
     }
 
-    func saveSubscription() {
-        let name = subName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let url = subURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !url.isEmpty else {
-            subURLError = true
+    func importClashFile() {
+        addStep = .none
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [UTType(filenameExtension: "yaml") ?? .plainText, .plainText, .item]
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard let text = try? String(contentsOf: url, encoding: .utf8) else {
             model.showToast(model.t("wrong"), tone: .warning)
             return
         }
-        subURLError = false
-        if let err = model.invoke("subscribe", ["name": name.isEmpty ? "Subscription" : name, "url": url]) {
-            model.showToast(err, tone: .error)
-            return
-        }
-        addStep = .none
-        model.showToast(model.t("imported"), tone: .success)
+        finishImport(text: text)
     }
 
     func finishImport(text: String) {

@@ -14,6 +14,8 @@ struct DnsItemsView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     SettingsSectionLabel(text: model.t("activeDns"))
                     SettingsCard {
+                        activePicker(role: "enabled", title: model.t("enabledDnsServer"))
+                        SettingsDivider(inset: 58)
                         activePicker(role: "remote", title: model.t("remoteDns"))
                         SettingsDivider(inset: 58)
                         activePicker(role: "domestic", title: model.t("domesticDns"))
@@ -64,7 +66,9 @@ struct DnsItemsView: View {
     func activePicker(role: String, title: String) -> some View {
         let current = role == "domestic"
             ? (model.settings["domestic_dns_id"] as? String ?? "")
-            : (model.settings["remote_dns_id"] as? String ?? "")
+            : role == "enabled"
+                ? (model.settings["enabledDnsServer"] as? String ?? model.settings["remote_dns_id"] as? String ?? "")
+                : (model.settings["remote_dns_id"] as? String ?? "")
         SettingsSelectRow(
             title: title,
             icon: "checkmark.circle",
@@ -240,6 +244,8 @@ struct DnsItemEditorView: View {
         enabled = item["enabled"] as? Bool ?? true
         if let arr = item["addresses"] as? [String] {
             addresses = arr.joined(separator: "\n")
+        } else if let arr = item["addresses"] as? [[String: Any]] {
+            addresses = arr.compactMap { $0["value"] as? String }.joined(separator: "\n")
         } else {
             addresses = ""
         }

@@ -93,6 +93,20 @@ struct NetworkSettingsView: View {
                             .padding(.bottom, 14)
                     }
 
+                    SettingsSectionLabel(text: model.t("speedMode"))
+                    SettingsCard {
+                        SettingsSelectRow(
+                            title: model.t("speedMode"),
+                            icon: "gauge",
+                            value: model.settings["speed_mode"] as? String ?? "http",
+                            options: [
+                                ("http", model.t("speedModeHttp")),
+                                ("tcp", model.t("speedModeTcp")),
+                                ("icmp", model.t("speedModeIcmp"))
+                            ]
+                        ) { model.set("speed_mode", $0) }
+                    }
+
                     SettingsSectionLabel(text: model.t("tunnelOptions"))
                     SettingsCard {
                         SettingsToggleRow(title: model.t("enforceRoutes"), isOn: model.settings["enforce_routes"] as? Bool ?? false) {

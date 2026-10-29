@@ -338,8 +338,12 @@ fn stream(profile: &Value) -> Value {
                 "serverName": tls["serverName"],
                 "fingerprint": if s(profile, "fp").is_empty() { "chrome".to_string() } else { s(profile, "fp") },
                 "publicKey": s(profile, "pbk"),
-                "shortId": s(profile, "sid")
+                "shortId": s(profile, "sid"),
+                "spiderX": s(profile, "spx")
             });
+            if !s(profile, "pqv").is_empty() {
+                stream["realitySettings"]["mldsa65Verify"] = json!(s(profile, "pqv"));
+            }
             if !alpn.is_empty() {
                 stream["realitySettings"]["alpn"] = json!(alpn);
             }
@@ -354,7 +358,19 @@ fn stream(profile: &Value) -> Value {
         "grpc" => stream["grpcSettings"] = json!({"serviceName": s(profile, "service_name")}),
         "h2" | "http" => stream["httpSettings"] = json!({"host": [host], "path": path}),
         "httpupgrade" => stream["httpupgradeSettings"] = json!({"host": host, "path": path}),
-        "xhttp" => stream["xhttpSettings"] = json!({"host": host, "path": path, "mode": if s(profile, "mode").is_empty() { "auto".to_string() } else { s(profile, "mode") }}),
+        "xhttp" => {
+            let mut xhttp = json!({"host": host, "path": path, "mode": if s(profile, "mode").is_empty() { "auto".to_string() } else { s(profile, "mode") }});
+            if !s(profile, "x_padding").is_empty() {
+                xhttp["xPaddingBytes"] = json!(s(profile, "x_padding"));
+            }
+            let extra = s(profile, "xhttp_extra");
+            if !extra.is_empty() {
+                if let Ok(value) = serde_json::from_str::<Value>(&extra) {
+                    xhttp["extra"] = value;
+                }
+            }
+            stream["xhttpSettings"] = xhttp;
+        }
         "quic" => stream["quicSettings"] = json!({"security": "none"}),
         "kcp" => stream["kcpSettings"] = json!({"mtu": 1350, "tti": 50, "uplinkCapacity": 12, "downlinkCapacity": 100, "congestion": false, "header": {"type": if s(profile, "header_type").is_empty() { "none".to_string() } else { s(profile, "header_type") }}, "seed": if s(profile, "path").is_empty() { s(profile, "seed") } else { s(profile, "path") }}),
         _ => {}

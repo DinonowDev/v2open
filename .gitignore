@@ -8,6 +8,7 @@ data/tun-start.sh
 data/proxy-backup.json
 .DS_Store
 dev-logs/
+.venv-cta/
 
 # Local / runtime (ignored — stash will not include these; that is intentional)
 # Use copies outside data/ or backup tools if you need to save config.json.

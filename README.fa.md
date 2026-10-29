@@ -6,7 +6,7 @@ V2Open سرویس VPN نمی‌فروشد و سرورهای کانفیگ شما 
 
 <p align="center">
   <a href="https://github.com/DinonowDev/v2open/releases/latest">
-    <img src="docs/screenshots/download-cta-fa.svg" alt="دانلود V2Open برای macOS — آخرین نسخه در GitHub" width="520">
+    <img src="docs/screenshots/download-cta-fa.png" alt="دانلود V2Open برای macOS — آخرین نسخه در GitHub" width="640">
   </a>
 </p>
 

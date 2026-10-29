@@ -6,7 +6,7 @@ V2Open is **not** a VPN service. It does not sell bandwidth and does not operate
 
 <p align="center">
   <a href="https://github.com/DinonowDev/v2open/releases/latest">
-    <img src="docs/screenshots/download-cta.svg" alt="Download V2Open for macOS — latest release on GitHub" width="520">
+    <img src="docs/screenshots/download-cta.png" alt="Download V2Open for macOS — latest release on GitHub" width="640">
   </a>
 </p>
 

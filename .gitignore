@@ -16,6 +16,8 @@ dev-logs/
 # Build outputs (see build-macos.sh / dev-macos.sh)
 V2Open.app/
 V2Open-Dev.app/
+V2Open.app.bak-release-test/
+*.app.bak-release-test/
 *.dSYM/
 
 # Editor-local

@@ -11,22 +11,19 @@ How to edit this file: [docs/versioning.md](docs/versioning.md).
 
 ### Added
 
-- GitHub Actions: CI builds and tests on macOS (`cargo test`, Swift tests, `./build-macos.sh`); main-branch workflow artifacts; tag-triggered Releases with downloadable zip.
-- App tunnel can pick installed Mac apps from a searchable list with their icons instead of typing process names.
-- Project documentation, contributing rules, branching / PR guide, SemVer source file (`VERSION`), GitHub issue/PR templates, locale/version check scripts, MIT `LICENSE`, third-party `NOTICE`, Swift helper tests, and CI for docs + Swift tests.
-
 ### Changed
 
-- README: UI screenshots, project links (docs, contributing, issues, releases), donation addresses aligned with [DinonowDev/LazyDisk](https://github.com/DinonowDev/LazyDisk); download hero banner and install steps moved to the top.
-- App icon replaced with a dimensional cyan tunnel mark, plus matching lime and violet alternates, shipped as the bundle `.icns`.
-- `v2core` crate version aligned with the app marketing version (`1.1.0`).
+### Fixed
 
-## [1.1.0] - 2026-10-29
+## [1.1.0] - 2026-10-30
 
 Build `2`.
 
 ### Added
 
+- GitHub Actions: CI builds and tests on macOS (`cargo test`, Swift tests, `./build-macos.sh`); main-branch workflow artifacts; tag-triggered Releases with downloadable zip.
+- App tunnel can pick installed Mac apps from a searchable list with their icons instead of typing process names.
+- Project documentation, contributing rules, branching / PR guide, SemVer source file (`VERSION`), GitHub issue/PR templates, locale/version check scripts, MIT `LICENSE`, third-party `NOTICE`, Swift helper tests, and CI for docs + Swift tests.
 - URL schemes for `v2open`, `v2box`, `vless`, `vmess`, `trojan`, `ss`, `ssr`, `hy2`, `hysteria`, `hysteria2`, `wireguard`, `ssh`, `socks`, `ping`, `dnstt`, `masterdns`, and `chain`.
 - Alternate app icons shipped in the bundle.
 - Locale JSON files for ten languages, loaded at runtime.
@@ -38,8 +35,15 @@ Build `2`.
 
 ### Changed
 
+- README: UI screenshots, project links (docs, contributing, issues, releases), donation addresses aligned with [DinonowDev/LazyDisk](https://github.com/DinonowDev/LazyDisk); download hero banner and install steps moved to the top.
+- App icon replaced with a dimensional cyan tunnel mark, plus matching lime and violet alternates, shipped as the bundle `.icns`.
+- `v2core` crate version aligned with the app marketing version (`1.1.0`).
 - macOS app version string set to `1.1.0`.
 - Dev and release build scripts copy locales, icons, speedometer assets, and engine binaries into the app bundle.
+
+### Fixed
+
+- CI: remote TCP ping self-test accepts fast WAN handshakes (>1 ms) on GitHub runners instead of requiring ≥5 ms.
 
 ## [1.0.0] - 2026-10
 

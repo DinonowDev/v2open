@@ -4300,7 +4300,9 @@ mod ping_measure_tests {
         let Some(ms) = tcp_connect_ms("8.8.8.8", 443, Duration::from_secs(3), false) else {
             return;
         };
-        assert!(ms >= 5, "remote ping {ms}ms is still tun-local");
+        // Sub-ms handshakes are clamped to 1 ms; that usually means a local/tun path, not WAN.
+        // Fast CI/datacenter links can legitimately measure 2–4 ms to 8.8.8.8.
+        assert!(ms > 1, "remote ping {ms}ms is still tun-local");
     }
 }
 

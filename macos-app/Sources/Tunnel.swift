@@ -1,12 +1,30 @@
 import Foundation
 import NetworkExtension
 
+struct TunnelStartOptions {
+    var configPath: String
+    var socksPort: Int
+    var mtu: Int
+    var includeLocal: Bool
+    var includeAll: Bool
+    var includeApns: Bool
+    var killSwitch: Bool
+    var combiner: Bool
+    var launchCore: Bool
+    var dns: String
+    var onDemand: Bool
+    var rules: String
+    var engine: String
+    var enforceRoutes: Bool
+}
+
 final class TunnelManager: NSObject {
     static let shared = TunnelManager()
     private var manager: NETunnelProviderManager?
     private(set) var usingSystem = false
+    private(set) var lastReloaded = false
 
-    func connect(configPath: String, socksPort: Int, mtu: Int, includeLocal: Bool, killSwitch: Bool, combiner: Bool, launchCore: Bool, dns: String, onDemand: Bool, rules: String, completion: @escaping (Bool) -> Void) {
+    func connect(_ options: TunnelStartOptions, completion: @escaping (Bool) -> Void) {
         NETunnelProviderManager.loadAllFromPreferences { [weak self] managers, error in
             if let error {
                 DevLog.error("tunnel", "preferences: \(error.localizedDescription)")
@@ -15,25 +33,7 @@ final class TunnelManager: NSObject {
             }
             guard let self else { completion(false); return }
             let manager = managers?.first ?? NETunnelProviderManager()
-            let proto = NETunnelProviderProtocol()
-            proto.providerBundleIdentifier = "local.v2open.desktop.PacketTunnel"
-            proto.serverAddress = "V2Open"
-            proto.providerConfiguration = [
-                "configPath": configPath,
-                "socksPort": socksPort,
-                "mtu": mtu,
-                "includeLocal": includeLocal,
-                "dns": dns,
-                "launchCore": launchCore
-            ]
-            proto.includeAllNetworks = killSwitch || combiner
-            proto.excludeLocalNetworks = !includeLocal
-            proto.enforceRoutes = killSwitch
-            manager.protocolConfiguration = proto
-            manager.localizedDescription = "V2Open"
-            manager.isEnabled = true
-            manager.onDemandRules = Self.demandRules(rules)
-            manager.isOnDemandEnabled = onDemand && !(manager.onDemandRules ?? []).isEmpty
+            self.apply(options, to: manager)
             manager.saveToPreferences { error in
                 if let error {
                     DevLog.error("tunnel", "save: \(error.localizedDescription)")
@@ -50,6 +50,7 @@ final class TunnelManager: NSObject {
                         try manager.connection.startVPNTunnel()
                         self.manager = manager
                         self.usingSystem = true
+                        self.lastReloaded = false
                         completion(true)
                     } catch {
                         DevLog.error("tunnel", "start: \(error.localizedDescription)")
@@ -61,9 +62,59 @@ final class TunnelManager: NSObject {
         }
     }
 
+    func reload(_ options: TunnelStartOptions, completion: @escaping (Bool) -> Void) {
+        guard usingSystem, let session = (manager?.connection as? NETunnelProviderSession) else {
+            connect(options, completion: completion)
+            return
+        }
+        let payload: [String: Any] = [
+            "op": "reload",
+            "path": options.configPath,
+            "socksPort": options.socksPort,
+            "mtu": options.mtu,
+            "includeLocal": options.includeLocal,
+            "dns": options.dns,
+            "launchCore": options.launchCore,
+            "engine": options.engine
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: payload) else {
+            connect(options, completion: completion)
+            return
+        }
+        do {
+            try session.sendProviderMessage(data) { [weak self] response in
+                let ok = Self.messageOK(response)
+                DispatchQueue.main.async {
+                    self?.lastReloaded = ok
+                    self?.usingSystem = ok || (self?.usingSystem ?? false)
+                    completion(ok)
+                }
+            }
+        } catch {
+            DevLog.error("tunnel", "reload: \(error.localizedDescription)")
+            connect(options, completion: completion)
+        }
+    }
+
     func disconnect() {
         manager?.connection.stopVPNTunnel()
         usingSystem = false
+        lastReloaded = false
+    }
+
+    func resetConfiguration(completion: @escaping (Bool) -> Void) {
+        NETunnelProviderManager.loadAllFromPreferences { managers, _ in
+            let group = DispatchGroup()
+            for item in managers ?? [] {
+                group.enter()
+                item.removeFromPreferences { _ in group.leave() }
+            }
+            group.notify(queue: .main) { [weak self] in
+                self?.manager = nil
+                self?.usingSystem = false
+                completion(true)
+            }
+        }
     }
 
     func armOnDemand(enabled: Bool, rules: String) {
@@ -85,7 +136,44 @@ final class TunnelManager: NSObject {
         }
     }
 
-    private static func demandRules(_ text: String) -> [NEOnDemandRule] {
+    private func apply(_ options: TunnelStartOptions, to manager: NETunnelProviderManager) {
+        let proto = NETunnelProviderProtocol()
+        proto.providerBundleIdentifier = "local.v2open.desktop.PacketTunnel"
+        proto.serverAddress = "V2Open"
+        proto.providerConfiguration = [
+            "configPath": options.configPath,
+            "socksPort": options.socksPort,
+            "mtu": options.mtu,
+            "includeLocal": options.includeLocal,
+            "dns": options.dns,
+            "launchCore": options.launchCore,
+            "engine": options.engine
+        ]
+        proto.includeAllNetworks = options.killSwitch || options.combiner || options.includeAll
+        proto.excludeLocalNetworks = !options.includeLocal
+        proto.enforceRoutes = options.killSwitch || options.enforceRoutes
+        applyIncludeAPNs(proto, enabled: options.includeApns)
+        manager.protocolConfiguration = proto
+        manager.localizedDescription = "V2Open"
+        manager.isEnabled = true
+        manager.onDemandRules = Self.demandRules(options.rules)
+        manager.isOnDemandEnabled = options.onDemand && !(manager.onDemandRules ?? []).isEmpty
+    }
+
+    private func applyIncludeAPNs(_ proto: NETunnelProviderProtocol, enabled: Bool) {
+        let setter = NSSelectorFromString("setExcludeAPNs:")
+        if proto.responds(to: setter) {
+            proto.perform(setter, with: NSNumber(value: !enabled))
+        }
+    }
+
+    private static func messageOK(_ data: Data?) -> Bool {
+        guard let data,
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return false }
+        return obj["ok"] as? Bool == true
+    }
+
+    static func demandRules(_ text: String) -> [NEOnDemandRule] {
         var rules: [NEOnDemandRule] = []
         for line in text.split(separator: "\n") {
             let parts = line.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
@@ -97,17 +185,23 @@ final class TunnelManager: NSObject {
             case "cellular": continue
             default: interface = .any
             }
-            if parts[2].lowercased() == "disconnect" {
-                let rule = NEOnDemandRuleDisconnect()
-                rule.interfaceTypeMatch = interface
-                if parts[1] != "*" && !parts[1].isEmpty { rule.ssidMatch = [parts[1]] }
-                rules.append(rule)
-            } else {
-                let rule = NEOnDemandRuleConnect()
-                rule.interfaceTypeMatch = interface
-                if parts[1] != "*" && !parts[1].isEmpty { rule.ssidMatch = [parts[1]] }
-                rules.append(rule)
+            let ssids = parts[1]
+                .split(separator: "|")
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty && $0 != "*" }
+            let action = parts[2].lowercased()
+            let rule: NEOnDemandRule
+            switch action {
+            case "disconnect":
+                rule = NEOnDemandRuleDisconnect()
+            case "ignore":
+                rule = NEOnDemandRuleIgnore()
+            default:
+                rule = NEOnDemandRuleConnect()
             }
+            rule.interfaceTypeMatch = interface
+            if !ssids.isEmpty { rule.ssidMatch = ssids }
+            rules.append(rule)
         }
         if rules.isEmpty {
             let connect = NEOnDemandRuleConnect()

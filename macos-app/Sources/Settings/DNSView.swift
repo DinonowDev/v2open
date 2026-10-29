@@ -58,6 +58,14 @@ struct DNSView: View {
                         SettingsToggleRow(title: model.t("dnsCache"), isOn: model.settings["dns_cache"] as? Bool ?? true) {
                             model.set("dns_cache", $0)
                         }
+                        SettingsDivider(inset: 58)
+                        SettingsToggleRow(title: model.t("dnsDisableFallback"), isOn: model.settings["dns_disable_fallback"] as? Bool ?? false) {
+                            model.set("dns_disable_fallback", $0)
+                        }
+                        SettingsDivider(inset: 58)
+                        SettingsToggleRow(title: model.t("dnsDisableFallbackIfMatch"), isOn: model.settings["dns_disable_fallback_if_match"] as? Bool ?? false) {
+                            model.set("dns_disable_fallback_if_match", $0)
+                        }
                     }
                     SettingsSectionLabel(text: model.t("hostsSection"))
                     SettingsCard {

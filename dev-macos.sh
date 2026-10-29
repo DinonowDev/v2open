@@ -93,7 +93,15 @@ scaffold_app() {
   mark_dev_bundle
   cp "$ROOT/assets/fonts/"*.ttf "$APP/Contents/Resources/Fonts/"
   sync_speedometer
+  sync_locales
   sync_cores
+}
+
+sync_locales() {
+  mkdir -p "$APP/Contents/Resources/Locales"
+  if [[ -d "$ROOT/macos-app/Resources/Locales" ]]; then
+    cp "$ROOT/macos-app/Resources/Locales/"*.json "$APP/Contents/Resources/Locales/" 2>/dev/null || true
+  fi
 }
 
 sync_speedometer() {
@@ -145,6 +153,7 @@ build_dev_app() {
   mark_dev_bundle
   sync_cores
   sync_speedometer
+  sync_locales
   rm -f "$APP/Contents/MacOS/geoip.dat" "$APP/Contents/MacOS/geosite.dat"
   SWIFT_SOURCES=()
   while IFS= read -r swift_file; do
@@ -157,6 +166,7 @@ EOF
     -L "$LIB" -lv2core \
     -framework SwiftUI -framework AppKit -framework AVFoundation -framework Vision -framework CoreText \
     -framework Security -framework CoreFoundation -framework SystemConfiguration -framework NetworkExtension -framework CloudKit -framework WebKit \
+    -framework CoreWLAN -framework CoreLocation -framework CoreImage \
     -lc++ -liconv
   codesign --force --sign - "$EXE"
   codesign --force --sign - "$APP"

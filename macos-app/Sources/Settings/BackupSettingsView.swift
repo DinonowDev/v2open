@@ -8,6 +8,11 @@ struct BackupSettingsView: View {
     @State private var renameText = ""
     @State private var packagePassword = ""
     @State private var allowForeign = false
+    @State private var shareNote = ""
+    @State private var allowedIds = ""
+    @State private var expiresAt = ""
+    @State private var cloudName = ""
+    @State private var cloudItems: [CloudBackupItem] = []
 
     var body: some View {
         sub(model.t("backup")) {
@@ -17,6 +22,12 @@ struct BackupSettingsView: View {
                         V2Field(label: model.t("filePassword"), placeholder: "••••••••", text: $packagePassword, latin: true, secure: true, icon: "key.fill")
                             .padding(14)
                         Mix(text: model.t("v2boxPasswordHint"), size: 11, color: C.muted)
+                            .padding(.horizontal, 14)
+                        V2Field(label: model.t("shareNote"), placeholder: "", text: $shareNote, icon: "text.quote")
+                            .padding(.horizontal, 14)
+                        V2Field(label: model.t("allowedIds"), placeholder: "id1,id2", text: $allowedIds, latin: true, icon: "person.crop.circle")
+                            .padding(.horizontal, 14)
+                        V2Field(label: model.t("expiresAt"), placeholder: "unix", text: $expiresAt, latin: true, icon: "calendar")
                             .padding(.horizontal, 14)
                         SettingsToggleRow(title: model.t("allowForeignDevice"), isOn: allowForeign) { allowForeign = $0 }
                             .padding(.bottom, 6)
@@ -54,6 +65,47 @@ struct BackupSettingsView: View {
                             }
                         }
                     }
+                    SettingsSectionLabel(text: model.t("icloud"))
+                    SettingsCard {
+                        V2Field(label: model.t("cloudNamed"), placeholder: "mac-home", text: $cloudName, icon: "icloud")
+                            .padding(14)
+                        SheetActionButton(title: model.t("backupNow"), primary: true, icon: "icloud.and.arrow.up") {
+                            let name = cloudName.isEmpty ? Date().description : cloudName
+                            CloudSync.shared.saveNamed(name: name) { ok in
+                                model.showToast(ok ? model.t("saved") : model.t("failed"), tone: ok ? .success : .error)
+                                reloadCloud()
+                            }
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.bottom, 8)
+                        Mix(text: model.t("autoIcloud"), size: 11, color: C.muted)
+                            .padding(.horizontal, 14)
+                            .padding(.bottom, 12)
+                    }
+                    if !cloudItems.isEmpty {
+                        SettingsCard {
+                            ForEach(Array(cloudItems.enumerated()), id: \.offset) { index, item in
+                                if index > 0 { SettingsDivider() }
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Mix(text: item.name, size: 15, weight: .semibold)
+                                    Mix(text: item.created.formatted(), size: 11, color: C.muted)
+                                    HStack {
+                                        SettingsChipButton(title: model.t("restore")) {
+                                            CloudSync.shared.restoreNamed(id: item.id) { ok in
+                                                model.refresh()
+                                                model.showToast(ok ? model.t("imported") : model.t("failed"), tone: ok ? .success : .error)
+                                            }
+                                        }
+                                        SettingsChipButton(title: model.t("deleteBackup")) {
+                                            CloudSync.shared.deleteNamed(id: item.id) { _ in reloadCloud() }
+                                        }
+                                    }
+                                }
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 10)
+                            }
+                        }
+                    }
                     if !renameId.isEmpty {
                         SettingsCard {
                             V2Field(label: model.t("renameBackup"), placeholder: "", text: $renameText, icon: "pencil")
@@ -73,7 +125,12 @@ struct BackupSettingsView: View {
                 .padding(.bottom, PageLayout.bottom + PageLayout.tabBarClearance)
             }
             .scrollIndicators(.hidden)
+            .onAppear { reloadCloud() }
         }
+    }
+
+    func reloadCloud() {
+        CloudSync.shared.listNamed { cloudItems = $0 }
     }
 
     func backupRow(_ item: [String: Any]) -> some View {
@@ -120,7 +177,9 @@ struct BackupSettingsView: View {
         panel.nameFieldStringValue = "V2Open.v2box"
         panel.allowedContentTypes = [UTType(filenameExtension: "v2box") ?? .data]
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        let response = model.call("export_package", ["path": url.path, "password": packagePassword])
+        var args: [String: Any] = ["path": url.path, "password": packagePassword, "note": shareNote, "allowed_ids": allowedIds]
+        if let n = UInt64(expiresAt.trimmingCharacters(in: .whitespaces)) { args["expires_at"] = n }
+        let response = model.call("export_package", args)
         model.showToast(response["ok"] as? Bool == false ? (response["error"] as? String ?? model.t("failed")) : model.t("saved"), tone: response["ok"] as? Bool == false ? .error : .success)
     }
 

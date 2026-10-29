@@ -15,8 +15,8 @@ struct SettingsView: View {
                         SettingsSelectRow(
                             title: model.t("language"),
                             icon: "globe",
-                            value: model.fa ? "fa" : "en",
-                            options: [("en", "English"), ("fa", "فارسی")]
+                            value: model.language,
+                            options: LocaleStore.options
                         ) { model.set("language", $0) }
                         SettingsDivider()
                         SettingsSelectRow(
@@ -42,9 +42,26 @@ struct SettingsView: View {
                         SettingsSelectRow(
                             title: model.t("theme"),
                             icon: "circle.lefthalf.filled",
-                            value: model.themeLight ? "light" : "dark",
-                            options: [("dark", model.t("themeDark")), ("light", model.t("themeLight"))]
+                            value: model.settings["theme"] as? String ?? "dark",
+                            options: [
+                                ("dark", model.t("themeDark")),
+                                ("light", model.t("themeLight")),
+                                ("system", model.t("themeSystem"))
+                            ]
                         ) { model.set("theme", $0) }
+                        SettingsDivider()
+                        SettingsToggleRow(title: model.t("glassy"), isOn: model.settings["glassy"] as? Bool ?? false) { model.set("glassy", $0) }
+                        SettingsDivider()
+                        SettingsSelectRow(
+                            title: model.t("connectButtonSize"),
+                            icon: "circle",
+                            value: model.settings["connect_button_size"] as? String ?? "medium",
+                            options: [
+                                ("small", model.t("sizeSmall")),
+                                ("medium", model.t("sizeMedium")),
+                                ("large", model.t("sizeLarge"))
+                            ]
+                        ) { model.set("connect_button_size", $0) }
                     }
                     SettingsCard {
                         SettingsToggleRow(title: model.t("insecure"), isOn: model.settings["allow_insecure"] as? Bool ?? false) { model.set("allow_insecure", $0) }
@@ -53,7 +70,14 @@ struct SettingsView: View {
                         SettingsDivider()
                         SettingsToggleRow(title: model.t("sleep"), hint: model.t("sleepSub"), isOn: model.settings["stop_on_sleep"] as? Bool ?? true) { model.set("stop_on_sleep", $0) }
                         SettingsDivider()
-                        SettingsToggleRow(title: model.t("persistTunnel"), isOn: model.settings["persist_tunnel"] as? Bool ?? false) { model.set("persist_tunnel", $0) }
+                        SettingsToggleRow(title: model.t("persistReload"), hint: model.t("persistReloadHint"), isOn: model.settings["persist_tunnel"] as? Bool ?? false) { model.set("persist_tunnel", $0) }
+                        SettingsDivider()
+                        SettingsToggleRow(title: model.t("reconnectWake"), hint: model.t("reconnectWakeHint"), isOn: model.settings["reconnect_after_wake"] as? Bool ?? false) { model.set("reconnect_after_wake", $0) }
+                        SettingsDivider()
+                        SettingsNavRow(icon: "number.square", title: model.t("deviceId"), value: String((model.settings["hwid"] as? String ?? "").prefix(10)), chevron: false) {
+                            ShareKit.copy(model.settings["hwid"] as? String ?? "")
+                            model.showToast(model.t("saved"), tone: .success)
+                        }
                         SettingsDivider()
                         SettingsToggleRow(title: "Mux", isOn: model.settings["mux_enabled"] as? Bool ?? false) { model.set("mux_enabled", $0) }
                         if model.settings["mux_enabled"] as? Bool == true {

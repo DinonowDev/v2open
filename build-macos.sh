@@ -9,11 +9,14 @@ cargo build --release -p v2core
 LIB="$ROOT/native/target/release"
 APP="$ROOT/V2Open.app"
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/Fonts" "$APP/Contents/Resources/rulesets"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/Fonts" "$APP/Contents/Resources/rulesets" "$APP/Contents/Resources/Locales"
 cp "$ROOT/macos-app/Info.plist" "$APP/Contents/Info.plist"
 cp "$ROOT/assets/fonts/"*.ttf "$APP/Contents/Resources/Fonts/"
 mkdir -p "$APP/Contents/Resources/speedometer"
 cp "$ROOT/macos-app/Resources/speedometer/"* "$APP/Contents/Resources/speedometer/"
+if [[ -d "$ROOT/macos-app/Resources/Locales" ]]; then
+  cp "$ROOT/macos-app/Resources/Locales/"*.json "$APP/Contents/Resources/Locales/" 2>/dev/null || true
+fi
 for tool in sing-box masterdns dnstt-client pingtunnel xray; do
   cp "$ROOT/binaries/macos/$tool" "$APP/Contents/MacOS/$tool"
   chmod +x "$APP/Contents/MacOS/$tool"
@@ -43,6 +46,7 @@ swiftc -parse-as-library -O -target "$SWIFT_TARGET" -o "$APP/Contents/MacOS/V2Op
   -L "$LIB" -lv2core \
   -framework SwiftUI -framework AppKit -framework AVFoundation -framework Vision -framework CoreText \
   -framework Security -framework CoreFoundation -framework SystemConfiguration -framework NetworkExtension -framework CloudKit -framework WebKit \
+  -framework CoreWLAN -framework CoreLocation -framework CoreImage \
   -lc++ -liconv
 # Same constraint as the extension: V2Open.entitlements is for a real
 # developer signature. Ad-hoc signing keeps the app launchable and the

@@ -303,6 +303,7 @@ struct SettingsSectionLabel: View {
 }
 
 struct SettingsCard<Content: View>: View {
+    @Environment(\.glassy) private var glassy
     var content: Content
 
     init(@ViewBuilder content: () -> Content) {
@@ -315,7 +316,11 @@ struct SettingsCard<Content: View>: View {
             .background {
                 ZStack {
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(C.cardElevated)
+                        .fill(glassy ? Color.clear : C.cardElevated)
+                    if glassy {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(.ultraThinMaterial)
+                    }
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
                         .fill(
                             LinearGradient(

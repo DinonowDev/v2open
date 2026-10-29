@@ -7,6 +7,9 @@ struct ConfigsView: View {
     @State var lockedImportB64: String?
     @State var filePassword = ""
     @State var collapsedGroups: Set<String> = []
+    @State var shareProfile: [String: Any]?
+    @State var shareGroupId = ""
+    @State var qrProfile: [String: Any]?
 
     var body: some View {
         let groups = filteredGroups()
@@ -79,6 +82,12 @@ struct ConfigsView: View {
             if addStep == .menu { addMenuOverlay }
             if addStep == .scan { addScanOverlay }
             if lockedImportB64 != nil { filePasswordOverlay }
+            if let profile = shareProfile {
+                ProfileShareSheet(profile: profile, groupId: shareGroupId) { shareProfile = nil }
+            }
+            if let profile = qrProfile {
+                ProfileQRSheet(profile: profile) { qrProfile = nil }
+            }
         }
         .animation(.spring(response: 0.34, dampingFraction: 0.88), value: addStep)
         .animation(.spring(response: 0.34, dampingFraction: 0.88), value: lockedImportB64 != nil)

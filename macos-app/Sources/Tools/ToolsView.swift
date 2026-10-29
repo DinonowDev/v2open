@@ -153,6 +153,28 @@ struct OnDemandRulesEditor: View {
                         Spacer()
                         Button {
                             var next = rows
+                            if index > 0 {
+                                next.swapAt(index, index - 1)
+                                text = next.joined(separator: "\n")
+                            }
+                        } label: {
+                            Image(systemName: "arrow.up")
+                                .foregroundStyle(C.muted)
+                        }
+                        .buttonStyle(.plain)
+                        Button {
+                            var next = rows
+                            if index + 1 < next.count {
+                                next.swapAt(index, index + 1)
+                                text = next.joined(separator: "\n")
+                            }
+                        } label: {
+                            Image(systemName: "arrow.down")
+                                .foregroundStyle(C.muted)
+                        }
+                        .buttonStyle(.plain)
+                        Button {
+                            var next = rows
                             next.remove(at: index)
                             text = next.joined(separator: "\n")
                         } label: {
@@ -166,10 +188,13 @@ struct OnDemandRulesEditor: View {
                 }
             }
             SettingsDivider()
-            SettingsSelectRow(title: model.t("demandInterface"), icon: "wifi", value: iface, options: [("wifi", "Wi-Fi"), ("ethernet", "Ethernet"), ("any", "Any")]) { iface = $0 }
-            V2Field(label: model.t("demandSsid"), placeholder: "*", text: $ssid, latin: true, icon: "tag")
+            SettingsSelectRow(title: model.t("demandInterface"), icon: "wifi", value: iface, options: [("wifi", "Wi-Fi"), ("ethernet", "Ethernet"), ("cellular", model.t("cellularMacHint")), ("any", "Any")]) { iface = $0 }
+            V2Field(label: model.t("demandSsid"), placeholder: "home|office|*", text: $ssid, latin: true, icon: "tag")
                 .padding(.horizontal, 14)
-            SettingsSelectRow(title: model.t("demandAction"), icon: "bolt", value: action, options: [("connect", model.t("connect")), ("disconnect", model.t("disconnect"))]) { action = $0 }
+            Mix(text: model.t("demandSsidHint"), size: 11, color: C.muted)
+                .padding(.horizontal, 14)
+                .padding(.bottom, 6)
+            SettingsSelectRow(title: model.t("demandAction"), icon: "bolt", value: action, options: [("connect", model.t("connect")), ("disconnect", model.t("disconnect")), ("ignore", model.t("demandIgnore"))]) { action = $0 }
             SheetActionButton(title: model.t("addOnDemand"), icon: "plus") {
                 let line = "\(iface),\(ssid.isEmpty ? "*" : ssid),\(action)"
                 var next = rows

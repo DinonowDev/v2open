@@ -22,6 +22,11 @@ extension ConfigsView {
                     VStack(alignment: .leading, spacing: 3) {
                         HStack(spacing: 8) {
                             Mix(text: name, size: 15, weight: .bold)
+                            if group["pinned"] as? Bool == true {
+                                Image(systemName: "pin.fill")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(C.cyan)
+                            }
                             Text("\(profiles.count)")
                                 .font(.custom("Inter", size: 11).weight(.bold))
                                 .foregroundStyle(C.cyan)
@@ -64,10 +69,24 @@ extension ConfigsView {
                 ConfigRowIconButton(systemName: "dot.radiowaves.left.and.right", label: model.t("pingAll")) {
                     runPing(profileIds: profileIds(in: group), args: pingArgs(groupId: gid))
                 }
+                ConfigRowIconButton(systemName: group["pinned"] as? Bool == true ? "pin.slash" : "pin", label: model.t("pinGroup")) {
+                    _ = model.call("pin_group", ["id": gid, "pinned": !(group["pinned"] as? Bool == true)])
+                    model.refresh()
+                }
+                ConfigRowIconButton(systemName: "square.and.arrow.up", label: model.t("exportGroup")) {
+                    exportGroup(gid: gid, name: name)
+                }
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 12)
             .padding(.bottom, 8)
+            .contextMenu {
+                Button(group["pinned"] as? Bool == true ? model.t("unpinGroup") : model.t("pinGroup")) {
+                    _ = model.call("pin_group", ["id": gid, "pinned": !(group["pinned"] as? Bool == true)])
+                    model.refresh()
+                }
+                Button(model.t("exportGroup")) { exportGroup(gid: gid, name: name) }
+            }
 
             if expanded {
                 Rectangle().fill(C.line).frame(height: 1)
@@ -78,13 +97,19 @@ extension ConfigsView {
                         .padding(.vertical, 12)
                 } else {
                     ForEach(profiles.indices, id: \.self) { i in
-                        profileRow(profiles[i], last: i == profiles.count - 1)
+                        profileRow(profiles[i], groupId: gid, last: i == profiles.count - 1)
                     }
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(C.card)
+        .background {
+            if model.glassy {
+                RoundedRectangle(cornerRadius: 16, style: .continuous).fill(.ultraThinMaterial)
+            } else {
+                RoundedRectangle(cornerRadius: 16, style: .continuous).fill(C.card)
+            }
+        }
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(C.line, lineWidth: 1))
     }
@@ -94,7 +119,7 @@ extension ConfigsView {
         else { collapsedGroups.insert(id) }
     }
 
-    func profileRow(_ profile: [String: Any], last: Bool) -> some View {
+    func profileRow(_ profile: [String: Any], groupId: String, last: Bool) -> some View {
         let proto = ((profile["protocol"] as? String) ?? "").uppercased()
         let ping = jsonInt(profile["ping"])
         let down = jsonInt(profile["download_bps"])
@@ -130,6 +155,10 @@ extension ConfigsView {
                                 color: C.muted
                             )
                             .lineLimit(1)
+                            if let created = createdLabel(profile) {
+                                Mix(text: created, size: 10, color: C.muted.opacity(0.8))
+                                    .lineLimit(1)
+                            }
                             if down > 0 || up > 0 {
                                 Mix(text: "↓ \(formatBps(down))  ↑ \(formatBps(up))", size: 10, color: C.muted.opacity(0.85))
                                     .lineLimit(1)
@@ -169,20 +198,7 @@ extension ConfigsView {
                     .disabled(model.pingingIds.contains(pid))
 
                     ConfigRowMoreMenu {
-                        Button(model.fa ? "کپی لینک" : "Copy link") {
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString((profile["link"] as? String) ?? "", forType: .string)
-                        }
-                        Button(model.fa ? "ویرایش" : "Edit") {
-                            model.draft = (profile["data"] as? [String: Any]) ?? profile
-                            model.draft["id"] = profile["id"] as Any
-                            model.push("editor")
-                        }
-                        Divider()
-                        Button(model.fa ? "حذف" : "Delete", role: .destructive) {
-                            _ = model.call("delete", ["id": pid])
-                            model.refresh()
-                        }
+                        profileMenu(profile, groupId: groupId)
                     }
                 }
                 .padding(.leading, 8)
@@ -210,21 +226,62 @@ extension ConfigsView {
             }
         }
         .contextMenu {
-            Button(model.t("ping")) { runPing(profileIds: [pid], args: pingArgs(profileId: pid)) }
-            Button(model.fa ? "کپی لینک" : "Copy link") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString((profile["link"] as? String) ?? "", forType: .string)
-            }
-            Button(model.fa ? "ویرایش" : "Edit") {
-                model.draft = (profile["data"] as? [String: Any]) ?? profile
-                model.draft["id"] = profile["id"] as Any
-                model.push("editor")
-            }
-            Divider()
-            Button(model.fa ? "حذف" : "Delete", role: .destructive) {
-                _ = model.call("delete", ["id": pid])
-                model.refresh()
-            }
+            profileMenu(profile, groupId: groupId)
         }
+    }
+
+    @ViewBuilder
+    func profileMenu(_ profile: [String: Any], groupId: String) -> some View {
+        let pid = profile["id"] as? String ?? ""
+        Button(model.t("ping")) { runPing(profileIds: [pid], args: pingArgs(profileId: pid)) }
+        Button(model.t("copyLink")) {
+            ShareKit.copy(profile["link"] as? String ?? "")
+        }
+        Button(model.t("copyJsonXray")) { copyProfileJSON(pid, key: "xray") }
+        Button(model.t("copyJsonSing")) { copyProfileJSON(pid, key: "singbox") }
+        Button(model.t("showQr")) { qrProfile = profile }
+        Button(model.t("copyQr")) { ShareKit.copyQR(profile["link"] as? String ?? "") }
+        Button(model.t("share")) {
+            shareGroupId = groupId
+            shareProfile = profile
+        }
+        Button(model.t("lockShare")) {
+            shareGroupId = groupId
+            shareProfile = profile
+        }
+        Button(model.t("edit")) {
+            model.draft = (profile["data"] as? [String: Any]) ?? profile
+            model.draft["id"] = profile["id"] as Any
+            model.push("editor")
+        }
+        Divider()
+        Button(model.t("delete"), role: .destructive) {
+            _ = model.call("delete", ["id": pid])
+            model.refresh()
+        }
+    }
+
+    func copyProfileJSON(_ id: String, key: String) {
+        let data = model.call("profile_json", ["id": id])["data"] as? [String: Any] ?? [:]
+        ShareKit.copy(data[key] as? String ?? "")
+        model.showToast(model.t("saved"), tone: .success)
+    }
+
+    func createdLabel(_ profile: [String: Any]) -> String? {
+        let raw = jsonInt(profile["created_at"])
+        guard raw > 0 else { return nil }
+        let date = Date(timeIntervalSince1970: TimeInterval(raw))
+        let fmt = DateFormatter()
+        fmt.dateStyle = .short
+        fmt.timeStyle = .short
+        return "\(model.t("createdAt")) · \(fmt.string(from: date))"
+    }
+
+    func exportGroup(gid: String, name: String) {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "\(name).txt"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let response = model.call("export_group", ["id": gid, "path": url.path])
+        model.showToast(response["ok"] as? Bool == false ? (response["error"] as? String ?? model.t("failed")) : model.t("saved"), tone: response["ok"] as? Bool == false ? .error : .success)
     }
 }

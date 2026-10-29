@@ -16,8 +16,19 @@ final class Model: ObservableObject {
     private let tickActivity = TickActivity()
     private static let autoPingInterval: TimeInterval = 60
 
-    var fa: Bool { (settings["language"] as? String) != "en" }
-    var themeLight: Bool { (settings["theme"] as? String) == "light" }
+    @Published var systemLight = false
+
+    var language: String { settings["language"] as? String ?? "en" }
+    var fa: Bool { language == "fa" }
+    var rtl: Bool { language == "fa" || language == "ar" }
+    var themeLight: Bool {
+        switch settings["theme"] as? String ?? "dark" {
+        case "light": return true
+        case "system": return systemLight
+        default: return false
+        }
+    }
+    var glassy: Bool { settings["glassy"] as? Bool == true }
     var settings: [String: Any] { state["settings"] as? [String: Any] ?? [:] }
     var groups: [[String: Any]] { state["groups"] as? [[String: Any]] ?? [] }
     var routes: [[String: Any]] { state["routes"] as? [[String: Any]] ?? [] }
@@ -26,8 +37,7 @@ final class Model: ObservableObject {
     var runtime: [String: Any] { state["runtime"] as? [String: Any] ?? [:] }
 
     func t(_ key: String) -> String {
-        let table = fa ? faText : enText
-        return table[key] ?? enText[key] ?? key
+        LocaleStore.string(key, language: language)
     }
 
     func showToast(_ text: String, tone: ToastTone = .info) {
@@ -57,6 +67,12 @@ final class Model: ObservableObject {
         }
         if code != 0 { DevLog.error("boot", "init failed: \(code)") }
         UILock.acquire()
+        systemLight = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .aqua
+        DistributedNotificationCenter.default().addObserver(forName: Notification.Name("AppleInterfaceThemeChangedNotification"), object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                self?.systemLight = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .aqua
+            }
+        }
         refresh()
         refreshAbout()
         syncBackgroundScheduler()
@@ -158,7 +174,7 @@ final class Model: ObservableObject {
     func set(_ key: String, _ value: Any) {
         _ = call("set", ["key": key, "value": value])
         refresh()
-        if ["geo_auto_update", "on_demand", "persist_tunnel", "on_demand_text"].contains(key) {
+        if ["geo_auto_update", "on_demand", "persist_tunnel", "reconnect_after_wake", "on_demand_text"].contains(key) {
             syncBackgroundScheduler()
             armSystemOnDemand()
         }
@@ -172,7 +188,7 @@ final class Model: ObservableObject {
         BackgroundScheduler.installIfNeeded(
             geoAuto: settings["geo_auto_update"] as? Bool == true,
             onDemand: settings["on_demand"] as? Bool == true,
-            persist: settings["persist_tunnel"] as? Bool == true
+            persist: (settings["persist_tunnel"] as? Bool == true) || (settings["reconnect_after_wake"] as? Bool == true)
         )
     }
 
@@ -187,7 +203,7 @@ final class Model: ObservableObject {
     func handleOpenURL(_ url: URL) {
         if url.isFileURL {
             guard let data = try? Data(contentsOf: url) else { return }
-            if data.starts(with: [0x56, 0x32, 0x4F, 0x50, 0x45, 0x4E, 0x31]) {
+            if data.starts(with: [0x56, 0x32, 0x4F, 0x50, 0x45, 0x4E, 0x31]) || data.starts(with: [0x50, 0x4B]) || url.pathExtension.lowercased() == "v2box" {
                 showToast(t("filePassword"), tone: .warning)
                 push("backup_settings")
                 return
@@ -288,7 +304,8 @@ final class Model: ObservableObject {
             return
         }
 
-        var args: [String: Any] = ["id": id, "smart": smart]
+        let persist = settings["persist_tunnel"] as? Bool == true
+        var args: [String: Any] = ["id": id, "smart": smart, "keep_alive": persist && TunnelManager.shared.usingSystem]
         if !groupId.isEmpty { args["group_id"] = groupId }
         let prepared = call("prepare", args)
         let data = prepared["data"] as? [String: Any] ?? [:]
@@ -300,22 +317,32 @@ final class Model: ObservableObject {
             startCoreConnect(id: id, smart: smart, groupId: groupId)
             return
         }
-        let tunnel = TunnelManager.shared
-        tunnel.connect(
+        let options = TunnelStartOptions(
             configPath: path,
             socksPort: data["socks_port"] as? Int ?? 10808,
             mtu: data["mtu"] as? Int ?? 1500,
             includeLocal: data["include_local"] as? Bool ?? false,
+            includeAll: data["include_all_networks"] as? Bool ?? false,
+            includeApns: data["include_apns"] as? Bool ?? false,
             killSwitch: data["kill_switch"] as? Bool ?? false,
             combiner: data["combiner"] as? Bool ?? false,
             launchCore: data["launch_core"] as? Bool ?? true,
             dns: data["dns"] as? String ?? "1.1.1.1",
             onDemand: data["on_demand"] as? Bool ?? false,
-            rules: data["on_demand_text"] as? String ?? ""
-        ) { [weak self] system in
+            rules: data["on_demand_text"] as? String ?? "",
+            engine: data["engine"] as? String ?? "sing-box",
+            enforceRoutes: settings["enforce_routes"] as? Bool ?? false
+        )
+        let tunnel = TunnelManager.shared
+        let finish: (Bool) -> Void = { [weak self] system in
             Task { @MainActor in
                 self?.finishTunnelConnect(id: id, smart: smart, groupId: groupId, system: system)
             }
+        }
+        if persist && tunnel.usingSystem {
+            tunnel.reload(options, completion: finish)
+        } else {
+            tunnel.connect(options, completion: finish)
         }
     }
 
@@ -345,7 +372,9 @@ final class Model: ObservableObject {
         if system {
             _ = call("mark_connected", ["id": id])
             refresh()
-            if runtime["connected"] as? Bool == true {
+            if TunnelManager.shared.lastReloaded {
+                showToast(t("coreReloaded"), tone: .success)
+            } else if runtime["connected"] as? Bool == true {
                 showToast(t("connected"), tone: .success)
             }
         } else {

@@ -90,6 +90,14 @@ pub fn physical_iface() -> Option<String> {
     fallback
 }
 
+pub fn iface_names() -> Vec<String> {
+    let text = command(&["ifconfig", "-l"]);
+    text.split_whitespace()
+        .map(|s| s.to_string())
+        .filter(|s| !is_tunnel_iface(s) && s != "lo0")
+        .collect()
+}
+
 fn dummy_vpn_ip(ip: &str) -> bool {
     ip.starts_with("127.")
         || ip.starts_with("169.254.")

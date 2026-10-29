@@ -28,10 +28,18 @@ private struct ThemeLightKey: EnvironmentKey {
     static let defaultValue = false
 }
 
+private struct GlassyKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
 extension EnvironmentValues {
     var themeLight: Bool {
         get { self[ThemeLightKey.self] }
         set { self[ThemeLightKey.self] = newValue }
+    }
+    var glassy: Bool {
+        get { self[GlassyKey.self] }
+        set { self[GlassyKey.self] = newValue }
     }
 }
 

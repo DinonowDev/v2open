@@ -278,7 +278,11 @@ struct PowerConnectButton: View {
     private var diameter: CGFloat {
         if dock { return 34 }
         if compact { return 58 }
-        return 108
+        switch model.settings["connect_button_size"] as? String ?? "medium" {
+        case "small": return 86
+        case "large": return 132
+        default: return 108
+        }
     }
     private var iconSize: CGFloat {
         if dock { return 14 }

@@ -54,9 +54,10 @@ struct RootView: View {
         .frame(width: AppFrame.width, height: AppFrame.height)
         .scrollIndicators(.hidden)
         .clipped()
-        .environment(\.layoutDirection, model.fa ? .rightToLeft : .leftToRight)
+        .environment(\.layoutDirection, model.rtl ? .rightToLeft : .leftToRight)
         .environment(\.themeLight, light)
-        .preferredColorScheme(light ? .light : .dark)
+        .environment(\.glassy, model.glassy)
+        .preferredColorScheme(model.settings["theme"] as? String == "system" ? nil : (light ? .light : .dark))
         .overlay(alignment: .bottom) {
             TabStrip()
         }

@@ -15,35 +15,37 @@ enum PacketTunnelMain {
 final class PacketTunnelProvider: NEPacketTunnelProvider {
     private var core: Process?
     private var bridge: PacketBridge?
+    private var lastMTU = 0
+    private var lastDNS = ""
+    private var lastIncludeLocal = false
+    private var lastPath = ""
+    private var lastEngine = "sing-box"
+    private var lastSocks = 10808
+    private var lastLaunch = true
 
     override func startTunnel(options: [String: NSObject]?, completionHandler: @escaping (Error?) -> Void) {
         let config = (protocolConfiguration as? NETunnelProviderProtocol)?.providerConfiguration ?? [:]
-        let path = config["configPath"] as? String ?? ""
-        let socks = (config["socksPort"] as? Int) ?? 10808
-        let mtu = (config["mtu"] as? Int) ?? 1500
-        let includeLocal = (config["includeLocal"] as? Bool) ?? false
-        let dns = config["dns"] as? String ?? "1.1.1.1"
-        guard !path.isEmpty, FileManager.default.fileExists(atPath: path) else {
+        apply(config: config)
+        guard !lastPath.isEmpty, FileManager.default.fileExists(atPath: lastPath) else {
             completionHandler(NSError(domain: "V2Open", code: 1, userInfo: [NSLocalizedDescriptionKey: "tunnel config is missing"]))
             return
         }
-        let launch = (config["launchCore"] as? Bool) ?? true
-        if launch {
+        if lastLaunch {
             do {
-                try launchCore(configPath: path)
+                try launchCore(configPath: lastPath, engine: lastEngine)
             } catch {
                 completionHandler(error)
                 return
             }
         }
-        let settings = Self.networkSettings(mtu: mtu, includeLocal: includeLocal, dns: dns)
+        let settings = Self.networkSettings(mtu: lastMTU, includeLocal: lastIncludeLocal, dns: lastDNS)
         setTunnelNetworkSettings(settings) { [weak self] error in
             if let error {
                 self?.stopCore()
                 completionHandler(error)
                 return
             }
-            let bridge = PacketBridge(socksPort: UInt16(socks))
+            let bridge = PacketBridge(socksPort: UInt16(self?.lastSocks ?? 10808))
             bridge.start(flow: self?.packetFlow)
             self?.bridge = bridge
             completionHandler(nil)
@@ -57,11 +59,76 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         completionHandler()
     }
 
-    private func launchCore(configPath: String) throws {
+    override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)?) {
+        guard let obj = try? JSONSerialization.jsonObject(with: messageData) as? [String: Any] else {
+            completionHandler?(Self.reply(ok: false))
+            return
+        }
+        let op = obj["op"] as? String ?? ""
+        if op == "status" {
+            completionHandler?(Self.reply(ok: true, extra: ["alive": core?.isRunning == true, "path": lastPath]))
+            return
+        }
+        guard op == "reload" else {
+            completionHandler?(Self.reply(ok: false))
+            return
+        }
+        let path = obj["path"] as? String ?? lastPath
+        let engine = obj["engine"] as? String ?? lastEngine
+        let socks = obj["socksPort"] as? Int ?? lastSocks
+        let mtu = obj["mtu"] as? Int ?? lastMTU
+        let includeLocal = obj["includeLocal"] as? Bool ?? lastIncludeLocal
+        let dns = obj["dns"] as? String ?? lastDNS
+        let launch = obj["launchCore"] as? Bool ?? lastLaunch
+        lastPath = path
+        lastEngine = engine
+        lastSocks = socks
+        lastLaunch = launch
+        if launch {
+            stopCore()
+            do {
+                try launchCore(configPath: path, engine: engine)
+            } catch {
+                completionHandler?(Self.reply(ok: false, extra: ["error": error.localizedDescription]))
+                return
+            }
+        }
+        let settingsChanged = mtu != lastMTU || dns != lastDNS || includeLocal != lastIncludeLocal
+        lastMTU = mtu
+        lastDNS = dns
+        lastIncludeLocal = includeLocal
+        if settingsChanged {
+            let settings = Self.networkSettings(mtu: mtu, includeLocal: includeLocal, dns: dns)
+            setTunnelNetworkSettings(settings) { [weak self] error in
+                if error == nil {
+                    self?.bridge?.stop()
+                    let bridge = PacketBridge(socksPort: UInt16(socks))
+                    bridge.start(flow: self?.packetFlow)
+                    self?.bridge = bridge
+                }
+                completionHandler?(Self.reply(ok: error == nil, extra: ["reloaded": true, "settings": error == nil]))
+            }
+        } else {
+            completionHandler?(Self.reply(ok: true, extra: ["reloaded": true, "settings": false]))
+        }
+    }
+
+    private func apply(config: [String: Any]) {
+        lastPath = config["configPath"] as? String ?? ""
+        lastSocks = (config["socksPort"] as? Int) ?? 10808
+        lastMTU = (config["mtu"] as? Int) ?? 1500
+        lastIncludeLocal = (config["includeLocal"] as? Bool) ?? false
+        lastDNS = config["dns"] as? String ?? "1.1.1.1"
+        lastLaunch = (config["launchCore"] as? Bool) ?? true
+        lastEngine = config["engine"] as? String ?? "sing-box"
+    }
+
+    private func launchCore(configPath: String, engine: String) throws {
         let contents = Bundle.main.bundleURL.deletingLastPathComponent().deletingLastPathComponent()
-        let binary = contents.appendingPathComponent("MacOS/sing-box")
+        let binaryName = engine == "xray" ? "xray" : "sing-box"
+        let binary = contents.appendingPathComponent("MacOS/\(binaryName)")
         guard FileManager.default.isExecutableFile(atPath: binary.path) else {
-            throw NSError(domain: "V2Open", code: 2, userInfo: [NSLocalizedDescriptionKey: "sing-box is missing from the app"])
+            throw NSError(domain: "V2Open", code: 2, userInfo: [NSLocalizedDescriptionKey: "\(binaryName) is missing from the app"])
         }
         let process = Process()
         process.executableURL = binary
@@ -75,13 +142,19 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         core = process
         Thread.sleep(forTimeInterval: 0.35)
         if !process.isRunning {
-            throw NSError(domain: "V2Open", code: 3, userInfo: [NSLocalizedDescriptionKey: "sing-box exited inside the packet tunnel"])
+            throw NSError(domain: "V2Open", code: 3, userInfo: [NSLocalizedDescriptionKey: "\(binaryName) exited inside the packet tunnel"])
         }
     }
 
     private func stopCore() {
         core?.terminate()
         core = nil
+    }
+
+    private static func reply(ok: Bool, extra: [String: Any] = [:]) -> Data {
+        var payload = extra
+        payload["ok"] = ok
+        return (try? JSONSerialization.data(withJSONObject: payload)) ?? Data()
     }
 
     private static func networkSettings(mtu: Int, includeLocal: Bool, dns: String) -> NEPacketTunnelNetworkSettings {

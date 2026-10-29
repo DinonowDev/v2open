@@ -14,6 +14,8 @@ struct NetworkSettingsView: View {
     @State private var mtuParallel = ""
     @State private var mtuRetries = ""
     @State private var mtuTimeout = ""
+    @State private var speedConcurrency = ""
+    @State private var lanIface = ""
 
     var body: some View {
         sub(model.t("networkSection")) {
@@ -32,6 +34,16 @@ struct NetworkSettingsView: View {
                         SettingsToggleRow(title: model.t("lanSharing"), isOn: model.settings["lan_sharing"] as? Bool ?? false) {
                             model.set("lan_sharing", $0)
                         }
+                        SettingsDivider()
+                        V2Field(label: model.t("lanIface"), placeholder: "en0", text: $lanIface, latin: true, icon: "cable.connector")
+                            .padding(.horizontal, 14)
+                            .padding(.bottom, 10)
+                        SheetActionButton(title: model.t("save"), icon: "checkmark") {
+                            model.set("lan_iface", lanIface.trimmingCharacters(in: .whitespaces))
+                            model.showToast(model.t("saved"), tone: .success)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.bottom, 12)
                     }
                     SettingsCard {
                         VStack(alignment: .leading, spacing: 12) {
@@ -105,6 +117,15 @@ struct NetworkSettingsView: View {
                                 ("icmp", model.t("speedModeIcmp"))
                             ]
                         ) { model.set("speed_mode", $0) }
+                        SettingsDivider()
+                        V2Field(label: model.t("speedConcurrency"), placeholder: "2", text: $speedConcurrency, latin: true, icon: "square.stack.3d.up")
+                            .padding(.horizontal, 14)
+                        SheetActionButton(title: model.t("save"), icon: "checkmark") {
+                            if let v = Int(speedConcurrency), v >= 1, v <= 8 { model.set("speed_concurrency", v) }
+                            model.showToast(model.t("saved"), tone: .success)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.bottom, 12)
                     }
 
                     SettingsSectionLabel(text: model.t("tunnelOptions"))
@@ -117,8 +138,37 @@ struct NetworkSettingsView: View {
                             model.set("include_local", $0)
                         }
                         SettingsDivider()
+                        SettingsToggleRow(title: model.t("includeAllNetworks"), isOn: model.settings["include_all_networks"] as? Bool ?? false) {
+                            model.set("include_all_networks", $0)
+                        }
+                        SettingsDivider()
+                        SettingsToggleRow(title: model.t("includeApns"), hint: model.t("includeApnsHint"), isOn: model.settings["include_apns"] as? Bool ?? false) {
+                            model.set("include_apns", $0)
+                        }
+                        SettingsDivider()
+                        SettingsToggleRow(title: model.t("useXrayTun"), isOn: model.settings["use_xray_tun"] as? Bool ?? false) {
+                            model.set("use_xray_tun", $0)
+                        }
+                        SettingsDivider()
+                        SettingsSelectRow(
+                            title: model.t("xhttpOpt"),
+                            icon: "bolt.horizontal",
+                            value: model.settings["xhttp_optimization"] as? String ?? "none",
+                            options: [
+                                ("none", model.t("xhttpNone")),
+                                ("normal", model.t("xhttpNormal")),
+                                ("aggressive", model.t("xhttpAggressive"))
+                            ]
+                        ) { model.set("xhttp_optimization", $0) }
+                        SettingsDivider()
                         SettingsToggleRow(title: model.t("loggingEnabled"), isOn: model.settings["logging_enabled"] as? Bool ?? true) {
                             model.set("logging_enabled", $0)
+                        }
+                        SettingsDivider()
+                        SettingsNavRow(icon: "arrow.counterclockwise", title: model.t("resetTunnel"), chevron: false) {
+                            TunnelManager.shared.resetConfiguration { _ in
+                                model.showToast(model.t("saved"), tone: .success)
+                            }
                         }
                     }
                     SettingsCard {
@@ -156,6 +206,8 @@ struct NetworkSettingsView: View {
         mtuParallel = num("mtu_test_parallelism", 16)
         mtuRetries = num("mtu_test_retries", 2)
         mtuTimeout = num("mtu_test_timeout", 2)
+        speedConcurrency = num("speed_concurrency", 2)
+        lanIface = model.settings["lan_iface"] as? String ?? ""
     }
 
     func num(_ key: String, _ def: Int) -> String {

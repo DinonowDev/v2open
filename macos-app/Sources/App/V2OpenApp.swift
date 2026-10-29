@@ -19,11 +19,12 @@ final class AppTerminator: NSObject, NSApplicationDelegate {
         let settings = (v2RPC(method: "state")["data"] as? [String: Any])?["settings"] as? [String: Any] ?? [:]
         UILock.release()
         let persist = settings["persist_tunnel"] as? Bool == true
+        let wake = settings["reconnect_after_wake"] as? Bool == true
         let onDemand = settings["on_demand"] as? Bool == true
         BackgroundScheduler.installIfNeeded(
             geoAuto: settings["geo_auto_update"] as? Bool == true,
             onDemand: onDemand,
-            persist: persist
+            persist: persist || wake
         )
         if !persist && !onDemand {
             _ = v2RPC(method: "disconnect")
@@ -55,19 +56,33 @@ struct V2OpenApp: App {
                     }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSWorkspace.willSleepNotification)) { _ in
+                    if model.settings["icloud"] as? Bool == true { CloudSync.shared.kick(force: true) }
                     if model.settings["stop_on_sleep"] as? Bool ?? true {
                         model.disconnectTunnel()
                     }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSWorkspace.didWakeNotification)) { _ in
-                    if model.settings["persist_tunnel"] as? Bool == true {
+                    if model.settings["reconnect_after_wake"] as? Bool == true {
                         model.connectTunnel()
                     }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
+                    if model.settings["icloud"] as? Bool == true { CloudSync.shared.kick(force: true) }
                 }
         }
         .defaultSize(width: AppFrame.width, height: AppFrame.height)
         .windowResizability(.contentSize)
         .windowStyle(.hiddenTitleBar)
+        Window("Logs", id: "logs-window") {
+            LogsView()
+                .environmentObject(model)
+                .frame(minWidth: 420, minHeight: 520)
+        }
+        Window("Diagnostics", id: "diagnostics-window") {
+            DiagnosticsView()
+                .environmentObject(model)
+                .frame(minWidth: 420, minHeight: 520)
+        }
     }
 }
 

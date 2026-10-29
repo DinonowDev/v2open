@@ -14,6 +14,8 @@
   <key>ATSApplicationFontsPath</key><string>Fonts</string>
   <key>NSPrincipalClass</key><string>NSApplication</string>
   <key>NSCameraUsageDescription</key><string>V2Open uses the camera to scan a config QR code.</string>
+  <key>NSLocationUsageDescription</key><string>V2Open uses location to read the Wi-Fi BSSID in Diagnostics.</string>
+  <key>NSLocationWhenInUseUsageDescription</key><string>V2Open uses location to read the Wi-Fi BSSID in Diagnostics.</string>
   <key>CFBundleURLTypes</key>
   <array>
     <dict>
@@ -31,7 +33,31 @@
         <string>hysteria</string>
         <string>hysteria2</string>
         <string>wireguard</string>
+        <string>ssh</string>
+        <string>socks</string>
+        <string>ping</string>
+        <string>dnstt</string>
+        <string>masterdns</string>
+        <string>chain</string>
       </array>
+    </dict>
+  </array>
+  <key>UTExportedTypeDeclarations</key>
+  <array>
+    <dict>
+      <key>UTTypeIdentifier</key><string>local.v2open.v2box</string>
+      <key>UTTypeDescription</key><string>V2Open Locked Catalog</string>
+      <key>UTTypeConformsTo</key>
+      <array>
+        <string>public.data</string>
+      </array>
+      <key>UTTypeTagSpecification</key>
+      <dict>
+        <key>public.filename-extension</key>
+        <array>
+          <string>v2box</string>
+        </array>
+      </dict>
     </dict>
   </array>
   <key>CFBundleDocumentTypes</key>
@@ -42,6 +68,7 @@
       <key>LSHandlerRank</key><string>Owner</string>
       <key>LSItemContentTypes</key>
       <array>
+        <string>local.v2open.v2box</string>
         <string>public.data</string>
         <string>public.json</string>
         <string>public.yaml</string>

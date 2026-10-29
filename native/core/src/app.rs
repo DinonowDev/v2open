@@ -365,7 +365,6 @@ fn defaults() -> Value {
         "on_demand": false,
         "on_demand_text": "",
         "net_combiner": false,
-        "theme": "dark",
         "icloud": false,
         "selected_id": "",
         "user_agent": "Mozilla/5.0",
@@ -389,6 +388,18 @@ fn defaults() -> Value {
         "burst_observatory": false,
         "speed_mode": "http",
         "persist_tunnel": false,
+        "reconnect_after_wake": false,
+        "use_xray_tun": false,
+        "include_all_networks": false,
+        "include_apns": false,
+        "xhttp_optimization": "none",
+        "speed_concurrency": 2,
+        "lan_iface": "",
+        "dns_disable_fallback": false,
+        "dns_disable_fallback_if_match": false,
+        "glassy": false,
+        "connect_button_size": "medium",
+        "theme": "dark",
         "remote_dns_id": "",
         "domestic_dns_id": "",
         "dns_items": [],
@@ -610,15 +621,28 @@ impl Core {
     }
 
     fn package_catalog(&self) -> Value {
+        self.package_catalog_with(&json!({}))
+    }
+
+    fn package_catalog_with(&self, extra: &Value) -> Value {
+        let expires = extra["expires_at"].as_u64().unwrap_or(0);
+        let note = extra["note"].as_str().unwrap_or("").trim();
+        let allowed: Vec<String> = extra["allowed_ids"].as_str().unwrap_or("").split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
         json!({
             "format": "v2box",
             "version": 2,
             "device_id": self.settings["hwid"],
             "created_at": now(),
+            "expires_at": expires,
+            "note": note,
+            "allowed_ids": allowed,
             "meta": {
                 "app": "V2Open",
                 "device_id": self.settings["hwid"],
                 "created_at": now(),
+                "expires_at": expires,
+                "note": note,
+                "allowed_ids": allowed,
                 "files": ["settings.json", "groups.json", "routes.json", "dns.json", "balancers.json"]
             },
             "catalog": {
@@ -924,7 +948,7 @@ impl Core {
                 self.save();
                 Ok(self.state())
             }
-            "logs" => Ok(json!({"text": self.logs()})),
+            "logs" => Ok(json!({"text": self.logs_kind(args["kind"].as_str().unwrap_or("error"))})),
             "clear_logs" => {
                 let _ = fs::write(self.path.parent().unwrap_or(Path::new(".")).join("core.log"), "");
                 Ok(json!({"ok": true}))
@@ -987,10 +1011,41 @@ impl Core {
                 if password.len() < 4 {
                     return Err("password is required for .v2box".into());
                 }
-                let payload = self.package_catalog();
+                let payload = self.package_catalog_with(args);
                 let bytes = crate::vault::seal(password, &serde_json::to_vec(&payload).map_err(|e| e.to_string())?)?;
                 fs::write(path, bytes).map_err(|e| e.to_string())?;
                 Ok(json!({"path": path, "format": "v2box", "files": payload["catalog"].as_object().map(|o| o.len()).unwrap_or(0)}))
+            }
+            "export_group" => {
+                let gid = args["id"].as_str().unwrap_or("");
+                let path = args["path"].as_str().unwrap_or("");
+                let group = self.groups.iter().find(|g| g["id"].as_str() == Some(gid)).ok_or("group not found")?;
+                let links: Vec<String> = group["profiles"].as_array().cloned().unwrap_or_default().iter().filter_map(|p| {
+                    let link = p["link"].as_str().unwrap_or("").trim();
+                    if link.is_empty() { None } else { Some(link.to_string()) }
+                }).collect();
+                let text = links.join("\n");
+                if !path.is_empty() {
+                    fs::write(path, &text).map_err(|e| e.to_string())?;
+                }
+                Ok(json!({"text": text, "count": links.len(), "path": path}))
+            }
+            "pin_group" => {
+                let gid = args["id"].as_str().unwrap_or("");
+                let pinned = args["pinned"].as_bool().unwrap_or(true);
+                if let Some(group) = self.groups.iter_mut().find(|g| g["id"].as_str() == Some(gid)) {
+                    group["pinned"] = json!(pinned);
+                    self.save();
+                }
+                Ok(self.state())
+            }
+            "profile_json" => {
+                let id = args["id"].as_str().unwrap_or("");
+                let profile = self.find_profile(if id.is_empty() { self.settings["selected_id"].as_str().unwrap_or("") } else { id }).ok_or("no profile")?;
+                let data = node_data(&profile);
+                let xray = serde_json::to_string_pretty(&crate::xray::document(&self.settings, &data, &self.routes)).unwrap_or_else(|_| "{}".into());
+                let sing = serde_json::to_string_pretty(&crate::builder::build_config(&self.settings, &[data.clone()], &self.routes, &self.rules, "proxy").unwrap_or(json!({}))).unwrap_or_else(|_| "{}".into());
+                Ok(json!({"xray": xray, "singbox": sing, "link": data["link"]}))
             }
             "import_package" => {
                 let path = args["path"].as_str().unwrap_or("");
@@ -1000,6 +1055,14 @@ impl Core {
                 let data: Value = if bytes.starts_with(b"V2OPEN1") {
                     let plain = crate::vault::open(password, &bytes)?;
                     serde_json::from_slice(&plain).map_err(|e| e.to_string())?
+                } else if bytes.starts_with(b"PK") {
+                    match unzip_library(password, &bytes).or_else(|_| unzip_library("", &bytes))? {
+                        ZipPayload::Json(plain) => serde_json::from_slice(&plain).or_else(|_| serde_json::from_str(&String::from_utf8_lossy(&plain))).map_err(|e| e.to_string())?,
+                        ZipPayload::Links(text) => {
+                            self.import_text(&text, None)?;
+                            return Ok(self.state());
+                        }
+                    }
                 } else {
                     serde_json::from_slice(&bytes).or_else(|_| {
                         serde_json::from_str(&String::from_utf8_lossy(&bytes))
@@ -1012,19 +1075,71 @@ impl Core {
                 } else {
                     data
                 };
-                let foreign = payload["device_id"].as_str().unwrap_or("");
+                let foreign = payload["device_id"].as_str().or_else(|| payload["meta"]["device_id"].as_str()).unwrap_or("");
                 let mine = self.settings["hwid"].as_str().unwrap_or("");
                 if !foreign.is_empty() && !mine.is_empty() && foreign != mine && !allow_foreign {
                     return Err("this backup belongs to another device".into());
                 }
+                let allowed = payload["allowed_ids"].as_array().or_else(|| payload["meta"]["allowed_ids"].as_array());
+                if let Some(ids) = allowed {
+                    let listed: Vec<String> = ids.iter().filter_map(|v| v.as_str().map(|s| s.trim().to_string())).filter(|s| !s.is_empty()).collect();
+                    if !listed.is_empty() && !listed.iter().any(|id| id == mine) && !allow_foreign {
+                        return Err("this backup is locked to other device ids".into());
+                    }
+                }
+                let expires = payload["expires_at"].as_u64().or_else(|| payload["meta"]["expires_at"].as_u64()).unwrap_or(0);
+                if expires > 0 && now() > expires {
+                    return Err("this backup has expired".into());
+                }
                 self.restore_payload(&payload);
                 Ok(self.state())
+            }
+            "share_locked" => {
+                let path = args["path"].as_str().unwrap_or("");
+                let password = args["password"].as_str().unwrap_or("");
+                if path.is_empty() {
+                    return Err("path is required".into());
+                }
+                if password.len() < 4 {
+                    return Err("password is required for .v2box".into());
+                }
+                let id = args["id"].as_str().unwrap_or("");
+                let gid = args["group_id"].as_str().unwrap_or("");
+                let mut catalog = self.package_catalog_with(args);
+                if !id.is_empty() || !gid.is_empty() {
+                    let groups: Vec<Value> = self.groups.iter().filter_map(|group| {
+                        if !gid.is_empty() && group["id"].as_str() != Some(gid) {
+                            return None;
+                        }
+                        let mut group = group.clone();
+                        if !id.is_empty() {
+                            let profiles: Vec<Value> = group["profiles"]
+                                .as_array()
+                                .cloned()
+                                .unwrap_or_default()
+                                .into_iter()
+                                .filter(|p| p["id"].as_str() == Some(id))
+                                .collect();
+                            if profiles.is_empty() {
+                                return None;
+                            }
+                            group["profiles"] = json!(profiles);
+                        }
+                        Some(group)
+                    }).collect();
+                    catalog["groups"] = json!(groups.clone());
+                    catalog["catalog"]["groups.json"] = json!(groups);
+                }
+                let bytes = crate::vault::seal(password, &serde_json::to_vec(&catalog).map_err(|e| e.to_string())?)?;
+                fs::write(path, bytes).map_err(|e| e.to_string())?;
+                Ok(json!({"path": path, "format": "v2box"}))
             }
             "update_group" => Err("subscriptions were removed".into()),
             "prepare" => self.prepare(
                 args["id"].as_str().unwrap_or(""),
                 args["smart"].as_bool().unwrap_or(false),
                 args["group_id"].as_str().unwrap_or(""),
+                args["keep_alive"].as_bool().unwrap_or(false),
             ),
             "diagnostics" => self.diagnostics(),
             "clash_status" => self.clash_status(),
@@ -1098,15 +1213,23 @@ impl Core {
                 } else {
                     base64_bytes(args["text"].as_str().unwrap_or(""))?
                 };
-                let plain = if bytes.starts_with(b"V2OPEN1") {
-                    crate::vault::open(password, &bytes)?
+                if bytes.starts_with(b"V2OPEN1") {
+                    let plain = crate::vault::open(password, &bytes)?;
+                    let data: Value = serde_json::from_slice(&plain).map_err(|_| "locked file did not contain a library".to_string())?;
+                    self.restore_payload(&data);
                 } else if bytes.starts_with(b"PK") {
-                    unzip_password(password, &bytes)?
+                    match unzip_library(password, &bytes)? {
+                        ZipPayload::Json(plain) => {
+                            let data: Value = serde_json::from_slice(&plain).map_err(|_| "locked file did not contain a library".to_string())?;
+                            self.restore_payload(&data);
+                        }
+                        ZipPayload::Links(text) => {
+                            self.import_text(&text, None)?;
+                        }
+                    }
                 } else {
                     return Err("the file is not a locked V2Open backup".into());
-                };
-                let data: Value = serde_json::from_slice(&plain).map_err(|_| "locked file did not contain a library".to_string())?;
-                self.restore_payload(&data);
+                }
                 Ok(self.state())
             }
             "lock_group" => {
@@ -1475,6 +1598,17 @@ impl Core {
     fn save_profile(&mut self, profile: &Value) -> Result<(), String> {
         let mut data = profile.clone();
         data["link"] = json!(build_link(&data));
+        let remark = data["remark"].as_str().unwrap_or("").trim().to_string();
+        let own_id = data["id"].as_str().unwrap_or("");
+        if !remark.is_empty() {
+            for group in &self.groups {
+                for item in group["profiles"].as_array().cloned().unwrap_or_default() {
+                    if item["id"].as_str() != Some(own_id) && item["remark"].as_str() == Some(remark.as_str()) {
+                        return Err("remark already exists".into());
+                    }
+                }
+            }
+        }
         if let Some(existing) = data["id"].as_str().filter(|s| !s.is_empty()) {
             for group in &mut self.groups {
                 if let Some(arr) = group["profiles"].as_array_mut() {
@@ -1573,25 +1707,33 @@ impl Core {
         None
     }
 
-    fn prepare(&mut self, id: &str, smart: bool, group_id: &str) -> Result<Value, String> {
-        let cfg = self.prepare_files(id, smart, "proxy", true, group_id)?;
+    fn prepare(&mut self, id: &str, smart: bool, group_id: &str, keep_alive: bool) -> Result<Value, String> {
+        let cfg = self.prepare_files(id, smart, "proxy", true, group_id, keep_alive)?;
         let dns = self.settings["remote_dns"].as_str().unwrap_or("1.1.1.1");
         let host = dns.trim_start_matches("https://").trim_start_matches("tls://").split('/').next().unwrap_or(dns).split(':').next().unwrap_or(dns);
+        let xray = cfg.with_file_name("xray.json");
+        let use_xray = self.settings["use_xray_tun"].as_bool().unwrap_or(false);
         Ok(json!({
-            "path": cfg,
+            "path": if use_xray { xray.display().to_string() } else { cfg.display().to_string() },
+            "sing_path": cfg.display().to_string(),
+            "xray_path": xray.display().to_string(),
+            "engine": if use_xray { "xray" } else { "sing-box" },
             "socks_port": if self.direct_bridge > 0 { self.direct_bridge as u64 } else { self.settings["socks_port"].as_u64().unwrap_or(10808) },
             "launch_core": self.direct_bridge == 0,
             "mtu": self.settings["mtu"].as_u64().unwrap_or(1500),
             "include_local": self.settings["include_local"].as_bool().unwrap_or(false),
+            "include_all_networks": self.settings["include_all_networks"].as_bool().unwrap_or(false),
+            "include_apns": self.settings["include_apns"].as_bool().unwrap_or(false),
             "kill_switch": self.settings["kill_switch"].as_bool().unwrap_or(false),
             "dns": host,
             "on_demand": self.settings["on_demand"].as_bool().unwrap_or(false),
             "on_demand_text": self.settings["on_demand_text"].as_str().unwrap_or(""),
-            "combiner": self.settings["net_combiner"].as_bool().unwrap_or(false)
+            "combiner": self.settings["net_combiner"].as_bool().unwrap_or(false),
+            "persist": self.settings["persist_tunnel"].as_bool().unwrap_or(false)
         }))
     }
 
-    fn prepare_files(&mut self, id: &str, smart: bool, mode: &str, touch_selection: bool, group_id: &str) -> Result<PathBuf, String> {
+    fn prepare_files(&mut self, id: &str, smart: bool, mode: &str, touch_selection: bool, group_id: &str, keep_alive: bool) -> Result<PathBuf, String> {
         let mut profiles = self.profiles_for(id, smart, group_id);
         if profiles.is_empty() {
             return Err("no profile".into());
@@ -1602,7 +1744,9 @@ impl Core {
         if !group_id.is_empty() {
             self.settings["smart_group_id"] = json!(group_id);
         }
-        self.disconnect()?;
+        if !keep_alive {
+            self.disconnect()?;
+        }
         let dir = self.path.parent().unwrap_or(Path::new(".")).to_path_buf();
         let _ = fs::create_dir_all(&dir);
         let (extras, routed, stops) = self.front_xray(&mut profiles, &dir)?;
@@ -1627,6 +1771,10 @@ impl Core {
         }
         let cfg = dir.join("config.json");
         fs::write(&cfg, serde_json::to_string_pretty(&config).unwrap_or_else(|_| "{}".into())).map_err(|e| e.to_string())?;
+        if let Some(profile) = profiles.first() {
+            let xray = crate::xray::document(&self.settings, profile, &self.routes);
+            let _ = fs::write(dir.join("xray.json"), serde_json::to_string_pretty(&xray).unwrap_or_else(|_| "{}".into()));
+        }
         if !self.singbox.exists() {
             return Err("sing-box core was not found".into());
         }
@@ -1736,7 +1884,7 @@ impl Core {
 
     fn connect(&mut self, id: &str, smart: bool, group_id: &str) -> Result<(), String> {
         let mode = self.settings["mode"].as_str().unwrap_or("tun").to_string();
-        let cfg = self.prepare_files(id, smart, &mode, true, group_id)?;
+        let cfg = self.prepare_files(id, smart, &mode, true, group_id, false)?;
         self.runtime.phase = "connecting".into();
         self.runtime.error.clear();
         if mode == "tun" {
@@ -2026,7 +2174,7 @@ impl Core {
         let was_id = self.settings["selected_id"].as_str().unwrap_or("").to_string();
         let was_smart = self.runtime.smart;
         let result = (|| {
-            let cfg = self.prepare_files(id, false, "proxy", false, "")?;
+            let cfg = self.prepare_files(id, false, "proxy", false, "", false)?;
             self.start_user(&cfg)?;
             thread::sleep(Duration::from_millis(700));
             let ms = {
@@ -2162,9 +2310,29 @@ impl Core {
         bv.cmp(&av)
     }
 
+    #[allow(dead_code)]
     fn logs(&self) -> String {
-        let path = self.path.parent().unwrap_or(Path::new(".")).join("core.log");
-        Self::tail_log(&path)
+        self.logs_kind("error")
+    }
+
+    fn logs_kind(&self, kind: &str) -> String {
+        let dir = self.path.parent().unwrap_or(Path::new("."));
+        let path = match kind {
+            "access" => dir.join("access.log"),
+            "dns" => dir.join("dns.log"),
+            _ => dir.join("core.log"),
+        };
+        let body = Self::tail_log(&path);
+        if kind == "error" || kind == "all" {
+            return body;
+        }
+        if body.trim().is_empty() {
+            let core = Self::tail_log(&dir.join("core.log"));
+            let needle = if kind == "dns" { "dns" } else { "inbound" };
+            core.lines().filter(|l| l.to_ascii_lowercase().contains(needle)).collect::<Vec<_>>().join("\n")
+        } else {
+            body
+        }
     }
 
     fn sidecar_logs(&self) -> String {
@@ -2267,7 +2435,7 @@ impl Core {
     }
 
     fn public_groups(&self) -> Vec<Value> {
-        self.groups.iter().map(|group| {
+        let mut groups: Vec<Value> = self.groups.iter().map(|group| {
             let mut group = group.clone();
             let id = group["id"].as_str().unwrap_or("").to_string();
             let locked = group["locked"].as_bool().unwrap_or(false) && !self.unlocked.contains(&id);
@@ -2284,7 +2452,9 @@ impl Core {
                 obj.remove("lock_hash");
             }
             group
-        }).collect()
+        }).collect();
+        groups.sort_by_key(|g| if g["pinned"].as_bool().unwrap_or(false) { 0 } else { 1 });
+        groups
     }
 
     fn refresh_net(&mut self) {
@@ -2417,6 +2587,7 @@ impl Core {
             },
             http_enabled: self.settings["http_enabled"].as_bool().unwrap_or(true),
             socks_enabled: self.settings["socks_enabled"].as_bool().unwrap_or(true),
+            concurrency: self.settings["speed_concurrency"].as_u64().unwrap_or(2).clamp(1, 8) as usize,
         }
     }
 
@@ -2509,6 +2680,12 @@ impl Core {
                 .map(|l| json!(l.trim()))
                 .collect::<Vec<_>>(),
             "config": live,
+            "xray_path": dir.join("xray.json").display().to_string(),
+            "proxy": cmd_text("scutil", &["--proxy"]),
+            "bootstrap": dns_servers.clone(),
+            "vpn_dns": self.settings["remote_dns"].clone(),
+            "hwid": self.settings["hwid"].clone(),
+            "ifaces": crate::platform::iface_names(),
             "updated_at": now()
         }))
     }
@@ -2610,6 +2787,7 @@ pub struct SpeedPlan {
     pub socks_port: u16,
     pub http_enabled: bool,
     pub socks_enabled: bool,
+    pub concurrency: usize,
 }
 
 enum SpeedProxyKind {
@@ -2807,18 +2985,48 @@ fn speed_transfer_candidates(plan: &SpeedPlan) -> Vec<ureq::Agent> {
     agents
 }
 
-fn probe_download(transfer: &ureq::Agent, report: bool) -> (u64, u64) {
+fn probe_download(transfer: &ureq::Agent, report: bool, concurrency: usize) -> (u64, u64) {
     speed_touch(report, |p| {
         p.phase = "download".into();
         p.live_bps = 0;
     });
+    let n = concurrency.max(1).min(8);
     for url in SPEED_DOWNLOAD_URLS {
-        let (bytes, rate) = download_from_url(transfer, url, report);
+        let (bytes, rate) = if n <= 1 {
+            download_from_url(transfer, url, report)
+        } else {
+            download_parallel(transfer, url, report, n)
+        };
         if bytes > 0 {
             return (bytes, rate);
         }
     }
     (0, 0)
+}
+
+fn download_parallel(transfer: &ureq::Agent, url: &str, report: bool, n: usize) -> (u64, u64) {
+    let began = Instant::now();
+    let total = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let mut handles = Vec::new();
+    for _ in 0..n {
+        let agent = transfer.clone();
+        let url = url.to_string();
+        let total = total.clone();
+        handles.push(thread::spawn(move || {
+            let (bytes, _) = download_from_url(&agent, &url, false);
+            total.fetch_add(bytes, std::sync::atomic::Ordering::Relaxed);
+        }));
+    }
+    for handle in handles {
+        let _ = handle.join();
+    }
+    let bytes = total.load(std::sync::atomic::Ordering::Relaxed);
+    speed_touch(report, |p| {
+        p.bytes = bytes;
+        p.live_bps = rate_bps(bytes, began.elapsed().max(Duration::from_millis(1)));
+        p.download_bps = p.live_bps as i64;
+    });
+    (bytes, rate_bps(bytes, began.elapsed().max(Duration::from_millis(1))))
 }
 
 fn download_from_url(transfer: &ureq::Agent, url: &str, report: bool) -> (u64, u64) {
@@ -2878,7 +3086,7 @@ fn measure_speed(
     let mut bytes = 0u64;
     let mut download_bps = 0u64;
     for agent in speed_transfer_candidates(plan) {
-        let (got, rate) = probe_download(&agent, report);
+        let (got, rate) = probe_download(&agent, report, plan.concurrency);
         if got > bytes {
             bytes = got;
             download_bps = rate;
@@ -2889,7 +3097,7 @@ fn measure_speed(
         }
     }
     if bytes == 0 {
-        let (got, rate) = probe_download(&transfer, report);
+        let (got, rate) = probe_download(&transfer, report, plan.concurrency);
         bytes = got;
         download_bps = rate;
     }
@@ -2947,6 +3155,7 @@ fn run_speed_probe_inner(plan: &SpeedPlan, report: bool) -> Result<Value, String
         socks_port: plan.socks_port,
         http_enabled: plan.http_enabled,
         socks_enabled: plan.socks_enabled,
+        concurrency: plan.concurrency,
     };
 
     let (ping, icmp, jitter, bytes, download_bps, upload_bps, (exit_ip, exit_country, country_code), vpn_active) =
@@ -3149,7 +3358,12 @@ fn strip_ansi(text: &str) -> String {
     out
 }
 
-fn unzip_password(password: &str, bytes: &[u8]) -> Result<Vec<u8>, String> {
+enum ZipPayload {
+    Json(Vec<u8>),
+    Links(String),
+}
+
+fn unzip_library(password: &str, bytes: &[u8]) -> Result<ZipPayload, String> {
     let dir = std::env::temp_dir().join(format!("v2open-zip-{}", now()));
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let zip = dir.join("in.zip");
@@ -3158,13 +3372,62 @@ fn unzip_password(password: &str, bytes: &[u8]) -> Result<Vec<u8>, String> {
     if !result.status.success() {
         return Err("wrong password or the archive is not a zip".into());
     }
-    for entry in fs::read_dir(&dir).map_err(|e| e.to_string())? {
-        let entry = entry.map_err(|e| e.to_string())?;
-        if entry.path().extension().and_then(|e| e.to_str()) == Some("json") || entry.file_name().to_string_lossy().ends_with(".json") {
-            return fs::read(entry.path()).map_err(|e| e.to_string());
+    let files = walk_files(&dir);
+    for path in &files {
+        let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("").to_ascii_lowercase();
+        if name.ends_with(".json") || name.contains("library") || name.contains("groups") {
+            if let Ok(body) = fs::read(path) {
+                if serde_json::from_slice::<Value>(&body).is_ok() {
+                    return Ok(ZipPayload::Json(body));
+                }
+            }
         }
     }
+    let mut links = Vec::new();
+    for path in &files {
+        if let Ok(body) = fs::read(path) {
+            links.extend(extract_share_links(&body));
+        }
+    }
+    if !links.is_empty() {
+        links.sort();
+        links.dedup();
+        return Ok(ZipPayload::Links(links.join("\n")));
+    }
     Err("the archive did not contain a library".into())
+}
+
+fn walk_files(dir: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                out.extend(walk_files(&path));
+            } else {
+                out.push(path);
+            }
+        }
+    }
+    out
+}
+
+fn extract_share_links(bytes: &[u8]) -> Vec<String> {
+    let text = String::from_utf8_lossy(bytes);
+    let mut links = Vec::new();
+    for prefix in ["vless://", "vmess://", "trojan://", "ss://", "ssr://", "hysteria2://", "hy2://", "hysteria://", "wireguard://", "socks://", "ssh://"] {
+        let mut rest = text.as_ref();
+        while let Some(at) = rest.find(prefix) {
+            let chunk = &rest[at..];
+            let end = chunk.find(|c: char| c.is_whitespace() || c == '"' || c == '\'' || c == '<' || c == '>' || c == '\0').unwrap_or(chunk.len());
+            let link = chunk[..end].trim_end_matches(|c: char| matches!(c, '.' | ',' | ';' | ')' | ']'));
+            if link.len() > prefix.len() + 4 {
+                links.push(link.to_string());
+            }
+            rest = &chunk[prefix.len()..];
+        }
+    }
+    links
 }
 
 fn port_num(value: &Value) -> u16 {
@@ -3292,6 +3555,7 @@ mod speed_probe_tests {
             socks_port: 10808,
             http_enabled: true,
             socks_enabled: true,
+            concurrency: 2,
         };
         assert!(!plan.connected);
     }

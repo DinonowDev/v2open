@@ -11,10 +11,23 @@ fn s(v: &Value, key: &str) -> String {
 
 pub fn document(settings: &Value, profile: &Value, routes: &[Value]) -> Value {
     let mut doc = core(settings, routes, outbound(profile));
-    doc["inbounds"] = json!([
-        {"tag":"socks","port": settings["socks_port"].as_u64().unwrap_or(10808), "listen":"127.0.0.1", "protocol":"socks", "settings":{"udp": true, "auth":"noauth"}, "sniffing": sniffing(settings)},
-        {"tag":"http","port": settings["http_port"].as_u64().unwrap_or(10807), "listen":"127.0.0.1", "protocol":"http", "sniffing": sniffing(settings)}
-    ]);
+    let listen = if settings["lan_sharing"].as_bool().unwrap_or(false) { "0.0.0.0" } else { "127.0.0.1" };
+    let mut inbounds = vec![
+        json!({"tag":"socks","port": settings["socks_port"].as_u64().unwrap_or(10808), "listen": listen, "protocol":"socks", "settings":{"udp": true, "auth":"noauth"}, "sniffing": sniffing(settings)}),
+        json!({"tag":"http","port": settings["http_port"].as_u64().unwrap_or(10807), "listen": listen, "protocol":"http", "sniffing": sniffing(settings)})
+    ];
+    if settings["use_xray_tun"].as_bool().unwrap_or(false) {
+        inbounds.insert(0, json!({
+            "tag": "tun-in",
+            "protocol": "tun",
+            "settings": {
+                "name": "xray-tun",
+                "MTU": settings["mtu"].as_u64().unwrap_or(1500)
+            },
+            "sniffing": sniffing(settings)
+        }));
+    }
+    doc["inbounds"] = json!(inbounds);
     doc
 }
 
@@ -116,7 +129,10 @@ fn dns(settings: &Value) -> Value {
     }
     let mut dns = json!({
         "servers": servers,
-        "queryStrategy": if settings["prefer_ipv6"].as_bool().unwrap_or(false) { "UseIPv6" } else { "UseIPv4" }
+        "queryStrategy": if settings["prefer_ipv6"].as_bool().unwrap_or(false) { "UseIPv6" } else { "UseIPv4" },
+        "disableCache": settings["dns_cache"].as_bool() == Some(false),
+        "disableFallback": settings["dns_disable_fallback"].as_bool().unwrap_or(false),
+        "disableFallbackIfMatch": settings["dns_disable_fallback_if_match"].as_bool().unwrap_or(false)
     });
     if let Some(hosts) = settings["hosts"].as_object() {
         if !hosts.is_empty() {

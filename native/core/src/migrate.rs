@@ -48,6 +48,39 @@ pub fn migrate_settings(settings: &mut Value) {
     if settings.get("smart_strategy").is_none() {
         settings["smart_strategy"] = json!("winner");
     }
+    if settings.get("reconnect_after_wake").is_none() {
+        settings["reconnect_after_wake"] = json!(settings["persist_tunnel"].as_bool().unwrap_or(false));
+    }
+    if settings.get("use_xray_tun").is_none() {
+        settings["use_xray_tun"] = json!(false);
+    }
+    if settings.get("include_all_networks").is_none() {
+        settings["include_all_networks"] = json!(false);
+    }
+    if settings.get("include_apns").is_none() {
+        settings["include_apns"] = json!(false);
+    }
+    if settings.get("xhttp_optimization").is_none() {
+        settings["xhttp_optimization"] = json!("none");
+    }
+    if settings.get("speed_concurrency").is_none() {
+        settings["speed_concurrency"] = json!(2);
+    }
+    if settings.get("dns_disable_fallback").is_none() {
+        settings["dns_disable_fallback"] = json!(false);
+    }
+    if settings.get("dns_disable_fallback_if_match").is_none() {
+        settings["dns_disable_fallback_if_match"] = json!(false);
+    }
+    if settings.get("glassy").is_none() {
+        settings["glassy"] = json!(false);
+    }
+    if settings.get("connect_button_size").is_none() {
+        settings["connect_button_size"] = json!("medium");
+    }
+    if settings.get("lan_iface").is_none() {
+        settings["lan_iface"] = json!("");
+    }
 }
 
 #[cfg(test)]

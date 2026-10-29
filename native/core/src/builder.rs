@@ -93,6 +93,7 @@ fn assemble(settings: &Value, profiles: &[Value], rules: &[Value], rules_dir: &P
         }
     }
     let listen = if settings["lan_sharing"].as_bool().unwrap_or(false) { "0.0.0.0" } else { "127.0.0.1" };
+    let bind_iface = settings["lan_iface"].as_str().unwrap_or("").trim().to_string();
     let mut inbounds = Vec::new();
     if mode == "tun" {
         let mut tun = json!({
@@ -110,10 +111,18 @@ fn assemble(settings: &Value, profiles: &[Value], rules: &[Value], rules_dir: &P
         inbounds.push(tun);
     }
     if settings["socks_enabled"].as_bool().unwrap_or(true) {
-        inbounds.push(json!({"type":"socks","tag":"socks-in","listen":listen,"listen_port": settings["socks_port"].as_u64().unwrap_or(10808)}));
+        let mut socks = json!({"type":"socks","tag":"socks-in","listen":listen,"listen_port": settings["socks_port"].as_u64().unwrap_or(10808)});
+        if !bind_iface.is_empty() {
+            socks["bind_interface"] = json!(bind_iface);
+        }
+        inbounds.push(socks);
     }
     if settings["http_enabled"].as_bool().unwrap_or(true) {
-        inbounds.push(json!({"type":"http","tag":"http-in","listen":listen,"listen_port": settings["http_port"].as_u64().unwrap_or(10807)}));
+        let mut http = json!({"type":"http","tag":"http-in","listen":listen,"listen_port": settings["http_port"].as_u64().unwrap_or(10807)});
+        if !bind_iface.is_empty() {
+            http["bind_interface"] = json!(bind_iface);
+        }
+        inbounds.push(http);
     }
     let dns = dns(settings, rules_dir);
     let (route_rules, rule_sets) = route(settings, rules, rules_dir, mode, pipe)?;
@@ -323,7 +332,7 @@ fn proxy(profile: &Value, tag: &str, settings: &Value) -> Result<Value, String> 
             node["tls"] = tls;
         }
     }
-    if let Some(transport) = transport(profile)? {
+    if let Some(transport) = transport(profile, settings)? {
         if matches!(protocol.as_str(), "vless" | "vmess" | "trojan") {
             node["transport"] = transport;
         }
@@ -362,7 +371,7 @@ fn tls(profile: &Value, settings: &Value) -> Option<Value> {
     Some(tls)
 }
 
-fn transport(profile: &Value) -> Result<Option<Value>, String> {
+fn transport(profile: &Value, settings: &Value) -> Result<Option<Value>, String> {
     let network = s(profile, "network");
     if matches!(network.as_str(), "tcp" | "raw" | "none" | "") {
         return Ok(None);
@@ -396,6 +405,11 @@ fn transport(profile: &Value) -> Result<Option<Value>, String> {
         let mode = if mode.is_empty() { "auto".to_string() } else { mode };
         let padding = s(profile, "x_padding");
         let padding = if padding.is_empty() { "100-1000".to_string() } else { padding };
+        let padding = match settings["xhttp_optimization"].as_str().unwrap_or("none") {
+            "aggressive" => "10-100".to_string(),
+            "normal" => "100-400".to_string(),
+            _ => padding,
+        };
         let mut xhttp = json!({"type":"xhttp","host": s(profile, "host"), "path": path, "mode": mode, "x_padding_bytes": padding});
         let extra = s(profile, "xhttp_extra");
         if !extra.is_empty() {
@@ -502,6 +516,10 @@ fn dns(settings: &Value, rules_dir: &Path) -> Value {
         _ => {}
     }
     let mut servers = vec![domestic, remote];
+    if settings["dns_disable_fallback"].as_bool().unwrap_or(false) {
+        dns_final = if settings["final"].as_str() == Some("direct") { "dns-direct" } else { "dns-remote" };
+    }
+    if !settings["dns_disable_fallback"].as_bool().unwrap_or(false) {
     if let Some(items) = settings["dns_items"].as_array() {
         for item in items {
             if !item["enabled"].as_bool().unwrap_or(true) {
@@ -527,6 +545,7 @@ fn dns(settings: &Value, rules_dir: &Path) -> Value {
             servers.push(extra);
         }
     }
+    }
     if settings["fake_dns"].as_bool().unwrap_or(false) {
         servers.insert(0, json!({"type":"fakeip","tag":"fakeip","inet4_range":"198.18.0.0/15","inet6_range":"fc00::/18"}));
         rules.push(json!({"query_type":["A","AAAA"],"action":"route","server":"fakeip"}));
@@ -536,7 +555,10 @@ fn dns(settings: &Value, rules_dir: &Path) -> Value {
         "rules": rules,
         "final": dns_final,
         "strategy": strategy(&settings),
-        "disable_cache": settings["dns_cache"].as_bool() == Some(false)
+        "disable_cache": settings["dns_cache"].as_bool() == Some(false),
+        "disable_expire": false,
+        "independent_cache": settings["dns_disable_fallback_if_match"].as_bool().unwrap_or(false),
+        "reverse_mapping": false
     });
     let item_hosts = crate::dns_items::dns_hosts_map(&settings);
     if let Some(obj) = item_hosts.as_object() {

@@ -376,6 +376,9 @@ struct EditorView: View {
             if proto == "tuic" {
                 hopField(index, "congestion_control", model.t("congestion"))
                 hopField(index, "udp_relay_mode", model.t("udpRelay"))
+                hopField(index, "heartbeat", "Heartbeat (ms)")
+                toggleHop(index, "zero_rtt", model.t("zeroRtt"))
+                toggleHop(index, "disable_sni", "Disable SNI")
             }
             if proto == "naive" {
                 hopField(index, "username", "User")
@@ -389,6 +392,7 @@ struct EditorView: View {
                 hopField(index, "plugin", model.t("ssPlugin"))
                 hopField(index, "shadowtls_version", "ShadowTLS v")
                 hopField(index, "shadowtls_password", "ShadowTLS password")
+                hopField(index, "shadowtls_sni", "ShadowTLS SNI")
             }
             if proto == "ssh" {
                 hopField(index, "username", "User")
@@ -406,9 +410,11 @@ struct EditorView: View {
                 hopField(index, "private_key", "Private key")
                 hopField(index, "peer_public_key", "Peer public key")
                 hopField(index, "local_address", "Local address")
-                hopField(index, "awg_jc", "Jc")
-                hopField(index, "awg_jmin", "Jmin")
-                hopField(index, "awg_jmax", "Jmax")
+                hopField(index, "reserved", "Reserved")
+                hopField(index, "mtu", "MTU")
+                ForEach(Self.awgKeys.filter { !$0.hasPrefix("i") || proto == "wireguard" }, id: \.self) { key in
+                    hopField(index, "awg_\(key)", key.hasPrefix("i") ? key.uppercased() : key.capitalized)
+                }
             }
             if proto == "warp" {
                 Mix(text: model.t("warpChainHopHint"), size: 11, color: C.muted)
@@ -456,6 +462,7 @@ struct EditorView: View {
                     hopField(index, "pqv", "ML-DSA verify")
                 }
                 hopField(index, "ech_config", model.t("echConfig"))
+                hopField(index, "ech_query_server_name", model.t("echQueryName"))
             }
 
             SheetActionButton(title: model.t("deleteRule"), danger: true, icon: "trash") {

@@ -26,6 +26,7 @@ struct RootView: View {
                 case "dns": DNSView()
                 case "dns_items": DnsItemsView()
                 case "xray_advanced": XrayAdvancedView()
+                case "warp": WarpView()
                 case "network_settings": NetworkSettingsView()
                 case "speed_settings": SpeedTestSettingsView()
                 case "on_demand": OnDemandView()

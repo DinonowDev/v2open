@@ -22,17 +22,19 @@ V2Open سرویس VPN نمی‌فروشد و سرورهای کانفیگ شما 
 
 **[→ دریافت آخرین نسخه (zip مک)](https://github.com/DinonowDev/v2open/releases/latest)**
 
-1. از [GitHub Releases](https://github.com/DinonowDev/v2open/releases) فایل `V2Open-*-macos-arm64.zip` را بگیرید.
+1. از [GitHub Releases](https://github.com/DinonowDev/v2open/releases) فایل مناسب مک خود را بگیرید:
+   - Apple Silicon: `V2Open-*-macos-arm64.zip`
+   - Intel: `V2Open-*-macos-x86_64.zip`
 2. از zip خارج کنید و **V2Open.app** را به **Programs** بکشید.
-3. بار اول: **Right-click → Open** اگر macOS هشدار امضا داد، یا `xattr -cr /Applications/V2Open.app`.
+3. بیلد notarize شده عادی باز می‌شود. اگر Gatekeeper گفت توسعه‌دهنده تأیید نشده، آن zip امضا نشده است: یک بار **Right-click → Open**، یا `xattr -cr /Applications/V2Open.app`.
 
-برای **Apple Silicon** zip آماده کافی است. **مک Intel:** با `./build-macos.sh` و [باینری‌های](docs/binaries.md) مناسب arch خودتان بیلد بگیرید. گاهی نسخهٔ آزمایشی در artifact **`V2Open-macos-arm64`** داخل [Actions](https://github.com/DinonowDev/v2open/actions) (۱۴ روز) هست.
+نسخهٔ آزمایشی هر دو معماری در artifactهای **`V2Open-macos-arm64`** و **`V2Open-macos-x86_64`** داخل [Actions](https://github.com/DinonowDev/v2open/actions) است (۱۴ روز).
 
 سند انگلیسی: [README.md](README.md)
 
 | | |
 | --- | --- |
-| **نسخه فعلی** | `1.1.0` (بیلد `2`) — فایل [`VERSION`](VERSION) |
+| **نسخه فعلی** | `1.2.0` (بیلد `3`) — فایل [`VERSION`](VERSION) |
 | **پلتفرم** | macOS ۱۳ به بالا |
 | **منبع** | [github.com/DinonowDev/v2open](https://github.com/DinonowDev/v2open) |
 | **توسعه‌دهنده** | امیرحسین رضایی |
@@ -58,13 +60,15 @@ V2Open سرویس VPN نمی‌فروشد و سرورهای کانفیگ شما 
 
 ## قابلیت‌ها
 
-- ورود لینک اشتراک (`vless`، `vmess`، `trojan`، `ss`، `ssr`، `hy2`، `hysteria`، `wireguard`، `ssh`، `socks`، `dnstt`، `masterdns`، `ping`، `chain` و …) از کلیپ‌بورد، QR، فایل یا URL scheme
+- ورود لینک اشتراک (`vless`، `vmess`، `trojan`، `ss`، `ssr`، `hy2`، `hysteria`، `tuic`، `anytls`، `naive`، `wireguard`، `warp`، `vpn`، `ssh`، `socks`، `dnstt`، `masterdns`، `ping`، `chain` و …) از کلیپ‌بورد، QR، فایل یا URL scheme
 - گروه اشتراک و به‌روزرسانی زمان‌بندی‌شده
 - اتصال به‌صورت تونل VPN سیستمی یا پروکسی SOCKS/HTTP محلی
 - روتینگ با پیش‌تنظیم (جهانی، ایران، روسیه، چین) یا ویرایشگر قانون
 - پینگ، انتخاب بهترین سرور، Smart Connect و تست سرعت داخل اپ
-- محدودیت per-app، kill switch، FakeDNS، mux، fragment، Clash API، بالانسر Xray
+- محدودیت per-app، kill switch، FakeDNS، mux، fragment TLS، **ECH**، ShadowTLS روی Shadowsocks، **AmneziaWG**، **WARP** داخلی Cloudflare (WARP روی WARP و زنجیره پشت کانفیگ)، **noise UDP در Xray**، Clash API، بالانسر Xray
 - پشتیبان محلی، بسته قفل‌شده `.v2box`، همگام‌سازی اختیاری iCloud
+- آیکن نوار منو برای اتصال، قطع و عوض کردن سرور، حتی وقتی پنجره بسته است
+- بررسی نسخهٔ جدید از GitHub Releases و نصب از داخل اپ
 - ده زبان رابط از جمله فارسی
 
 مسئولیت کانفیگ‌هایی که وارد می‌کنید و رعایت قوانین کشورتان با شماست.

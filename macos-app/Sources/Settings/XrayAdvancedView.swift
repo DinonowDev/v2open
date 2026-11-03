@@ -9,6 +9,7 @@ struct XrayAdvancedView: View {
     @State private var probeInterval = ""
     @State private var smartInterval = ""
     @State private var sheetBalancer: [String: Any]?
+    @State private var noises: [[String: String]] = []
 
     private var balancers: [[String: Any]] {
         model.settings["xray_balancers"] as? [[String: Any]] ?? []
@@ -18,6 +19,26 @@ struct XrayAdvancedView: View {
         sub(model.t("xrayAdvanced")) {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 16) {
+                    SettingsSectionLabel(text: model.t("xrayNoise"))
+                    SettingsCard {
+                        SettingsToggleRow(title: model.t("xrayNoise"), hint: model.t("xrayNoiseInfo"), isOn: model.settings["xray_noise_enabled"] as? Bool ?? false) {
+                            model.set("xray_noise_enabled", $0)
+                        }
+                        if model.settings["xray_noise_enabled"] as? Bool == true {
+                            ForEach(noises.indices, id: \.self) { index in
+                                SettingsDivider()
+                                noiseRow(index)
+                            }
+                            SettingsDivider(inset: 58)
+                            SettingsNavRow(icon: "plus", title: model.t("addNoise"), chevron: false) {
+                                noises.append(["type": "rand", "packet": "10-20", "delay": "10-16", "apply_to": "ip"])
+                            }
+                        }
+                    }
+                    if model.settings["xray_noise_enabled"] as? Bool == true {
+                        SheetActionButton(title: model.t("save"), primary: true, icon: "checkmark") { saveNoises() }
+                    }
+
                     SettingsSectionLabel(text: model.t("xrayPolicy"))
                     SettingsCard {
                         V2Field(label: model.t("policyLevel"), placeholder: "0", text: $policyLevel, latin: true, icon: "number")
@@ -147,7 +168,61 @@ struct XrayAdvancedView: View {
         ]
     }
 
+    func noiseRow(_ index: Int) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                SoftSelect(
+                    title: model.t("noiseType"),
+                    value: noiseValue(index, "type", "rand"),
+                    options: [("rand", "rand"), ("str", "str"), ("hex", "hex"), ("base64", "base64")],
+                    wide: true
+                ) { setNoise(index, "type", $0) }
+                SoftSelect(
+                    title: model.t("noiseApplyTo"),
+                    value: noiseValue(index, "apply_to", "ip"),
+                    options: [("ip", "IPv4 + IPv6"), ("ipv4", "IPv4"), ("ipv6", "IPv6")],
+                    wide: true
+                ) { setNoise(index, "apply_to", $0) }
+            }
+            V2Field(label: model.t("noisePacket"), placeholder: noiseValue(index, "type", "rand") == "rand" ? "10-20" : "packet", text: noiseBinding(index, "packet"), latin: true, icon: "shippingbox")
+            V2Field(label: model.t("noiseDelay"), placeholder: "10-16", text: noiseBinding(index, "delay"), latin: true, icon: "timer")
+            SheetActionButton(title: model.t("delete"), danger: true, icon: "trash") {
+                if noises.indices.contains(index) { noises.remove(at: index) }
+            }
+        }
+        .padding(14)
+    }
+
+    func noiseValue(_ index: Int, _ key: String, _ fallback: String) -> String {
+        guard noises.indices.contains(index) else { return fallback }
+        let value = noises[index][key] ?? ""
+        return value.isEmpty ? fallback : value
+    }
+
+    func setNoise(_ index: Int, _ key: String, _ value: String) {
+        guard noises.indices.contains(index) else { return }
+        noises[index][key] = value
+    }
+
+    func noiseBinding(_ index: Int, _ key: String) -> Binding<String> {
+        Binding(
+            get: { noises.indices.contains(index) ? (noises[index][key] ?? "") : "" },
+            set: { setNoise(index, key, $0) }
+        )
+    }
+
+    func saveNoises() {
+        let rows = noises
+            .map { row in row.mapValues { $0.trimmingCharacters(in: .whitespacesAndNewlines) } }
+            .filter { !($0["packet"] ?? "").isEmpty }
+        model.set("xray_noises", rows)
+        noises = rows
+        model.showToast(model.t("saved"), tone: .success)
+    }
+
     func loadFields() {
+        let stored = model.settings["xray_noises"] as? [[String: Any]] ?? []
+        noises = stored.map { row in row.mapValues { "\($0)" } }
         policyLevel = stringInt("xray_policy_level", default: 0)
         uplinkOnly = stringInt("xray_policy_uplink_only", default: 0)
         downlinkOnly = stringInt("xray_policy_downlink_only", default: 0)
@@ -173,7 +248,11 @@ struct XrayAdvancedView: View {
             "burst_observatory": model.settings["burst_observatory"] as? Bool ?? false,
             "probe_url": probeUrl.trimmingCharacters(in: .whitespacesAndNewlines),
             "probe_interval": probeInterval.trimmingCharacters(in: .whitespacesAndNewlines),
-            "smart_interval": smartInterval.trimmingCharacters(in: .whitespacesAndNewlines)
+            "smart_interval": smartInterval.trimmingCharacters(in: .whitespacesAndNewlines),
+            "xray_noise_enabled": model.settings["xray_noise_enabled"] as? Bool ?? false,
+            "xray_noises": noises.map { row in
+                row.mapValues { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            }.filter { !($0["packet"] ?? "").isEmpty }
         ]
         let response = model.call("save_xray_advanced", payload)
         model.mergeState(from: response)

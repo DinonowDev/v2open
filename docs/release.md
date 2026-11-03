@@ -25,25 +25,18 @@ git tag -a "vX.Y.Z" -m "V2Open X.Y.Z"
 git push origin "vX.Y.Z"
 ```
 
-9. **GitHub Actions** runs [`.github/workflows/release.yml`](../.github/workflows/release.yml) on that tag: tests, `./build-macos.sh`, zip `V2Open-{version}-build{N}-macos-arm64.zip`, and a GitHub Release with the matching `[x.y.z]` section from `CHANGELOG.md`. No manual upload unless the workflow failed and you are recovering by hand.
+9. **GitHub Actions** runs [`.github/workflows/release.yml`](../.github/workflows/release.yml) on that tag: tests, `./build-macos.sh` for **arm64** and **x86_64**, zips `V2Open-{version}-build{N}-macos-arm64.zip` and `V2Open-{version}-build{N}-macos-x86_64.zip`, and a GitHub Release with the matching `[x.y.z]` section from `CHANGELOG.md`. No manual upload unless the workflow failed and you are recovering by hand.
 10. Smoke-test About → version plate matches `x.y.z (build)`.
 
-Optional: after every push to `main`, CI attaches an unsigned **`V2Open-macos-arm64`** artifact (14-day retention) on the latest workflow run — useful for testers before you tag.
+After every push to `main`, CI uploads **`V2Open-macos-arm64`** and **`V2Open-macos-x86_64`** zip artifacts (14-day retention).
 
 ---
 
-## Optional signing on CI
+## Signing on CI
 
-Ad-hoc builds from CI are **unsigned** (same as local `./build-macos.sh` without a Developer ID). Users may need **Right-click → Open** the first time. Full **Network Extension / VPN** mode still needs a signed Packet Tunnel; see [signing.md](signing.md).
+Without Apple secrets the zips are ad-hoc. Users may need **Right-click → Open** the first time. With the secrets in [signing.md](signing.md) and [apple-ci-secrets.md](apple-ci-secrets.md), the same workflow signs with Developer ID, notarizes, and staples before zipping. System VPN still needs those provisioning profiles; an ad-hoc Packet Tunnel is not a system VPN.
 
-To sign and notarize release zips from Actions later, add repository secrets (same pattern as [DinonowDev/LazyDisk](https://github.com/DinonowDev/LazyDisk)):
-
-| Secret | Purpose |
-| --- | --- |
-| `CODE_SIGN_IDENTITY` | e.g. `Developer ID Application: …` |
-| `NOTARYTOOL_PROFILE` | Keychain profile name for `notarytool` |
-
-Then extend `release.yml` to export those env vars before `./build-macos.sh` (and add notarization steps to `build-macos.sh` when you are ready).
+Before the first signed release, run [scripts/encode-apple-secrets.sh](../scripts/encode-apple-secrets.sh) and set repository secrets, then `./scripts/pre-release-check.sh` before tagging.
 
 ---
 

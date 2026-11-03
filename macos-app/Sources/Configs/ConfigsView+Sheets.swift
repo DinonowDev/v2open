@@ -17,6 +17,8 @@ extension ConfigsView {
                     Rectangle().fill(C.line).frame(height: 1).padding(.leading, 64)
                     AddActionRow(icon: "slider.horizontal.3", title: model.t("manual"), hint: model.t("manualHint"), tint: C.cyan, action: openManualEditor)
                     Rectangle().fill(C.line).frame(height: 1).padding(.leading, 64)
+                    AddActionRow(icon: "cloud.fill", title: model.t("warpTitle"), hint: model.t("warpHint"), tint: Color(red: 0.96, green: 0.55, blue: 0.2), action: { addStep = .none; model.push("warp") })
+                    Rectangle().fill(C.line).frame(height: 1).padding(.leading, 64)
                     AddActionRow(icon: "folder", title: model.t("file"), hint: model.t("fileHint"), tint: Color(red: 0.96, green: 0.72, blue: 0.38), action: importFile)
                 }
                 .background(C.cardElevated)

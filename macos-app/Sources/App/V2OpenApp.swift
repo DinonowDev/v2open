@@ -1,15 +1,45 @@
 import SwiftUI
 import AppKit
 import CoreText
+@preconcurrency import UserNotifications
 
-final class AppTerminator: NSObject, NSApplicationDelegate {
+final class AppTerminator: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        UNUserNotificationCenter.current().delegate = self
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag { MenuBarCenter.shared.open() }
+        return true
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         let settings = (v2RPC(method: "state")["data"] as? [String: Any])?["settings"] as? [String: Any] ?? [:]
+        if settings["menu_bar"] as? Bool ?? true { return false }
         let keep = (settings["geo_auto_update"] as? Bool == true)
             || (settings["on_demand"] as? Bool == true)
             || (settings["persist_tunnel"] as? Bool == true)
             || (settings["sub_auto_update"] as? Bool == true)
         return !keep
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound])
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        Task { @MainActor in
+            MenuBarCenter.shared.open(page: "about")
+        }
+        completionHandler()
     }
 
     func application(_ sender: NSApplication, open urls: [URL]) {
@@ -47,9 +77,10 @@ struct V2OpenApp: App {
         registerFonts()
     }
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: "main") {
             RootView()
                 .environmentObject(model)
+                .background(WindowBridgeInstaller())
                 .background(WindowChrome(light: model.themeLight))
                 .onAppear { model.boot() }
                 .onReceive(NotificationCenter.default.publisher(for: .v2openOpenURLs)) { note in
@@ -75,6 +106,13 @@ struct V2OpenApp: App {
         .defaultSize(width: AppFrame.width, height: AppFrame.height)
         .windowResizability(.contentSize)
         .windowStyle(.hiddenTitleBar)
+        .commands {
+            CommandGroup(after: .appInfo) {
+                Button(model.t("checkForUpdates")) {
+                    AppUpdater.shared.check(interactive: true)
+                }
+            }
+        }
         Window("Logs", id: "logs-window") {
             LogsView()
                 .environmentObject(model)

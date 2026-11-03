@@ -67,8 +67,8 @@ fn assemble(settings: &Value, profiles: &[Value], rules: &[Value], rules_dir: &P
         let last = produced.last().unwrap();
         tags.push((last.0.clone(), last.1.clone()));
     }
-    let final_tag = if profiles.len() > 1 {
-        let proxy_tags: Vec<String> = tags.iter().filter(|(k, _)| k == "outbound").map(|(_, t)| t.clone()).collect();
+    let mut final_tag = if profiles.len() > 1 {
+        let proxy_tags: Vec<String> = tags.iter().map(|(_, t)| t.clone()).collect();
         if proxy_tags.is_empty() {
             return Err("smart connect needs proxy profiles".into());
         }
@@ -84,6 +84,14 @@ fn assemble(settings: &Value, profiles: &[Value], rules: &[Value], rules_dir: &P
     } else {
         tags[0].1.clone()
     };
+    if let Some(chain) = settings.get("_warp_chain").filter(|v| v.is_object()) {
+        let mut pieces = warp(chain, "warp")?;
+        if let Some(first) = pieces.first_mut() {
+            first.2["detour"] = json!(final_tag);
+        }
+        final_tag = pieces.last().map(|p| p.1.clone()).unwrap_or(final_tag);
+        endpoints.extend(pieces.into_iter().map(|p| p.2));
+    }
     outbounds.push(json!({"type":"direct","tag":"direct"}));
     outbounds.push(json!({"type":"block","tag":"block"}));
     for outbound in &mut outbounds {
@@ -194,10 +202,47 @@ fn rewrite(config: &mut Value, tag: &str) {
     }
 }
 
+fn num(v: &Value, key: &str) -> u64 {
+    match &v[key] {
+        Value::Number(n) => n.as_u64().unwrap_or(0),
+        Value::String(text) => text.trim().parse().unwrap_or(0),
+        _ => 0,
+    }
+}
+
+fn truthy(v: &Value, key: &str) -> bool {
+    match &v[key] {
+        Value::Bool(b) => *b,
+        Value::String(text) => matches!(text.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"),
+        Value::Number(n) => n.as_u64().unwrap_or(0) > 0,
+        _ => false,
+    }
+}
+
+fn expand(profile: &Value, tag: &str, settings: &Value) -> Result<Vec<(String, String, Value)>, String> {
+    let protocol = s(profile, "protocol");
+    if protocol == "warp" {
+        return warp(profile, tag);
+    }
+    if protocol == "shadowsocks" && !s(profile, "shadowtls_version").is_empty() {
+        let wrap_tag = format!("{tag}t");
+        let wrap = shadowtls(profile, &wrap_tag, settings);
+        let (kind, mut inner) = node(profile, tag, settings)?;
+        if let Some(obj) = inner.as_object_mut() {
+            obj.remove("server");
+            obj.remove("server_port");
+            obj.remove("domain_resolver");
+        }
+        inner["detour"] = json!(wrap_tag);
+        return Ok(vec![("outbound".into(), wrap_tag, wrap), (kind, tag.to_string(), inner)]);
+    }
+    let (kind, node) = node(profile, tag, settings)?;
+    Ok(vec![(kind, tag.to_string(), node)])
+}
+
 fn materialize(profile: &Value, prefix: &str, settings: &Value) -> Result<Vec<(String, String, Value)>, String> {
     if s(profile, "protocol") != "chain" {
-        let (kind, node) = node(profile, prefix, settings)?;
-        return Ok(vec![(kind, prefix.to_string(), node)]);
+        return expand(profile, prefix, settings);
     }
     let mut hops = Vec::new();
     for hop in profile["chain"].as_array().cloned().unwrap_or_default() {
@@ -216,15 +261,14 @@ fn materialize(profile: &Value, prefix: &str, settings: &Value) -> Result<Vec<(S
     }
     let mut produced: Vec<(String, String, Value)> = Vec::new();
     for (i, hop) in hops.iter().enumerate() {
-        if matches!(s(hop, "protocol").as_str(), "wireguard" | "chain") {
+        if s(hop, "protocol") == "chain" {
             return Err("chain hops must be proxy links".into());
         }
-        let tag = format!("{prefix}h{i}");
-        let (kind, mut node) = node(hop, &tag, settings)?;
-        if i > 0 {
-            node["detour"] = json!(produced.last().unwrap().1);
+        let mut pieces = expand(hop, &format!("{prefix}h{i}"), settings)?;
+        if let (Some(previous), Some(first)) = (produced.last(), pieces.first_mut()) {
+            first.2["detour"] = json!(previous.1);
         }
-        produced.push((kind, tag, node));
+        produced.extend(pieces);
     }
     Ok(produced)
 }
@@ -235,7 +279,7 @@ fn node(profile: &Value, tag: &str, settings: &Value) -> Result<(String, Value),
         return Err(format!("{protocol} is saved, and this core does not run it"));
     }
     if protocol == "wireguard" {
-        return Ok(("endpoint".into(), wireguard(profile, tag)));
+        return Ok(("endpoint".into(), wireguard(profile, tag)?));
     }
     Ok(("outbound".into(), proxy(profile, tag, settings)?))
 }
@@ -272,7 +316,42 @@ fn proxy(profile: &Value, tag: &str, settings: &Value) -> Result<Value, String> 
             let method = s(profile, "method");
             node["method"] = json!(if method.is_empty() { "chacha20-ietf-poly1305".to_string() } else { method });
             node["password"] = json!(s(profile, "password"));
+            let plugin = s(profile, "plugin");
+            if matches!(plugin.as_str(), "obfs-local" | "v2ray-plugin") && s(profile, "shadowtls_version").is_empty() {
+                node["plugin"] = json!(plugin);
+                node["plugin_opts"] = json!(s(profile, "plugin_opts"));
+            }
         }
+        "tuic" => {
+            node["type"] = json!("tuic");
+            node["uuid"] = json!(s(profile, "uuid"));
+            node["password"] = json!(s(profile, "password"));
+            let cc = s(profile, "congestion_control");
+            node["congestion_control"] = json!(if cc.is_empty() { "bbr".to_string() } else { cc });
+            let relay = s(profile, "udp_relay_mode");
+            if matches!(relay.as_str(), "native" | "quic") {
+                node["udp_relay_mode"] = json!(relay);
+            }
+            if truthy(profile, "zero_rtt") {
+                node["zero_rtt_handshake"] = json!(true);
+            }
+            if !s(profile, "heartbeat").is_empty() {
+                node["heartbeat"] = json!(duration(&s(profile, "heartbeat"), "ms"));
+            }
+        }
+        "anytls" => {
+            node["type"] = json!("anytls");
+            node["password"] = json!(s(profile, "password"));
+            for key in ["idle_session_check_interval", "idle_session_timeout"] {
+                if !s(profile, key).is_empty() {
+                    node[key] = json!(duration(&s(profile, key), "s"));
+                }
+            }
+            if num(profile, "min_idle_session") > 0 {
+                node["min_idle_session"] = json!(num(profile, "min_idle_session"));
+            }
+        }
+        "naive" => return Ok(naive_outbound(profile, tag)),
         "socks" => {
             node["type"] = json!("socks");
             node["version"] = json!("5");
@@ -305,11 +384,11 @@ fn proxy(profile: &Value, tag: &str, settings: &Value) -> Result<Value, String> 
             }
             node["type"] = json!("hysteria2");
             node["password"] = json!(password);
-            if profile["up_mbps"].as_u64().unwrap_or(0) > 0 {
-                node["up_mbps"] = profile["up_mbps"].clone();
+            if num(profile, "up_mbps") > 0 {
+                node["up_mbps"] = json!(num(profile, "up_mbps"));
             }
-            if profile["down_mbps"].as_u64().unwrap_or(0) > 0 {
-                node["down_mbps"] = profile["down_mbps"].clone();
+            if num(profile, "down_mbps") > 0 {
+                node["down_mbps"] = json!(num(profile, "down_mbps"));
             }
             if !s(profile, "obfs").is_empty() {
                 node["obfs"] = json!({"type": s(profile, "obfs"), "password": s(profile, "obfs_password")});
@@ -322,12 +401,23 @@ fn proxy(profile: &Value, tag: &str, settings: &Value) -> Result<Value, String> 
         "hysteria" => {
             node["type"] = json!("hysteria");
             node["auth_str"] = json!(s(profile, "password"));
-            node["up_mbps"] = json!(profile["up_mbps"].as_u64().filter(|n| *n > 0).unwrap_or(100));
-            node["down_mbps"] = json!(profile["down_mbps"].as_u64().filter(|n| *n > 0).unwrap_or(100));
+            node["up_mbps"] = json!(Some(num(profile, "up_mbps")).filter(|n| *n > 0).unwrap_or(100));
+            node["down_mbps"] = json!(Some(num(profile, "down_mbps")).filter(|n| *n > 0).unwrap_or(100));
+            if !s(profile, "obfs").is_empty() {
+                node["obfs"] = json!(s(profile, "obfs"));
+            }
         }
         other => return Err(format!("unsupported protocol {other}")),
     }
-    if let Some(tls) = tls(profile, settings) {
+    let tls_required = matches!(protocol.as_str(), "tuic" | "anytls" | "hysteria" | "hysteria2");
+    let tls_value = tls(profile, settings).or_else(|| tls_required.then(|| tls(&forced_tls(profile), settings)).flatten());
+    if let Some(mut tls) = tls_value {
+        if protocol == "tuic" && truthy(profile, "disable_sni") {
+            tls["disable_sni"] = json!(true);
+        }
+        if protocol == "tuic" && tls.get("alpn").is_none() {
+            tls["alpn"] = json!(["h3"]);
+        }
         if !matches!(protocol.as_str(), "shadowsocks" | "socks" | "ssh") {
             node["tls"] = tls;
         }
@@ -367,8 +457,108 @@ fn tls(profile: &Value, settings: &Value) -> Option<Value> {
         let fp = s(profile, "fp");
         tls["reality"] = json!({"enabled": true, "public_key": s(profile, "pbk"), "short_id": s(profile, "sid")});
         tls["utls"] = json!({"enabled": true, "fingerprint": if fp.is_empty() { "chrome".to_string() } else { fp }});
+    } else if let Some(ech) = ech(profile) {
+        tls["ech"] = ech;
     }
     Some(tls)
+}
+
+fn forced_tls(profile: &Value) -> Value {
+    let mut copy = profile.clone();
+    copy["tls"] = json!("tls");
+    copy
+}
+
+fn ech(profile: &Value) -> Option<Value> {
+    if !truthy(profile, "ech") {
+        return None;
+    }
+    let mut ech = json!({"enabled": true});
+    let config = s(profile, "ech_config");
+    let config = config.trim();
+    if !config.is_empty() && !config.contains("://") {
+        let body = crate::parser::pem_to_b64(config);
+        if !body.is_empty() {
+            ech["config"] = json!(["-----BEGIN ECH CONFIGS-----", body, "-----END ECH CONFIGS-----"]);
+        }
+    }
+    let name = s(profile, "ech_query_server_name");
+    if !name.is_empty() {
+        ech["query_server_name"] = json!(name);
+    }
+    Some(ech)
+}
+
+fn duration(raw: &str, unit: &str) -> String {
+    let raw = raw.trim();
+    if raw.chars().all(|c| c.is_ascii_digit()) {
+        format!("{raw}{unit}")
+    } else {
+        raw.to_string()
+    }
+}
+
+pub fn naive_outbound(profile: &Value, tag: &str) -> Value {
+    let address = s(profile, "address");
+    let sni = s(profile, "sni");
+    let mut node = json!({
+        "type": "naive",
+        "tag": tag,
+        "server": address,
+        "server_port": profile["port"].as_u64().filter(|p| *p > 0).unwrap_or(443),
+        "username": s(profile, "username"),
+        "password": s(profile, "password"),
+        "tls": {"enabled": true, "server_name": if sni.is_empty() { address.clone() } else { sni }}
+    });
+    if truthy(profile, "insecure") {
+        node["tls"]["insecure"] = json!(true);
+    }
+    if truthy(profile, "naive_quic") {
+        node["quic"] = json!(true);
+    }
+    if num(profile, "insecure_concurrency") > 0 {
+        node["insecure_concurrency"] = json!(num(profile, "insecure_concurrency"));
+    }
+    let headers = s(profile, "extra_headers");
+    if !headers.is_empty() {
+        let mut map = serde_json::Map::new();
+        for pair in headers.split(|c| c == '\n' || c == ',') {
+            if let Some((k, v)) = pair.split_once(':').or_else(|| pair.split_once('=')) {
+                if !k.trim().is_empty() {
+                    map.insert(k.trim().to_string(), json!(v.trim()));
+                }
+            }
+        }
+        if !map.is_empty() {
+            node["extra_headers"] = Value::Object(map);
+        }
+    }
+    node
+}
+
+fn shadowtls(profile: &Value, tag: &str, settings: &Value) -> Value {
+    let address = s(profile, "address");
+    let sni = s(profile, "shadowtls_sni");
+    let sni = if sni.is_empty() { s(profile, "sni") } else { sni };
+    let fp = s(profile, "fp");
+    let version = num(profile, "shadowtls_version").clamp(1, 3);
+    let mut node = json!({
+        "type": "shadowtls",
+        "tag": tag,
+        "server": address,
+        "server_port": profile["port"].as_u64().unwrap_or(443),
+        "version": version,
+        "tls": {
+            "enabled": true,
+            "server_name": if sni.is_empty() { address.clone() } else { sni },
+            "insecure": truthy(profile, "insecure") || settings["allow_insecure"].as_bool().unwrap_or(false),
+            "utls": {"enabled": true, "fingerprint": if fp.is_empty() { "chrome".to_string() } else { fp }}
+        }
+    });
+    if version > 1 {
+        node["password"] = json!(s(profile, "shadowtls_password"));
+    }
+    node
 }
 
 fn transport(profile: &Value, settings: &Value) -> Result<Option<Value>, String> {
@@ -425,30 +615,113 @@ fn transport(profile: &Value, settings: &Value) -> Result<Option<Value>, String>
     Err(format!("transport {network} is not available on this core"))
 }
 
-fn wireguard(profile: &Value, tag: &str) -> Value {
-    let reserved: Vec<u64> = s(profile, "reserved").split(',').filter_map(|p| p.trim().parse().ok()).take(3).collect();
-    let local: Vec<String> = if s(profile, "local_address").is_empty() { vec!["10.0.0.2/32".into()] } else { s(profile, "local_address").split(',').map(|v| v.trim().to_string()).filter(|v| !v.is_empty()).collect() };
+fn wireguard(profile: &Value, tag: &str) -> Result<Value, String> {
+    let private_key = s(profile, "private_key");
+    if private_key.is_empty() {
+        return Err("WireGuard needs a private key".into());
+    }
+    let split = |raw: String| raw.split(',').map(|v| v.trim().to_string()).filter(|v| !v.is_empty()).collect::<Vec<String>>();
+    let mut local = split(s(profile, "local_address"));
+    if local.is_empty() {
+        local.push("10.0.0.2/32".into());
+    }
+    let mut allowed = split(s(profile, "allowed_ips"));
+    if allowed.is_empty() {
+        allowed = vec!["0.0.0.0/0".into(), "::/0".into()];
+    }
     let mut peer = json!({
         "address": s(profile, "address"),
-        "port": profile["port"].as_u64().unwrap_or(51820),
+        "port": profile["port"].as_u64().filter(|p| *p > 0).unwrap_or(51820),
         "public_key": s(profile, "peer_public_key"),
-        "allowed_ips": ["0.0.0.0/0", "::/0"]
+        "allowed_ips": allowed
     });
     if !s(profile, "preshared_key").is_empty() {
         peer["pre_shared_key"] = json!(s(profile, "preshared_key"));
     }
-    if !reserved.is_empty() {
-        peer["reserved"] = json!(reserved);
+    if num(profile, "keepalive") > 0 {
+        peer["persistent_keepalive_interval"] = json!(num(profile, "keepalive").min(65535));
     }
-    json!({
+    let mut endpoint = json!({
         "type": "wireguard",
         "tag": tag,
-        "private_key": s(profile, "private_key"),
+        "private_key": private_key,
         "address": local,
-        "mtu": profile["mtu"].as_u64().filter(|n| *n > 0).unwrap_or(1280),
+        "mtu": Some(num(profile, "mtu")).filter(|n| *n > 0).unwrap_or(1280),
         "peers": [peer],
         "domain_resolver": "dns-direct"
-    })
+    });
+    if let Some(amnezia) = amnezia(profile) {
+        endpoint["amnezia"] = amnezia;
+    }
+    Ok(endpoint)
+}
+
+fn amnezia(profile: &Value) -> Option<Value> {
+    let mut obj = serde_json::Map::new();
+    for key in crate::parser::AWG_KEYS {
+        let raw = s(profile, &format!("awg_{key}"));
+        let raw = raw.trim();
+        if raw.is_empty() {
+            continue;
+        }
+        if matches!(key, "jc" | "jmin" | "jmax" | "s1" | "s2" | "s3" | "s4") {
+            if let Ok(n) = raw.parse::<i64>() {
+                obj.insert(key.to_string(), json!(n));
+            }
+        } else {
+            obj.insert(key.to_string(), json!(raw));
+        }
+    }
+    if obj.is_empty() { None } else { Some(Value::Object(obj)) }
+}
+
+pub const WARP_ENDPOINT: &str = "162.159.192.1";
+pub const WARP_PORT: u64 = 2408;
+pub const WARP_PEER: &str = "bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=";
+
+fn warp_wireguard(account: &Value, profile: &Value, tag: &str) -> Result<Value, String> {
+    let mut wg = account.clone();
+    if !wg.is_object() {
+        wg = json!({});
+    }
+    let address = s(profile, "address");
+    wg["address"] = json!(if address.is_empty() { WARP_ENDPOINT.to_string() } else { address });
+    wg["port"] = json!(Some(num(profile, "port")).filter(|p| *p > 0).unwrap_or(WARP_PORT));
+    if s(&wg, "peer_public_key").is_empty() {
+        wg["peer_public_key"] = json!(WARP_PEER);
+    }
+    if num(&wg, "mtu") == 0 {
+        wg["mtu"] = json!(Some(num(profile, "mtu")).filter(|n| *n > 0).unwrap_or(1280));
+    }
+    wireguard(&wg, tag)
+}
+
+fn warp(profile: &Value, tag: &str) -> Result<Vec<(String, String, Value)>, String> {
+    if s(profile, "private_key").is_empty() {
+        return Err("the WARP account is not registered yet".into());
+    }
+    let mut inner = warp_wireguard(profile, profile, tag)?;
+    if !truthy(profile, "warp_wow") {
+        return Ok(vec![("endpoint".into(), tag.to_string(), inner)]);
+    }
+    let mut outer_account = profile["warp_outer"].clone();
+    if s(&outer_account, "private_key").is_empty() {
+        return Err("WARP-on-WARP needs a second WARP account".into());
+    }
+    for key in crate::parser::AWG_KEYS {
+        let field = format!("awg_{key}");
+        outer_account[&field] = profile[&field].clone();
+    }
+    let outer_tag = format!("{tag}o");
+    let outer = warp_wireguard(&outer_account, profile, &outer_tag)?;
+    if let Some(obj) = inner.as_object_mut() {
+        obj.remove("amnezia");
+    }
+    if num(profile, "mtu") == 0 {
+        inner["mtu"] = json!(1200);
+    }
+    inner["detour"] = json!(outer_tag);
+    Ok(vec![("endpoint".into(), outer_tag, outer), ("endpoint".into(), tag.to_string(), inner)])
 }
 
 fn strategy(settings: &Value) -> &'static str {

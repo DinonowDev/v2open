@@ -11,8 +11,10 @@
 ```bash
 xcode-select -p
 rustc --version
-ls binaries/macos/sing-box binaries/macos/xray
+ls binaries/macos/sing-box binaries/macos/sing-box.official binaries/macos/xray
 ```
+
+Apple Silicon keeps an **extended** `sing-box` plus stock `sing-box.official` (bundled as `sing-box-naive` for NaiveProxy). Intel release builds fetch official engines into `binaries/macos-x86_64/` via `fetch-macos-engines.sh`, which also copies `sing-box.official` for the naive sidecar. Details: [binaries.md](binaries.md).
 
 There is no Xcode project. The app is compiled with `swiftc -parse-as-library` over every `macos-app/Sources/**/*.swift` file.
 
@@ -22,10 +24,15 @@ There is no Xcode project. The app is compiled with `swiftc -parse-as-library` o
 
 | Script | Purpose |
 | --- | --- |
-| `macos-env.sh` | Sourced by the others. Sets `MACOSX_DEPLOYMENT_TARGET`, `SWIFT_TARGET`, ad-hoc or identity codesign, Packet Tunnel compile helper. |
-| `dev-macos.sh` | Debug `V2Open-Dev.app` (`-g -Onone`, debug `v2core`). |
+| `macos-env.sh` | Sourced by the others. Sets `MACOSX_DEPLOYMENT_TARGET`, `SWIFT_TARGET`, `V2OPEN_ARCH` (`arm64` or `x86_64`), codesign, Packet Tunnel compile helper. |
+| `dev-macos.sh` | Debug `V2Open-Dev.app` (`-g -Onone`, debug `v2core`). Prefers an Apple Development identity. |
 | `dev-watch-macos.sh` | Rebuild + relaunch when Swift, speedometer assets, or `native/core/src` change. |
-| `build-macos.sh` | Release `V2Open.app` (`-O`, `--release` crate). |
+| `build-macos.sh` | Release `V2Open.app` (`-O`, `--release` crate). `V2OPEN_ARCH=x86_64` cross-compiles and fetches Intel engines. |
+| `scripts/fetch-macos-engines.sh` | Official sing-box, Xray, pingtunnel, optional dnstt; copies `sing-box.official` for NaiveProxy sidecar on Intel. |
+| `scripts/notarize-macos.sh` | `notarytool` submit, staple, `spctl`. |
+| `scripts/ci-import-certificate.sh` | GitHub Actions keychain import. No-op without secrets; requires both profiles when the certificate secret is set. |
+| `scripts/encode-apple-secrets.sh` | Base64 payloads and `gh secret set` hints — see [apple-ci-secrets.md](apple-ci-secrets.md). |
+| `scripts/pre-release-check.sh` | Run before `git tag`: docs, `## [x.y.z]` in CHANGELOG, tests, clean tree. |
 
 Do not copy compiler flags into a new script; extend `macos-env.sh`.
 
@@ -35,8 +42,8 @@ Do not copy compiler flags into a new script; extend `macos-env.sh`.
 
 | Workflow | Trigger | What it does |
 | --- | --- | --- |
-| [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) | PR + push to `main` | `check-docs.sh`, `cargo test -p v2core`, `test-swift.sh`, `./build-macos.sh`. On `main`, uploads artifact `V2Open-macos-arm64` (14 days). |
-| [`.github/workflows/release.yml`](../.github/workflows/release.yml) | Push tag `v*` | Same tests + build, zip, GitHub Release. Tag must match [`VERSION`](../VERSION) (e.g. `v1.1.0`). |
+| [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) | PR + push to `main` | `check-docs.sh`, `cargo test -p v2core`, `test-swift.sh`, then `./build-macos.sh` for arm64 and x86_64. On `main`, uploads both zips (14 days). |
+| [`.github/workflows/release.yml`](../.github/workflows/release.yml) | Push tag `v*` | Tests, both architectures, GitHub Release with both zips. Tag must match [`VERSION`](../VERSION). Signs and notarizes when Apple secrets are set. |
 
 Release process: [release.md](release.md).
 
@@ -78,7 +85,7 @@ Dev bundle identity is rewritten with PlistBuddy to `local.v2open.dev` so it can
 The script:
 
 1. `cargo build --release -p v2core`
-2. Copies fonts, locales, speedometer, app icons, `AppIcon.icns`, engines, `geoip.dat` / `geosite.dat`
+2. Copies fonts, locales, speedometer, app icons, `AppIcon.icns`, engines (`sing-box`, `xray`, sidecars, optional `sing-box-naive` from `sing-box.official`), `geoip.dat` / `geosite.dat`
 3. Compiles `PacketTunnel.appex` (`-O`)
 4. Compiles the SwiftUI app (`-O`) linking `libv2core`
 5. Codesigns engines, the app binary, and the bundle (with `macos-app/V2Open.entitlements` when a development identity exists)
@@ -147,6 +154,22 @@ Full system VPN requires a provisioning profile and the Network Extension entitl
 Do not disable SIP or copy random provisioning profiles into the repo.
 
 Full Packet Tunnel / notarization path: [signing.md](signing.md). Replacing engines: [binaries.md](binaries.md).
+
+---
+
+## Protocol work (Rust + UI)
+
+When you add or change an outbound type:
+
+1. **`native/core/src/parser.rs`** — share links, Clash, sing-box JSON import, `build_link`.
+2. **`native/core/src/builder.rs`** — sing-box outbounds/endpoints; run config through `binaries/macos/sing-box check` in `tests/config.rs` or manually.
+3. **`native/core/src/xray.rs`** + **`app.rs` `xray_capable`** — only if Xray should front the profile (noise/fragment/ECH go through the `dialer` freedom outbound).
+4. **`native/core/src/sidecar.rs`** — if the extended sing-box cannot run the protocol (NaiveProxy → `sing-box-naive`).
+5. **`native/core/src/warp.rs`** — Cloudflare registration for `warp` profiles and WARP-on-WARP.
+6. **Swift** — `ProtocolChipPicker`, `EditorView`, locales (all ten JSON files + `check-locales.sh`), `Info.plist` URL schemes, [user-guide.md](user-guide.md) § Protocols.
+7. **Docs** — [rpc.md](rpc.md), [CHANGELOG.md](../CHANGELOG.md), this file if build/copy steps change.
+
+Sidecar summary: SSR (in-process), MasterDNS, DNSTT, pingtunnel, **naive** (stock sing-box). See [architecture.md](architecture.md) § Sidecars.
 
 ---
 

@@ -3,12 +3,13 @@ import SwiftUI
 
 struct AboutView: View {
     @EnvironmentObject var model: Model
+    @ObservedObject private var updater = AppUpdater.shared
 
     private var about: [String: Any] { model.about }
     private var appVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
             ?? (about["app_version"] as? String)
-            ?? "1.1.0"
+            ?? "1.2.0"
     }
     private var build: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
@@ -53,6 +54,9 @@ struct AboutView: View {
                         .padding(20)
                     }
 
+                    SettingsSectionLabel(text: model.t("updates"))
+                    UpdateBanner()
+                    updateCard
                     SettingsSectionLabel(text: model.t("versions"))
                     versionsCard
                     SheetActionButton(title: model.t("copyVersions"), icon: "doc.on.clipboard") {
@@ -93,6 +97,33 @@ struct AboutView: View {
             }
             .scrollIndicators(.hidden)
             .onAppear { model.refreshAbout() }
+        }
+    }
+
+    private var updateCard: some View {
+        SettingsCard {
+            VStack(alignment: .leading, spacing: 10) {
+                if updater.release?.notes.isEmpty == false, let notes = updater.release?.notes {
+                    Mix(text: model.t("releaseNotes"), size: 12, weight: .semibold, color: C.muted)
+                    Mix(text: notes, size: 12, color: C.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .lineLimit(8)
+                }
+                SheetActionButton(title: model.t("checkForUpdates"), icon: "arrow.clockwise") {
+                    updater.check(interactive: true)
+                }
+                if case .upToDate = updater.phase {
+                    Mix(text: model.t("upToDate"), size: 12, color: C.green)
+                }
+                if case .checking = updater.phase {
+                    Mix(text: model.t("checkingUpdates"), size: 12, color: C.muted)
+                }
+                if case .failed(let message) = updater.phase, updater.release == nil {
+                    Mix(text: message, size: 12, color: Color(red: 1, green: 0.36, blue: 0.45))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(12)
         }
     }
 

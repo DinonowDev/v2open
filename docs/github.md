@@ -49,6 +49,12 @@ GitHub may reject a first push that contains `binaries/macos/sing-box` because o
 
 ---
 
+## Actions secrets (signed releases)
+
+To ship notarized zips from CI, set the Apple secrets listed in [apple-ci-secrets.md](apple-ci-secrets.md). Use [scripts/encode-apple-secrets.sh](../scripts/encode-apple-secrets.sh) locally, then `gh secret set …`. Leave **`APPLE_CERTIFICATE_BASE64` unset** if you only want ad-hoc CI artifacts.
+
+---
+
 ## Why this is not automatic
 
 A ruleset is server-side. Committing a YAML file does not protect `main`. Until this checklist is applied, contributors must still follow [docs/branching.md](branching.md) by convention.

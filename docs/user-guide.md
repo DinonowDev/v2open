@@ -25,6 +25,8 @@ Subpages are pushed on `Model.stack` (back button pops). A floating connect cont
 - `legacy_slider` restores slide-to-connect instead of the power button.
 - Stats: memory, upload/download rate and totals from `tick`.
 - Stop on sleep is on by default. Persist-tunnel and reconnect-after-wake are off by default.
+- The menu bar icon is on by default. It connects, disconnects, and switches servers. **Quit V2Open** is in that menu. With the icon on, closing the window does not quit.
+- A newer GitHub Release shows on Home and under **Settings → About**. **Download and Install** replaces this copy of the app (or copies it to Applications) and restarts. The zip must match this Mac (`macos-arm64` or `macos-x86_64`). The download is checked against the GitHub `sha256` digest when the release asset has one.
 
 ---
 
@@ -50,13 +52,25 @@ Sort: `sort_by` = `default` / `name` / ping / newest / download / upload.
 
 `ProtocolChipPicker` ids:
 
-`vless`, `vmess`, `trojan`, `shadowsocks`, `shadowsocksr`, `hysteria2`, `hysteria`, `chain`, `wireguard`, `ssh`, `socks`, `http`, `dnstt`, `masterdns`, `ping`
+`vless`, `vmess`, `trojan`, `shadowsocks`, `shadowsocksr`, `hysteria2`, `hysteria`, `tuic`, `anytls`, `naive`, `warp`, `chain`, `wireguard`, `ssh`, `socks`, `http`, `dnstt`, `masterdns`, `ping`
 
-Share-link schemes parsed in `parser.rs`: `vmess`, `vless`, `trojan`, `ss`, `hysteria2`/`hy2`, `hysteria`, `wireguard`/`wg`, `ssh`, `socks`/`socks5`, `http`/`https`, `dnstt`, `masterdns`, `ping`, `ssr`, `dnst`, `chain`, `v2box`/`v2open` (subscription URL).
+Share-link schemes parsed in `parser.rs`: `vmess`, `vless`, `trojan`, `ss`, `hysteria2`/`hy2`, `hysteria`, `tuic`, `anytls`, `naive+https`/`naive+quic`/`naive`, `wireguard`/`wg`, `warp` (Hiddify style, `&&detour=` for WARP-on-WARP), `vpn` (AmneziaVPN export), `ssh`, `socks`/`socks5`, `http`/`https`, `dnstt`, `masterdns`, `ping`, `ssr`, `dnst`, `chain`, `v2box`/`v2open` (subscription URL). Plain WireGuard / AmneziaWG `.conf` text (`[Interface]` / `[Peer]`) is also accepted, as are sing-box JSON `outbounds` / `endpoints`.
 
 Transport chips for proxy protocols include `tcp`, `ws`, `grpc`, `h2`, `httpupgrade`, `xhttp`, `quic`. TLS: `none`, `tls`, `reality`.
 
-Clash YAML proxies are accepted through `parse_clash_yaml`.
+Clash YAML proxies are accepted through `parse_clash_yaml` (including `tuic`, `anytls`, `wireguard` with `amnezia-wg-option`, `ech-opts`, and the `shadow-tls` / `obfs` / `v2ray-plugin` SS plugins).
+
+**Chain editor** (`protocol: chain`): each hop can be VLESS, VMess, Trojan, SS (with ShadowTLS plugin fields), TUIC, AnyTLS, Naive, Hy1/Hy2, WireGuard, WARP, SOCKS, HTTP, or SSH. WARP hops must already be registered (Settings → WARP, or lazy registration on connect). ECH config can be set per hop in the security section.
+
+Protocol notes:
+
+- **TUIC / AnyTLS** — sing-box outbounds; TLS is always on.
+- **ShadowTLS** — set on a Shadowsocks profile (Plugin → ShadowTLS, or `ss://…?plugin=shadow-tls;host=…;password=…;version=3`). The builder emits a `shadowtls` outbound and detours the SS outbound through it.
+- **NaiveProxy** — the extended sing-box has no naive outbound, so each naive profile runs in a stock sing-box sidecar (`Contents/MacOS/sing-box-naive`) that exposes a local SOCKS port.
+- **ECH** — toggle under Security (TLS, Hysteria, TUIC, AnyTLS, Naive). Leave the config empty to fetch it over DNS, or paste a base64 / PEM `ECHConfigList`. Links carry it as `ech=` (`1`, the config, or `name+https://dns/dns-query`). Xray gets `echConfigList`.
+- **AmneziaWG** — `awg_jc` … `awg_i5` on a WireGuard profile. Any non-empty value runs the profile on sing-box (`amnezia` block); plain WireGuard keeps going through Xray, which also honours `reserved`.
+- **WARP** — see below.
+- **Psiphon** is not available: no Psiphon core is bundled and sing-box has no Psiphon outbound.
 
 If you add a protocol, update this section, URL schemes below, `Info.plist`, `parse_link`, the editor picker, tests, locales, and `CHANGELOG.md`.
 
@@ -78,6 +92,9 @@ If you add a protocol, update this section, URL schemes below, `Info.plist`, `pa
 | `legacy_slider` | `false` | Slide-to-connect |
 | `fab_fixed` | `false` | Floating connect button |
 | `fab_home_only` | `false` | FAB only on Home |
+| `menu_bar` | `true` | Menu bar icon: connect, disconnect, switch servers. Closing the window leaves the app running. |
+| `hide_dock_icon` | `false` | Dock icon hidden. Only applies while `menu_bar` is on. |
+| `app_update_check` | `true` | Check GitHub Releases for a newer app and notify. Dev builds skip this. |
 | `allow_insecure` | `false` | TLS skip verify |
 | `prefer_ipv6` | `false` | Address family preference |
 | `stop_on_sleep` | `true` | Disconnect on sleep |
@@ -114,7 +131,18 @@ From Settings:
 - **Per-app** — `per_app_mode` `off` / `include` / `exclude`. The UI lists apps installed on the Mac; the saved value is still process names in `per_app_text`.
 - **Apply system proxy** — `apply_system_proxy` (default true) when in proxy mode.
 
+### WARP
+
+Settings → **WARP** (also in the Add sheet). `warp_create` generates a key with `sing-box generate wg-keypair`, registers it with the Cloudflare client API, optionally applies a WARP+ license, and saves a `warp` profile. WARP-on-WARP registers a second account and nests the inner tunnel inside the outer one; the outer one carries AmneziaWG handshake noise (`jc`/`jmin`/`jmax`, default 4/40/70). Profiles imported without keys register on first connect.
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `warp_chain` | `false` | Send traffic through the selected config, then out through WARP |
+| `warp_chain_id` | `""` | Profile id of the WARP config used for the chain |
+
 ### Advanced
+
+**Xray → UDP noise**: `xray_noise_enabled` (default `false`) and `xray_noises` (`[{type: rand|str|hex|base64, packet, delay, apply_to: ip|ipv4|ipv6}]`). Noise and TLS fragment for Xray-run profiles go through a `freedom` outbound tagged `dialer` that the proxy reaches with `sockopt.dialerProxy`. Noise is only attached to UDP-based profiles (WireGuard, Hysteria2, QUIC/KCP); fragment only to TCP TLS/REALITY.
 
 Xray policy / balancers (`xray_advanced`, `save_xray_balancer`), xhttp optimization, memory limit (`memory_limit_mb`, default 30), geo source repos, logging toggle (`logging_enabled`).
 
@@ -135,6 +163,7 @@ Registered in `macos-app/Info.plist`:
 
 ```
 v2open, v2box, vless, vmess, trojan, ss, ssr, hy2, hysteria, hysteria2,
+tuic, anytls, naive+https, naive+quic, warp, vpn,
 wireguard, ssh, socks, ping, dnstt, masterdns, chain
 ```
 

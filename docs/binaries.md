@@ -11,7 +11,7 @@ Licenses and upstream URLs: [NOTICE](../NOTICE). Process for replacing them is t
 | Path | Role | Copied into the app? |
 | --- | --- | --- |
 | `binaries/macos/sing-box` | Default engine (currently an **extended** build) | Yes → `Contents/MacOS/sing-box` |
-| `binaries/macos/sing-box.official` | Stock SagerNet build, kept for comparison / swap | No (not copied by the scripts) |
+| `binaries/macos/sing-box.official` | Stock SagerNet build, used as the NaiveProxy sidecar | Yes → `Contents/MacOS/sing-box-naive` (optional) |
 | `binaries/macos/xray` | Xray engine | Yes |
 | `binaries/macos/dnstt-client` | DNSTT sidecar | Yes |
 | `binaries/macos/masterdns` | MasterDNS sidecar | Yes |
@@ -23,7 +23,21 @@ Licenses and upstream URLs: [NOTICE](../NOTICE). Process for replacing them is t
 
 `dev-macos.sh` / `build-macos.sh` ad-hoc codesign each executable after copy.
 
-Current machines in this tree are **Mach-O arm64**. A release for Intel (or universal) needs matching binaries; `file binaries/macos/sing-box` must show `arm64`, `x86_64`, or `universal`.
+Committed machines in this tree are **Mach-O arm64**, including the extended `sing-box` the app actually launches. `file binaries/macos/sing-box` must show `arm64` or `universal`.
+
+### Intel (x86_64)
+
+There is no committed Intel tree. `V2OPEN_ARCH=x86_64 ./build-macos.sh` runs [scripts/fetch-macos-engines.sh](../scripts/fetch-macos-engines.sh) into gitignored `binaries/macos-x86_64/`:
+
+| File | Source |
+| --- | --- |
+| `sing-box` | Stock SagerNet `1.14.4` darwin/amd64 (not the extended arm64 build). Also copied to `sing-box.official` for the naive sidecar. |
+| `xray` | `26.10.21` `Xray-macos-64.zip` |
+| `pingtunnel` | `esrrhs/pingtunnel` `3.1` `darwin_amd64` |
+| `dnstt-client` | `go install` of `www.bamsoftware.com/git/dnstt.git/dnstt-client@latest` when Go is on `PATH` |
+| `masterdns` | Not downloaded. Copy an Intel binary to `binaries/macos-x86_64/masterdns` before building if that protocol must work. |
+
+`geoip.dat` and `geosite.dat` are still copied from `binaries/macos/`. Override versions with `SING_BOX_VERSION`, `XRAY_VERSION`, or `PINGTUNNEL_VERSION`. `V2OPEN_FETCH_FORCE=1` re-downloads.
 
 ---
 
@@ -43,9 +57,11 @@ Then update the “Current tree” table below if the marketing version of an en
 | File | Identity (as of this docs revision) |
 | --- | --- |
 | `sing-box` | `1.14.3-extended-2.7.3` (`darwin/arm64`) — launched by the app |
-| `sing-box.official` | stock `1.14.4` (`darwin/arm64`) — not copied into the bundle |
+| `sing-box.official` | stock `1.14.4` (`darwin/arm64`) — bundled as `sing-box-naive`, launched only for naive profiles |
 | `xray` | `26.10.21` (`darwin/arm64`) |
 | sidecars + `.dat` | sizes and `file(1)` type in `binaries/macos/VERSIONS` |
+
+The extended build carries TUIC, AnyTLS, ShadowTLS, ECH, and the WireGuard `amnezia` block, but was built without `with_naive_outbound`; that is why the stock build ships beside it. Its WireGuard peers also reject `reserved`, so the builder omits it.
 
 The extended `sing-box` is **not** a vanilla SagerNet release (version suffix `extended-…`, extra tags). Do not advertise it as official sing-box. Official binary lives next to it as `sing-box.official`. To ship stock instead: copy it over `sing-box`, regenerate `VERSIONS`, and document the swap in the PR.
 

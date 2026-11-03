@@ -14,6 +14,7 @@ mod routing;
 mod sidecar;
 mod ssr;
 mod vault;
+mod warp;
 mod xray;
 mod xray_balancers;
 

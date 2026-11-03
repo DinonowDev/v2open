@@ -82,10 +82,10 @@ Window size is fixed (`AppFrame`: 418×684) with a hidden title bar. Four tabs: 
 1. `V2OpenApp.init` installs `DevLog` and, if argv contains `--agent` / `--daemon`, runs `BackgroundScheduler` instead of the UI.
 2. `Model.boot()` creates `~/Library/Application Support/V2Open/`, then `v2_init(supportDir, pathToSingBox, rulesDir)`.
 3. Rust `Core::open` loads `library.json` (or seeds defaults), runs `migrate_settings`, copies bundled rulesets/geo files if missing.
-4. Swift calls `state` and `about`, applies the selected app icon, arms on-demand VPN rules, starts the 60s auto-ping loop and a `tick` timer.
+4. Swift calls `state` and `about`, applies the selected app icon, attaches `MenuBarCenter`, starts `AppUpdater` when `app_update_check` is on, arms on-demand VPN rules, starts the 60s auto-ping loop and a `tick` timer.
 5. `UILock` keeps a file lock so a Launch Agent daemon will idle while the UI owns the library.
 
-If the last window closes, the app **stays open** when geo auto-update, on-demand, persist-tunnel, or subscription auto-update is on.
+If the last window closes, the app **stays open** when the menu bar icon is enabled (`menu_bar`, default on), or when geo auto-update, on-demand, persist-tunnel, or subscription auto-update is on.
 
 ---
 
@@ -172,6 +172,7 @@ Protocols that are not native outbounds are adapted in `sidecar.rs` (and `ssr.rs
 | `masterdns` | `masterdns` | Local SOCKS |
 | `dnstt` | `dnstt-client` | Local SOCKS |
 | `ping` | `pingtunnel` (may ask for admin via osascript) | Local SOCKS |
+| `naive` | `sing-box-naive` (stock sing-box build) | Local SOCKS; server IP bypassed in TUN mode |
 
 `adapt_all` runs before `build_config`. On disconnect, sidecar children are killed.
 

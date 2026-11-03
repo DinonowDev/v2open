@@ -14,10 +14,10 @@ jobs:
       - name: Locale keys and version copies
         run: ./scripts/check-docs.sh
 
-  macos:
-    name: macOS build and test
+  test:
+    name: macOS tests
     runs-on: macos-latest
-    timeout-minutes: 60
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -30,14 +30,58 @@ jobs:
       - name: Swift tests
         run: ./scripts/test-swift.sh
 
-      - name: Release build
+  build:
+    name: macOS ${{ matrix.arch }}
+    needs: test
+    runs-on: macos-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [arm64, x86_64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Go for dnstt
+        if: matrix.arch == 'x86_64'
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Import signing certificate
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_PROFILE_APP_BASE64: ${{ secrets.APPLE_PROFILE_APP_BASE64 }}
+          APPLE_PROFILE_TUNNEL_BASE64: ${{ secrets.APPLE_PROFILE_TUNNEL_BASE64 }}
+          APPLE_NOTARY_KEY_BASE64: ${{ secrets.APPLE_NOTARY_KEY_BASE64 }}
+          APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: ./scripts/ci-import-certificate.sh
+
+      - name: Build app bundle
+        env:
+          V2OPEN_ARCH: ${{ matrix.arch }}
         run: ./build-macos.sh
+
+      - name: Package zip
+        run: |
+          VERSION="$(sed -n '1p' VERSION | tr -d '[:space:]')"
+          BUILD="$(sed -n '2p' VERSION | tr -d '[:space:]')"
+          ZIP="V2Open-${VERSION}-build${BUILD}-macos-${{ matrix.arch }}.zip"
+          ditto -c -k --keepParent V2Open.app "$ZIP"
+          echo "ZIP=$ZIP" >> "$GITHUB_ENV"
 
       - name: Upload build artifact
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
         with:
-          name: V2Open-macos-arm64
-          path: V2Open.app
+          name: V2Open-macos-${{ matrix.arch }}
+          path: ${{ env.ZIP }}
           retention-days: 14
           if-no-files-found: error

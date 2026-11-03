@@ -70,8 +70,38 @@ fn adapt_one(profile: &Value, singbox: &Path, work: &Path, settings: &Value) -> 
         "masterdns" => masterdns(profile, singbox, work, settings),
         "dnstt" => dnstt(profile, singbox, work),
         "ping" => ping(profile, singbox, work),
+        "naive" => naive(profile, singbox, work),
         _ => Ok((profile.clone(), Running::new())),
     }
+}
+
+pub fn naive_document(profile: &Value, port: u16) -> Value {
+    json!({
+        "log": {"level": "warn", "timestamp": true},
+        "dns": {"servers": [{"type": "local", "tag": "local"}]},
+        "inbounds": [{"type": "mixed", "tag": "in", "listen": "127.0.0.1", "listen_port": port}],
+        "outbounds": [crate::builder::naive_outbound(profile, "naive"), {"type": "direct", "tag": "direct"}],
+        "route": {"final": "naive", "default_domain_resolver": "local"}
+    })
+}
+
+fn naive(profile: &Value, singbox: &Path, work: &Path) -> Result<(Value, Running), String> {
+    let bin = tool(singbox, "sing-box-naive")?;
+    if text(profile, "address").is_empty() {
+        return Err("NaiveProxy needs a server address".into());
+    }
+    let _ = fs::create_dir_all(work);
+    let port = free_port()?;
+    let cfg = work.join("naive.json");
+    fs::write(&cfg, serde_json::to_string_pretty(&naive_document(profile, port)).unwrap_or_default()).map_err(|e| e.to_string())?;
+    let log = File::create(work.join("naive.log")).map_err(|e| e.to_string())?;
+    let err = log.try_clone().map_err(|e| e.to_string())?;
+    let mut child = Command::new(bin).arg("run").arg("-c").arg(&cfg).arg("-D").arg(work)
+        .stdout(Stdio::from(log)).stderr(Stdio::from(err)).spawn().map_err(|e| e.to_string())?;
+    wait_port(port, &mut child)?;
+    let mut running = Running::new();
+    running.children.push(child);
+    Ok((socks(profile, port), running))
 }
 
 fn masterdns(profile: &Value, singbox: &Path, work: &Path, settings: &Value) -> Result<(Value, Running), String> {
@@ -436,4 +466,25 @@ fn dial_socks(port: u16, request: &[u8]) -> std::io::Result<TcpStream> {
     let mut tail = vec![0u8; more];
     if more > 0 { stream.read_exact(&mut tail)?; }
     Ok(stream)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn naive_document_passes_stock_core() {
+        let profile = json!({"protocol": "naive", "address": "example.com", "port": 443, "username": "u", "password": "p",
+            "sni": "example.com", "naive_quic": "1", "insecure_concurrency": "2", "extra_headers": "X-Test: 1"});
+        let doc = naive_document(&profile, 18090);
+        assert_eq!(doc["outbounds"][0]["type"], "naive");
+        let bin = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../binaries/macos/sing-box.official");
+        if !bin.exists() {
+            return;
+        }
+        let file = std::env::temp_dir().join("v2open-naive-check.json");
+        fs::write(&file, serde_json::to_string_pretty(&doc).unwrap()).unwrap();
+        let out = Command::new(&bin).args(["check", "-c"]).arg(&file).output().unwrap();
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    }
 }

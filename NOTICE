@@ -19,7 +19,8 @@ Bundled programs (binaries/macos/)
 -----------------------------------------------------------------------------
 
 sing-box (default `sing-box` in this tree is an extended build;
-`sing-box.official` is a stock build kept beside it)
+`sing-box.official` is a stock build bundled as `sing-box-naive`
+for NaiveProxy profiles)
   Upstream (stock): https://github.com/SagerNet/sing-box
   License: GPL-3.0-or-later, plus the upstream name restriction
   Text:    https://github.com/SagerNet/sing-box/blob/dev/LICENSE

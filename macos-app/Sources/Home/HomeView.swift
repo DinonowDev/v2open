@@ -12,6 +12,7 @@ struct HomeView: View {
         let connecting = phase == "connecting"
         VStack(alignment: .leading, spacing: 0) {
             PageHeader(title: model.t("app"), subtitle: selectedName, caption: ssidCaption)
+            UpdateBanner()
             if let error = runtime["error"] as? String, !error.isEmpty {
                 Mix(text: error, size: 13, color: Color(red: 1, green: 0.36, blue: 0.45))
                     .padding(.top, 8)

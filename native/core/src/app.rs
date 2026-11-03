@@ -339,6 +339,10 @@ fn defaults() -> Value {
         "fragment_packets": "tlshello",
         "fragment_length": "100-200",
         "fragment_interval": "10-20",
+        "xray_noise_enabled": false,
+        "xray_noises": [{"type": "rand", "packet": "10-20", "delay": "10-16", "apply_to": "ip"}],
+        "warp_chain": false,
+        "warp_chain_id": "",
         "domain_strategy": "AsIs",
         "route_only": true,
         "apple_direct": false,
@@ -405,6 +409,9 @@ fn defaults() -> Value {
         "legacy_slider": false,
         "fab_fixed": false,
         "fab_home_only": false,
+        "menu_bar": true,
+        "hide_dock_icon": false,
+        "app_update_check": true,
         "remote_dns_id": "",
         "domestic_dns_id": "",
         "dns_items": [],
@@ -899,6 +906,8 @@ impl Core {
                     "probe_interval",
                     "smart_interval",
                     "smart_tolerance",
+                    "xray_noise_enabled",
+                    "xray_noises",
                 ] {
                     if let Some(value) = args.get(key) {
                         self.settings[key] = value.clone();
@@ -919,6 +928,53 @@ impl Core {
             }
             "save_profile" => {
                 self.save_profile(&args["profile"])?;
+                Ok(self.state())
+            }
+            "warp_create" => {
+                let license = args["license"].as_str().unwrap_or("").trim();
+                if !license.is_empty() && !crate::warp::valid_license(license) {
+                    return Err("invalid WARP license key".into());
+                }
+                let mut data = crate::warp::blank(args["name"].as_str().unwrap_or(""), license, args["wow"].as_bool().unwrap_or(false));
+                crate::warp::complete(&self.singbox, &mut data)?;
+                data["link"] = json!(build_link(&data));
+                let gid = self.groups[self.local_group_index()]["id"].as_str().unwrap_or("").to_string();
+                self.insert_profile(&gid, data);
+                let new_id = self.groups.iter().find(|g| g["id"].as_str() == Some(gid.as_str()))
+                    .and_then(|g| g["profiles"].as_array()).and_then(|a| a.last()).and_then(|p| p["id"].as_str()).unwrap_or("").to_string();
+                let mut state = self.state();
+                state["created_id"] = json!(new_id);
+                Ok(state)
+            }
+            "warp_register" => {
+                let id = args["id"].as_str().unwrap_or("").to_string();
+                let profile = self.find_profile(&id).ok_or("profile not found")?;
+                let mut data = node_data(&profile);
+                if data["protocol"].as_str() != Some("warp") {
+                    return Err("not a WARP profile".into());
+                }
+                for key in ["private_key", "local_address", "peer_public_key", "reserved", "warp_id", "warp_token", "account_type"] {
+                    data[key] = json!("");
+                }
+                data["warp_outer"] = json!({});
+                crate::warp::complete(&self.singbox, &mut data)?;
+                self.store_profile_data(&id, data);
+                Ok(self.state())
+            }
+            "warp_license" => {
+                let id = args["id"].as_str().unwrap_or("").to_string();
+                let license = args["license"].as_str().unwrap_or("").trim().to_string();
+                if !crate::warp::valid_license(&license) {
+                    return Err("invalid WARP license key".into());
+                }
+                let profile = self.find_profile(&id).ok_or("profile not found")?;
+                let mut data = node_data(&profile);
+                if data["private_key"].as_str().unwrap_or("").is_empty() {
+                    crate::warp::complete(&self.singbox, &mut data)?;
+                }
+                crate::warp::apply_license(data["warp_id"].as_str().unwrap_or(""), data["warp_token"].as_str().unwrap_or(""), &license)?;
+                data["license"] = json!(license);
+                self.store_profile_data(&id, data);
                 Ok(self.state())
             }
             "backup" => {
@@ -1782,8 +1838,90 @@ impl Core {
         Ok(())
     }
 
+    fn store_profile_data(&mut self, id: &str, mut data: Value) {
+        data["link"] = json!(build_link(&data));
+        for group in &mut self.groups {
+            if let Some(arr) = group["profiles"].as_array_mut() {
+                for item in arr.iter_mut().filter(|item| item["id"].as_str() == Some(id)) {
+                    item["link"] = data["link"].clone();
+                    item["address"] = data["address"].clone();
+                    item["port"] = data["port"].clone();
+                    item["data"] = data.clone();
+                }
+            }
+        }
+        self.save();
+    }
+
+    fn ensure_warp(&mut self, profiles: &mut [Value]) -> Result<(), String> {
+        for profile in profiles.iter_mut() {
+            if self.ensure_warp_profile(profile)? {
+                if let Some(id) = profile["id"].as_str().filter(|s| !s.is_empty()) {
+                    self.store_profile_data(id, profile.clone());
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn ensure_warp_profile(&mut self, profile: &mut Value) -> Result<bool, String> {
+        if profile["protocol"].as_str() == Some("chain") {
+            let hops = profile["chain"].as_array().cloned().unwrap_or_default();
+            let mut updated = Vec::new();
+            let mut changed = false;
+            for hop in hops {
+                let mut node = if let Some(link) = hop.as_str() {
+                    parse_link(link)?
+                } else if hop["protocol"].as_str().unwrap_or("").is_empty() {
+                    if let Some(link) = hop["link"].as_str() {
+                        parse_link(link)?
+                    } else {
+                        hop
+                    }
+                } else {
+                    hop
+                };
+                changed |= self.ensure_warp_profile(&mut node)?;
+                updated.push(node);
+            }
+            if changed {
+                profile["chain"] = json!(updated);
+            }
+            return Ok(changed);
+        }
+        if !crate::warp::needs_registration(profile) {
+            return Ok(false);
+        }
+        crate::warp::complete(&self.singbox, profile).map_err(|e| format!("WARP registration failed: {e}"))?;
+        Ok(true)
+    }
+
+    fn warp_chain_active(&self) -> bool {
+        self.warp_chain_profile().is_some()
+    }
+
+    fn warp_chain_profile(&self) -> Option<Value> {
+        if !self.settings["warp_chain"].as_bool().unwrap_or(false) {
+            return None;
+        }
+        let id = self.settings["warp_chain_id"].as_str().unwrap_or("");
+        let profile = self.find_profile(id)?;
+        let data = node_data(&profile);
+        (data["protocol"].as_str() == Some("warp")).then_some(data)
+    }
+
     fn save_profile(&mut self, profile: &Value) -> Result<(), String> {
         let mut data = profile.clone();
+        if data["protocol"].as_str() == Some("warp") {
+            if let Some(existing) = data["id"].as_str().and_then(|id| self.find_profile(id)) {
+                let stored = node_data(&existing);
+                for (key, value) in stored.as_object().into_iter().flatten() {
+                    if data.get(key).map(|v| v.is_null()).unwrap_or(true) {
+                        data[key] = value.clone();
+                    }
+                }
+            }
+        }
         data["link"] = json!(build_link(&data));
         let remark = data["remark"].as_str().unwrap_or("").trim().to_string();
         let own_id = data["id"].as_str().unwrap_or("");
@@ -1934,6 +2072,24 @@ impl Core {
         if profiles.is_empty() {
             return Err("no profile".into());
         }
+        if self.settings["warp_chain"].as_bool().unwrap_or(false) {
+            let chain_id = self.settings["warp_chain_id"].as_str().unwrap_or("").trim();
+            if chain_id.is_empty() {
+                return Err("WARP chain is enabled but no WARP profile is selected".into());
+            }
+            let chain_profile = self.warp_chain_profile().ok_or_else(|| {
+                "WARP chain is enabled but the selected WARP profile is missing or invalid".to_string()
+            })?;
+            if profiles.iter().any(|p| p["id"] == chain_profile["id"]) {
+                return Err("WARP chain cannot use the same profile you are connecting to".into());
+            }
+        }
+        let mut chain = self.warp_chain_profile();
+        self.ensure_warp(&mut profiles)?;
+        if let Some(mut link) = chain.take() {
+            self.ensure_warp(std::slice::from_mut(&mut link))?;
+            chain = Some(link);
+        }
         if smart {
             self.race_profiles(&mut profiles);
         }
@@ -1946,14 +2102,23 @@ impl Core {
         let dir = self.path.parent().unwrap_or(Path::new(".")).to_path_buf();
         let _ = fs::create_dir_all(&dir);
         let (extras, routed, stops) = self.front_xray(&mut profiles, &dir)?;
+        for profile in profiles.iter().filter(|p| p["protocol"].as_str() == Some("naive")) {
+            let host = profile["address"].as_str().unwrap_or("").to_string();
+            let port = profile["port"].as_u64().unwrap_or(443).min(65535) as u16;
+            self.bypass.extend(crate::xray::dial_addresses(&host, port));
+        }
+        let mut build_settings = self.settings.clone();
+        if let Some(link) = chain {
+            build_settings["_warp_chain"] = link;
+        }
         let (profiles, mut running) = crate::sidecar::adapt_all(&profiles, &self.singbox, &dir.join("bridges"), &self.settings)?;
         running.children.extend(extras);
         running.stops.extend(stops);
         self.bridges = running;
         let built = if routed {
-            build_pipe(&self.settings, &profiles, &self.routes, &self.rules, mode)
+            build_pipe(&build_settings, &profiles, &self.routes, &self.rules, mode)
         } else {
-            build_config(&self.settings, &profiles, &self.routes, &self.rules, mode)
+            build_config(&build_settings, &profiles, &self.routes, &self.rules, mode)
         };
         let mut config = match built {
             Ok(config) => config,
@@ -2022,7 +2187,7 @@ impl Core {
 
     fn front_xray(&mut self, profiles: &mut Vec<Value>, dir: &Path) -> Result<(Vec<std::process::Child>, bool, Vec<Arc<AtomicBool>>), String> {
         let binds = self.combiner_binds();
-        let owns_routing = !profiles.is_empty() && profiles.iter().all(|profile| xray_protocol(profile["protocol"].as_str().unwrap_or("")));
+        let owns_routing = !profiles.is_empty() && profiles.iter().all(xray_capable) && !self.warp_chain_active();
         let settings = self.settings.clone();
         let routes = self.routes.clone();
         let mut children = Vec::new();
@@ -2031,7 +2196,7 @@ impl Core {
         let mut complete = owns_routing;
         self.bypass.clear();
         for (index, profile) in profiles.iter_mut().enumerate() {
-            if !xray_protocol(profile["protocol"].as_str().unwrap_or("")) {
+            if !xray_capable(profile) {
                 continue;
             }
             let mut origin = profile.clone();
@@ -2050,7 +2215,7 @@ impl Core {
                 let rendered = if owns_routing {
                     crate::xray::routed_socks(&settings, &origin, &routes, port, bind.as_deref())
                 } else {
-                    crate::xray::local_socks(&origin, port, bind.as_deref())
+                    crate::xray::local_socks(&settings, &origin, port, bind.as_deref())
                 };
                 fs::write(&cfg, serde_json::to_string(&rendered).unwrap_or_else(|_| "{}".into())).map_err(|e| e.to_string())?;
                 let check = xray_cmd(&bin, &self.data_dir()).args(["run", "-test", "-c"]).arg(&cfg).output().map_err(|e| e.to_string())?;
@@ -3048,7 +3213,7 @@ impl Core {
             })
         }).unwrap_or_default();
         Ok(json!({
-            "app_version": "1.1.0",
+            "app_version": "1.2.0",
             "sing_box": self.runtime.core,
             "xray": xray,
             "engine": self.runtime.engine,
@@ -3056,7 +3221,7 @@ impl Core {
             "developer": "Amirhossein Rezaei",
             "github": "https://github.com/DinonowDev",
             "repo": "https://github.com/DinonowDev/v2open",
-            "url_schemes": ["v2open", "v2box", "vless", "vmess", "trojan", "ss", "ssr", "hy2", "hysteria", "hysteria2", "wireguard"]
+            "url_schemes": ["v2open", "v2box", "vless", "vmess", "trojan", "ss", "ssr", "hy2", "hysteria", "hysteria2", "tuic", "anytls", "naive+https", "naive+quic", "wireguard", "warp", "vpn"]
         }))
     }
 
@@ -3634,8 +3799,15 @@ fn rate_bps(bytes: u64, elapsed: Duration) -> u64 {
     (bytes as f64 / elapsed.as_secs_f64().max(0.05)) as u64
 }
 
-fn xray_protocol(protocol: &str) -> bool {
-    matches!(protocol, "vless" | "vmess" | "trojan" | "shadowsocks" | "hysteria" | "hysteria2" | "wireguard" | "socks" | "http")
+fn xray_capable(profile: &Value) -> bool {
+    let text = |key: &str| profile[key].as_str().unwrap_or("").trim().to_string();
+    match profile["protocol"].as_str().unwrap_or("") {
+        "vless" | "vmess" | "trojan" | "socks" | "http" => true,
+        "shadowsocks" => text("plugin").is_empty() && text("shadowtls_version").is_empty(),
+        "hysteria2" => text("obfs").is_empty() && text("hop_port").is_empty(),
+        "wireguard" => !crate::parser::is_amnezia(profile),
+        _ => false,
+    }
 }
 
 fn socks_profile(origin: &Value, port: u16) -> Value {

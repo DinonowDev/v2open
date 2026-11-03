@@ -40,6 +40,9 @@ Do not rename or remove a method without a **MAJOR** version bump. Add new metho
 | `import` | `{text, group_id?}` | Parse links / Clash / JSON into a group |
 | `subscribe` | `{name, url}` | Fetch URL, import as a group |
 | `save_profile` | `{profile}` | Create/update one profile object |
+| `warp_create` | `{name?, license?, wow?}` | Registers a Cloudflare WARP account (two for `wow`), saves a `warp` profile; snapshot plus `created_id` |
+| `warp_register` | `{id}` | Replaces the keys of a WARP profile with a newly registered account |
+| `warp_license` | `{id, license}` | Applies a WARP+ license to the account behind a WARP profile |
 | `select` | `{id}` | `selected_id` |
 | `delete` | `{id}` | Delete profile or group (id) |
 | `clear_group` | `{id}` | Remove profiles, keep group |
@@ -73,6 +76,8 @@ Do not rename or remove a method without a **MAJOR** version bump. Add new metho
 
 Swift path: `prepare` → `TunnelManager.connect/reload` → `mark_connected`. If the extension is missing or start fails: `connect`.
 
+`prepare` / connect may fail with a clear error when **WARP-after-config** is enabled but `warp_chain_id` is empty, invalid, or the same profile as the one being connected. WARP profiles without keys are registered lazily on prepare (including WARP hops inside a **chain** profile).
+
 ---
 
 ## Routing and geo
@@ -103,9 +108,28 @@ Swift path: `prepare` → `TunnelManager.connect/reload` → `mark_connected`. I
 | `delete_dns_item` | `{id}` |
 | `set_active_dns` | `{id, role}` role = remote / domestic |
 | `optimize_mtu` | `{…}` uses `mtu_*` settings |
-| `save_xray_advanced` | `{…}` policy fields |
+| `save_xray_advanced` | `{…}` Xray policy, observatory, probe fields, and optional `xray_noise_enabled` / `xray_noises` |
 | `save_xray_balancer` | `{balancer}` |
 | `delete_xray_balancer` | `{id}` |
+
+---
+
+## Notable settings (`set`)
+
+These keys live in `settings` and are written with `set` `{key, value}` unless a dedicated RPC also accepts them (for example `save_xray_advanced`).
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `warp_chain` | `false` | After the selected proxy profile, exit through the WARP profile in `warp_chain_id` |
+| `warp_chain_id` | `""` | Profile id of a `warp` config used for that chain |
+| `xray_noise_enabled` | `false` | Attach Xray `freedom` UDP noise (WireGuard, Hysteria, QUIC/KCP) via `dialerProxy` |
+| `xray_noises` | `[{type, packet, delay, apply_to}]` | Noise rows (`type`: `rand` / `str` / `hex` / `base64`; `apply_to`: `ip` / `ipv4` / `ipv6`) |
+| `fragment_enabled` | `false` | TLS record split (sing-box route-options when not Xray-routed; Xray `freedom` fragment when Xray-routed) |
+| `fragment_packets` | `tlshello` | Xray/sing-box fragment packet selector |
+| `fragment_length` | `100-200` | Fragment length range |
+| `fragment_interval` | `10-20` | Fragment interval / fallback delay |
+
+Full settings tables: [user-guide.md](user-guide.md) § Settings.
 
 ---
 

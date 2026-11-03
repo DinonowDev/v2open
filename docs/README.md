@@ -20,6 +20,7 @@ Canonical process: [CONTRIBUTING.md](../CONTRIBUTING.md). Persian: [CONTRIBUTING
 | Bump the version | [versioning.md](versioning.md) |
 | Name a branch or open a PR | [branching.md](branching.md) |
 | Cut a GitHub release | [release.md](release.md) |
+| Configure Apple signing on Actions | [apple-ci-secrets.md](apple-ci-secrets.md) |
 | Replace sing-box / Xray / sidecars | [binaries.md](binaries.md), [../NOTICE](../NOTICE) |
 | Sign the Packet Tunnel | [signing.md](signing.md) |
 | Protect `main` on GitHub | [github.md](github.md) |
@@ -42,6 +43,10 @@ Use this table when you touch code. Update **every** matching row in the same PR
 | `macos-app/Sources/Tunnel.swift`, `PacketTunnel/` | [architecture.md](architecture.md) § Tunnel |
 | `macos-app/Sources/Cloud.swift` | [user-guide.md](user-guide.md) § Backup |
 | `macos-app/Sources/App/BackgroundScheduler.swift` | [architecture.md](architecture.md) § Background |
+| `macos-app/Sources/App/MenuBar.swift` | [user-guide.md](user-guide.md) § Home |
+| `macos-app/Sources/App/AppUpdater.swift` | [user-guide.md](user-guide.md) § Home, [signing.md](signing.md) |
+| `scripts/fetch-macos-engines.sh`, `notarize-macos.sh`, `ci-import-certificate.sh` | [binaries.md](binaries.md), [signing.md](signing.md), [release.md](release.md) |
+| `scripts/encode-apple-secrets.sh`, `scripts/pre-release-check.sh` | [apple-ci-secrets.md](apple-ci-secrets.md), [release.md](release.md) |
 | `macos-app/Resources/Locales/*.json` | [localization.md](localization.md) |
 | `macos-app/Sources/Core/Localization.swift` fallbacks | [localization.md](localization.md) |
 | `macos-app/Sources/Design/Theme.swift` | [user-guide.md](user-guide.md) § Appearance |
@@ -53,6 +58,7 @@ Use this table when you touch code. Update **every** matching row in the same PR
 | `native/core/src/builder.rs` | [architecture.md](architecture.md) § Engines |
 | `native/core/src/routing.rs`, `assets/routing/` | [user-guide.md](user-guide.md) § Routing |
 | `native/core/src/sidecar.rs`, `ssr.rs` | [architecture.md](architecture.md) § Sidecars |
+| `native/core/src/warp.rs` | [user-guide.md](user-guide.md) § WARP, [rpc.md](rpc.md) |
 | `native/core/src/vault.rs` | [user-guide.md](user-guide.md) § Locked catalog, [SECURITY.md](../SECURITY.md) |
 | `native/core/src/xray.rs`, `xray_balancers.rs` | [user-guide.md](user-guide.md) § Xray |
 | `native/core/src/dns_items.rs` | [user-guide.md](user-guide.md) § DNS |

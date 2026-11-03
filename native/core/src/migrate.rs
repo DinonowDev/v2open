@@ -35,6 +35,18 @@ pub fn migrate_settings(settings: &mut Value) {
             .unwrap_or(false);
         settings["observatory_enabled"] = json!(least);
     }
+    if settings.get("xray_noise_enabled").is_none() {
+        settings["xray_noise_enabled"] = json!(false);
+    }
+    if !settings["xray_noises"].is_array() {
+        settings["xray_noises"] = json!([{"type": "rand", "packet": "10-20", "delay": "10-16", "apply_to": "ip"}]);
+    }
+    if settings.get("warp_chain").is_none() {
+        settings["warp_chain"] = json!(false);
+    }
+    if !settings["warp_chain_id"].is_string() {
+        settings["warp_chain_id"] = json!("");
+    }
     if settings.get("speed_mode").is_none() {
         settings["speed_mode"] = json!("http");
     }

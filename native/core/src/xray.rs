@@ -10,7 +10,7 @@ fn s(v: &Value, key: &str) -> String {
 }
 
 pub fn document(settings: &Value, profile: &Value, routes: &[Value]) -> Value {
-    let mut doc = core(settings, routes, outbound(profile));
+    let mut doc = core(settings, routes, proxy_outbounds(settings, profile, None));
     let listen = if settings["lan_sharing"].as_bool().unwrap_or(false) { "0.0.0.0" } else { "127.0.0.1" };
     let mut inbounds = vec![
         json!({"tag":"socks","port": settings["socks_port"].as_u64().unwrap_or(10808), "listen": listen, "protocol":"socks", "settings":{"udp": true, "auth":"noauth"}, "sniffing": sniffing(settings)}),
@@ -39,14 +39,18 @@ pub fn document(settings: &Value, profile: &Value, routes: &[Value]) -> Value {
     doc
 }
 
-fn core(settings: &Value, routes: &[Value], proxy: Value) -> Value {
+fn core(settings: &Value, routes: &[Value], proxy: Vec<Value>) -> Value {
     let direct = json!({"tag":"direct","protocol":"freedom"});
     let block = json!({"tag":"block","protocol":"blackhole"});
-    let outbounds = if settings["final"].as_str() == Some("direct") {
-        vec![direct, proxy, block]
+    let mut outbounds = Vec::new();
+    let mut rest = proxy.into_iter();
+    let main = rest.next().unwrap_or_else(|| json!({"tag":"proxy","protocol":"freedom"}));
+    if settings["final"].as_str() == Some("direct") {
+        outbounds.extend([direct, main, block]);
     } else {
-        vec![proxy, direct, block]
-    };
+        outbounds.extend([main, direct, block]);
+    }
+    outbounds.extend(rest);
     let mut routing = json!({
         "domainStrategy": settings["domain_strategy"].as_str().unwrap_or("AsIs"),
         "rules": rules(settings, routes)
@@ -300,15 +304,32 @@ fn outbound(profile: &Value) -> Value {
         });
     }
     if protocol == "wireguard" {
-        node = json!({
-            "tag": "proxy",
-            "protocol": "wireguard",
-            "settings": {
-                "secretKey": s(profile, "private_key"),
-                "address": [s(profile, "local_address")],
-                "peers": [{"publicKey": s(profile, "peer_public_key"), "endpoint": format!("{}:{}", s(profile, "address"), profile["port"].as_u64().unwrap_or(51820))}]
-            }
-        });
+        let list = |key: &str| -> Vec<String> {
+            s(profile, key).split(',').map(|v| v.trim().to_string()).filter(|v| !v.is_empty()).collect()
+        };
+        let host = s(profile, "address");
+        let host = if host.contains(':') && !host.starts_with('[') { format!("[{host}]") } else { host };
+        let mut peer = json!({"publicKey": s(profile, "peer_public_key"), "endpoint": format!("{}:{}", host, profile["port"].as_u64().unwrap_or(51820))});
+        if !s(profile, "preshared_key").is_empty() {
+            peer["preSharedKey"] = json!(s(profile, "preshared_key"));
+        }
+        let allowed = list("allowed_ips");
+        if !allowed.is_empty() {
+            peer["allowedIPs"] = json!(allowed);
+        }
+        if let Some(keepalive) = s(profile, "keepalive").parse::<u64>().ok().filter(|k| *k > 0) {
+            peer["keepAlive"] = json!(keepalive);
+        }
+        let mut settings = json!({"secretKey": s(profile, "private_key"), "address": list("local_address"), "peers": [peer]});
+        let reserved: Vec<u8> = list("reserved").iter().filter_map(|b| b.parse().ok()).collect();
+        if reserved.len() == 3 {
+            settings["reserved"] = json!(reserved);
+        }
+        let mtu = profile["mtu"].as_u64().or_else(|| s(profile, "mtu").parse().ok()).unwrap_or(0);
+        if mtu > 0 {
+            settings["mtu"] = json!(mtu);
+        }
+        node = json!({"tag": "proxy", "protocol": "wireguard", "settings": settings});
     }
     node["remarks"] = json!(s(profile, "remark"));
     if matches!(protocol.as_str(), "dnstt" | "masterdns" | "ping" | "shadowsocksr") {
@@ -372,6 +393,9 @@ fn stream(profile: &Value) -> Value {
                 stream["realitySettings"]["alpn"] = json!(alpn);
             }
         } else {
+            if let Some(list) = ech_config_list(profile) {
+                tls["echConfigList"] = json!(list);
+            }
             stream["tlsSettings"] = tls;
         }
     }
@@ -402,18 +426,16 @@ fn stream(profile: &Value) -> Value {
     stream
 }
 
-pub fn local_socks(profile: &Value, port: u16, bind_iface: Option<&str>) -> Value {
-    let node = bind_outbound(outbound(profile), bind_iface);
+pub fn local_socks(settings: &Value, profile: &Value, port: u16, bind_iface: Option<&str>) -> Value {
     json!({
         "log": {"loglevel": "warning"},
         "inbounds": [{"listen": "127.0.0.1", "port": port, "protocol": "socks", "settings": {"udp": true, "auth": "noauth"}, "sniffing": json!({"enabled": true, "destOverride": ["http", "tls", "quic"], "routeOnly": true})}],
-        "outbounds": [node]
+        "outbounds": proxy_outbounds(settings, profile, bind_iface)
     })
 }
 
 pub fn routed_socks(settings: &Value, profile: &Value, routes: &[Value], port: u16, bind_iface: Option<&str>) -> Value {
-    let node = bind_outbound(outbound(profile), bind_iface);
-    let mut doc = core(settings, routes, node);
+    let mut doc = core(settings, routes, proxy_outbounds(settings, profile, bind_iface));
     doc["inbounds"] = json!([{
         "listen": "127.0.0.1",
         "port": port,
@@ -576,12 +598,91 @@ fn push_ext(out: &mut Vec<u8>, id: u16, fill: impl FnOnce(&mut Vec<u8>)) {
 
 fn bind_outbound(mut node: Value, bind_iface: Option<&str>) -> Value {
     if let Some(iface) = bind_iface.filter(|s| !s.is_empty()) {
-        if !node.get("streamSettings").map(|v| v.is_object()).unwrap_or(false) {
-            node["streamSettings"] = json!({});
-        }
-        node["streamSettings"]["sockopt"] = json!({"interface": iface});
+        sockopt(&mut node)["interface"] = json!(iface);
     }
     node
+}
+
+fn sockopt(node: &mut Value) -> &mut Value {
+    if !node.get("streamSettings").map(|v| v.is_object()).unwrap_or(false) {
+        node["streamSettings"] = json!({});
+    }
+    if !node["streamSettings"].get("sockopt").map(|v| v.is_object()).unwrap_or(false) {
+        node["streamSettings"]["sockopt"] = json!({});
+    }
+    &mut node["streamSettings"]["sockopt"]
+}
+
+pub fn proxy_outbounds(settings: &Value, profile: &Value, bind_iface: Option<&str>) -> Vec<Value> {
+    let mut proxy = outbound(profile);
+    match dialer(settings, profile) {
+        Some(dialer) => {
+            sockopt(&mut proxy)["dialerProxy"] = json!("dialer");
+            vec![proxy, bind_outbound(dialer, bind_iface)]
+        }
+        None => vec![bind_outbound(proxy, bind_iface)],
+    }
+}
+
+fn dialer(settings: &Value, profile: &Value) -> Option<Value> {
+    let protocol = s(profile, "protocol");
+    let network = s(profile, "network");
+    let udp = matches!(protocol.as_str(), "wireguard" | "hysteria" | "hysteria2") || matches!(network.as_str(), "quic" | "kcp");
+    let tls = matches!(s(profile, "tls").as_str(), "tls" | "reality");
+    let mut freedom = json!({"domainStrategy": "AsIs"});
+    let mut used = false;
+    if settings["fragment_enabled"].as_bool().unwrap_or(false) && tls && !udp {
+        let packets = settings["fragment_packets"].as_str().filter(|v| !v.trim().is_empty()).unwrap_or("tlshello");
+        let length = settings["fragment_length"].as_str().filter(|v| !v.trim().is_empty()).unwrap_or("100-200");
+        let interval = settings["fragment_interval"].as_str().filter(|v| !v.trim().is_empty()).unwrap_or("10-20");
+        freedom["fragment"] = json!({"packets": packets.trim(), "length": length.trim(), "interval": interval.trim()});
+        used = true;
+    }
+    let noises = noises(settings);
+    if !noises.is_empty() && udp {
+        freedom["noises"] = Value::Array(noises);
+        used = true;
+    }
+    used.then(|| json!({"tag": "dialer", "protocol": "freedom", "settings": freedom}))
+}
+
+pub fn noises(settings: &Value) -> Vec<Value> {
+    if !settings["xray_noise_enabled"].as_bool().unwrap_or(false) {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for item in settings["xray_noises"].as_array().cloned().unwrap_or_default() {
+        let kind = item["type"].as_str().unwrap_or("rand").trim().to_ascii_lowercase();
+        let packet = item["packet"].as_str().unwrap_or("").trim().to_string();
+        if !matches!(kind.as_str(), "rand" | "str" | "hex" | "base64") || packet.is_empty() {
+            continue;
+        }
+        let mut noise = json!({"type": kind, "packet": packet});
+        let delay = item["delay"].as_str().unwrap_or("").trim();
+        if !delay.is_empty() {
+            noise["delay"] = json!(delay);
+        }
+        let apply = item["apply_to"].as_str().unwrap_or("").trim();
+        if matches!(apply, "ip" | "ipv4" | "ipv6") {
+            noise["applyTo"] = json!(apply);
+        }
+        out.push(noise);
+    }
+    out
+}
+
+fn ech_config_list(profile: &Value) -> Option<String> {
+    if !matches!(&profile["ech"], Value::Bool(true)) && !matches!(profile["ech"].as_str(), Some("1" | "true")) {
+        return None;
+    }
+    let config = s(profile, "ech_config");
+    let name = s(profile, "ech_query_server_name");
+    let config = config.trim();
+    if !config.is_empty() && !config.contains("://") {
+        return Some(crate::parser::pem_to_b64(config));
+    }
+    let server = if config.is_empty() { "https://1.1.1.1/dns-query" } else { config };
+    Some(if name.is_empty() { server.to_string() } else { format!("{name}+{server}") })
 }
 
 fn list(value: &Value) -> Vec<String> {
@@ -612,7 +713,7 @@ mod tests {
             "alpn": "h2",
             "fp": "chrome"
         });
-        let doc = local_socks(&profile, 18080, None);
+        let doc = local_socks(&json!({}), &profile, 18080, None);
         let alpn = &doc["outbounds"][0]["streamSettings"]["tlsSettings"]["alpn"];
         assert_eq!(alpn, &json!(["h2"]));
     }
@@ -659,5 +760,55 @@ mod tests {
         let socks = inbounds.iter().find(|item| item["tag"] == "socks-tun").expect("socks bridge");
         assert_eq!(socks["port"], json!(10809));
         assert_eq!(socks["listen"], json!("127.0.0.1"));
+    }
+
+    fn xray_accepts(doc: &Value, label: &str) {
+        let bin = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../binaries/macos/xray");
+        if !bin.exists() {
+            return;
+        }
+        let file = std::env::temp_dir().join(format!("v2open-xray-{label}.json"));
+        std::fs::write(&file, serde_json::to_string_pretty(doc).unwrap()).unwrap();
+        let out = std::process::Command::new(&bin).args(["run", "-test", "-c"]).arg(&file).output().unwrap();
+        assert!(out.status.success(), "{label}: {}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+    }
+
+    #[test]
+    fn dialer_carries_fragment_noise_and_ech() {
+        let settings = json!({
+            "fragment_enabled": true, "fragment_packets": "tlshello", "fragment_length": "100-200", "fragment_interval": "10-20",
+            "xray_noise_enabled": true,
+            "xray_noises": [
+                {"type": "rand", "packet": "10-20", "delay": "10-16", "apply_to": "ip"},
+                {"type": "str", "packet": "hello", "delay": "", "apply_to": "ipv4"},
+                {"type": "bogus", "packet": "x"}
+            ]
+        });
+        let vless = json!({
+            "protocol": "vless", "address": "example.com", "port": 443, "uuid": "b1a2c3d4-1111-2222-3333-444455556666",
+            "encryption": "none", "network": "tcp", "tls": "tls", "sni": "example.com", "ech": true, "ech_query_server_name": "cloudflare-ech.com"
+        });
+        let doc = local_socks(&settings, &vless, 18080, Some("en0"));
+        let outbounds = doc["outbounds"].as_array().unwrap();
+        assert_eq!(outbounds[0]["streamSettings"]["sockopt"]["dialerProxy"], "dialer");
+        assert_eq!(outbounds[0]["streamSettings"]["tlsSettings"]["echConfigList"], "cloudflare-ech.com+https://1.1.1.1/dns-query");
+        assert_eq!(outbounds[1]["settings"]["fragment"]["packets"], "tlshello");
+        assert!(outbounds[1]["settings"].get("noises").is_none());
+        assert_eq!(outbounds[1]["streamSettings"]["sockopt"]["interface"], "en0");
+        xray_accepts(&doc, "fragment-ech");
+
+        let hy2 = json!({"protocol": "hysteria2", "address": "example.com", "port": 443, "password": "p", "tls": "tls", "sni": "example.com"});
+        let doc = local_socks(&settings, &hy2, 18081, None);
+        let noises = doc["outbounds"][1]["settings"]["noises"].as_array().unwrap();
+        assert_eq!(noises.len(), 2);
+        assert!(doc["outbounds"][1]["settings"].get("fragment").is_none());
+        xray_accepts(&doc, "noise-hy2");
+
+        let wg = json!({"protocol": "wireguard", "address": "1.2.3.4", "port": 51820, "private_key": "yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+            "peer_public_key": "xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=", "local_address": "10.8.1.2/32,fd00::2/128", "mtu": 1280, "keepalive": "25", "reserved": "1,2,3"});
+        xray_accepts(&local_socks(&settings, &wg, 18082, None), "noise-wg");
+
+        let plain = local_socks(&json!({}), &vless, 18083, None);
+        assert_eq!(plain["outbounds"].as_array().unwrap().len(), 1);
     }
 }

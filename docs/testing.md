@@ -10,8 +10,8 @@ cargo test -p v2core
 
 | File | What it covers | Network |
 | --- | --- | --- |
-| `tests/config.rs` | Share links + per-app modes pass `sing-box check` | No (needs bundled `sing-box`) |
-| `tests/clash.rs` | Clash YAML proxy parse | No |
+| `tests/config.rs` | Share links, TUIC/AnyTLS/ShadowTLS/ECH/AWG/WARP configs pass `sing-box check`; per-app modes | No (needs bundled `sing-box`) |
+| `tests/clash.rs` | Clash YAML (incl. tuic, anytls, AWG, shadow-tls, ECH) | No |
 | `tests/dns_balancers.rs` | DNS items and Xray balancer export | No |
 | `tests/ping.rs` | ICMP/TCP ping to a real host | Yes (small) |
 | `tests/live_connect.rs` | SOCKS/TUN download using **saved** library | Yes, `#[ignore]` |
@@ -20,6 +20,8 @@ cargo test -p v2core
 `config.rs` tests **return early** if `binaries/macos/sing-box` or `assets/rulesets` are missing. Keep those files in place for a meaningful run.
 
 Ignored tests use `~/Library/Application Support/V2Open` and the currently selected profile. They can change system proxy and must tear the tunnel down in `Drop`. **Do not run them in CI. Do not commit `dev-logs/connection-matrix.txt`.**
+
+Unit tests in `parser.rs`, `xray.rs`, `sidecar.rs`, and `warp.rs` cover link round-trips, Xray `run -test`, naive sidecar JSON, and live WARP-on-WARP (`#[ignore]`).
 
 ```bash
 # only if you intend to hit your own configs

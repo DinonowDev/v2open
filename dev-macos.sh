@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=macos-env.sh
 source "$ROOT/macos-env.sh"
+export V2OPEN_SIGN_STYLE=development
 export CARGO_TARGET_DIR="$ROOT/native/target"
 APP="$ROOT/V2Open-Dev.app"
 EXE="$APP/Contents/MacOS/V2Open"
@@ -127,8 +128,9 @@ sync_speedometer() {
 
 sync_cores() {
   mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/.dev-core-stamps"
-  for tool in sing-box masterdns dnstt-client pingtunnel xray; do
+  for tool in sing-box masterdns dnstt-client pingtunnel xray sing-box-naive; do
     local src="$ROOT/binaries/macos/$tool"
+    [[ "$tool" == "sing-box-naive" ]] && src="$ROOT/binaries/macos/sing-box.official"
     local dst="$APP/Contents/MacOS/$tool"
     local stamp="$APP/Contents/Resources/.dev-core-stamps/$tool"
     [[ -f "$src" ]] || continue
@@ -182,11 +184,7 @@ EOF
   swiftc -parse-as-library -g -Onone -target "$SWIFT_TARGET" -o "$EXE" \
     "${SWIFT_SOURCES[@]}" \
     -L "$LIB" -lv2core \
-    -framework SwiftUI -framework AppKit -framework AVFoundation -framework Vision -framework CoreText \
-    -framework Security -framework CoreFoundation -framework SystemConfiguration -framework NetworkExtension -framework CloudKit -framework WebKit \
-    -framework CoreWLAN -framework CoreLocation -framework CoreImage \
-    -framework PhotosUI -framework Photos -framework CreateML -framework TabularData -framework CoreML -framework NaturalLanguage \
-    -lc++ -liconv
+    "${V2OPEN_SWIFT_FRAMEWORKS[@]}"
   v2open_codesign "$EXE"
   v2open_codesign "$APP" "$ROOT/macos-app/V2Open.entitlements"
   echo "built $APP"

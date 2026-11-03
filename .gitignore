@@ -34,4 +34,5 @@ macos/
 native/gui/
 binaries/linux/
 binaries/windows/
+binaries/macos-x86_64/
 bin/

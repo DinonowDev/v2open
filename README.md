@@ -22,17 +22,19 @@ V2Open is **not** a VPN service. It does not sell bandwidth and does not operate
 
 **[→ Get the latest release (macOS zip)](https://github.com/DinonowDev/v2open/releases/latest)**
 
-1. Download `V2Open-*-macos-arm64.zip` from [GitHub Releases](https://github.com/DinonowDev/v2open/releases).
+1. From [GitHub Releases](https://github.com/DinonowDev/v2open/releases), download the zip for your Mac:
+   - Apple Silicon: `V2Open-*-macos-arm64.zip`
+   - Intel: `V2Open-*-macos-x86_64.zip`
 2. Unzip and drag **V2Open.app** to **Applications**.
-3. First open: **Right-click → Open** if Gatekeeper warns about an unsigned app, or run `xattr -cr /Applications/V2Open.app`.
+3. A notarized build opens normally. If Gatekeeper says the developer cannot be verified, that zip was not notarized: **Right-click → Open** once, or `xattr -cr /Applications/V2Open.app`.
 
-Apple Silicon Macs use the pre-built zip. **Intel Macs:** build from source with `./build-macos.sh` and matching [engine binaries](docs/binaries.md). Pre-release builds sometimes appear as the **`V2Open-macos-arm64`** artifact on [Actions](https://github.com/DinonowDev/v2open/actions) (14-day retention). Maintainers: [docs/release.md](docs/release.md).
+Pre-release zips for both architectures are the **`V2Open-macos-arm64`** and **`V2Open-macos-x86_64`** artifacts on [Actions](https://github.com/DinonowDev/v2open/actions) (14-day retention). Maintainers: [docs/release.md](docs/release.md).
 
 Persian overview: [README.fa.md](README.fa.md)
 
 | | |
 | --- | --- |
-| **Current version** | `1.1.0` (build `2`) — see [`VERSION`](VERSION) |
+| **Current version** | `1.2.0` (build `3`) — see [`VERSION`](VERSION) |
 | **Platform** | macOS 13+ (Apple Silicon and Intel) |
 | **UI** | SwiftUI desktop client |
 | **Core** | Rust `v2core` static library |
@@ -62,13 +64,15 @@ Persian overview: [README.fa.md](README.fa.md)
 
 ## What it does
 
-- Import share links (`vless`, `vmess`, `trojan`, `ss`, `ssr`, `hy2`, `hysteria`, `wireguard`, `ssh`, `socks`, `dnstt`, `masterdns`, `ping`, `chain`, …) from clipboard, QR, file, or URL scheme.
+- Import share links (`vless`, `vmess`, `trojan`, `ss`, `ssr`, `hy2`, `hysteria`, `tuic`, `anytls`, `naive`, `wireguard`, `warp`, `vpn`, `ssh`, `socks`, `dnstt`, `masterdns`, `ping`, `chain`, …) from clipboard, QR, file, or URL scheme.
 - Pull subscription groups and refresh them on a schedule.
 - Connect as a **system VPN tunnel** (Network Extension) or as **local SOCKS/HTTP proxy**.
 - Route traffic with presets (global, Iran, Russia, China white/black) or a custom rule editor.
 - Ping, pick the best node, Smart Connect, and an in-app speed test.
-- Optional per-app include/exclude, kill switch, FakeDNS, mux, fragment, Clash API, Xray balancers.
+- Optional per-app include/exclude, kill switch, FakeDNS, mux, TLS fragment, **ECH**, ShadowTLS on Shadowsocks, **AmneziaWG**, built-in **Cloudflare WARP** (WARP-on-WARP and chain-after-config), **Xray UDP noise**, Clash API, Xray balancers.
 - Local backups, password-locked `.v2box` packages, optional iCloud sync.
+- Menu bar icon to connect, disconnect, and switch servers without keeping the window open.
+- Update check against GitHub Releases, with download and install inside the app.
 - Ten UI languages: English, فارسی, العربية, Indonesia, Русский, Türkçe, Українська, Tiếng Việt, 中文, 简体中文.
 
 You are responsible for the configs you import and for complying with the laws of your country. See in-app Terms and Privacy under **Settings → About**.
@@ -80,7 +84,7 @@ You are responsible for the configs you import and for complying with the laws o
 - macOS 13.0 or later
 - Xcode Command Line Tools (`xcrun`, `swiftc`)
 - [Rust](https://rustup.rs) / Cargo (stable)
-- Bundled engine binaries in `binaries/macos/` (`sing-box`, `xray`, `masterdns`, `dnstt-client`, `pingtunnel`, plus `geoip.dat` / `geosite.dat`)
+- Bundled engine binaries in `binaries/macos/` (`sing-box`, `sing-box-naive` for NaiveProxy, `xray`, `masterdns`, `dnstt-client`, `pingtunnel`, plus `geoip.dat` / `geosite.dat`)
 - For live reload: `fswatch` (`brew install fswatch`)
 
 VPN mode needs a signed Network Extension. Unsigned `V2Open-Dev.app` falls back to starting the core process directly (proxy / local engine, not a full system tunnel).

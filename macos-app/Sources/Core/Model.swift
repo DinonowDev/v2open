@@ -41,6 +41,14 @@ final class Model: ObservableObject {
         LocaleStore.string(key, language: language)
     }
 
+    func t(_ key: String, vars: [String: String]) -> String {
+        var text = t(key)
+        for (name, value) in vars {
+            text = text.replacingOccurrences(of: "{\(name)}", with: value)
+        }
+        return text
+    }
+
     func showToast(_ text: String, tone: ToastTone = .info) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -81,6 +89,11 @@ final class Model: ObservableObject {
         syncBackgroundScheduler()
         armSystemOnDemand()
         startAutoPing()
+        MenuBarCenter.shared.attach(self)
+        AppUpdater.shared.onToast = { [weak self] message, tone in
+            self?.showToast(message, tone: tone)
+        }
+        AppUpdater.shared.start(auto: settings["app_update_check"] as? Bool ?? true)
         tickActivity.start { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
@@ -183,6 +196,17 @@ final class Model: ObservableObject {
         refresh()
         if key == "app_icon" {
             AppIconStore.apply(value as? String ?? "default")
+        }
+        if key == "menu_bar", (value as? Bool) != true {
+            _ = call("set", ["key": "hide_dock_icon", "value": false])
+            refresh()
+        }
+        if key == "hide_dock_icon", (value as? Bool) == true, settings["menu_bar"] as? Bool == false {
+            _ = call("set", ["key": "menu_bar", "value": true])
+            refresh()
+        }
+        if key == "app_update_check" {
+            AppUpdater.shared.setAutoCheck(value as? Bool ?? true)
         }
         if ["geo_auto_update", "on_demand", "persist_tunnel", "reconnect_after_wake", "on_demand_text", "sub_auto_update"].contains(key) {
             syncBackgroundScheduler()

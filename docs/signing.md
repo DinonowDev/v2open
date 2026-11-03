@@ -76,16 +76,42 @@ If start fails, Swift falls back to `connect` (child process). That is **not** a
 
 ## Notarization (Developer ID distribution)
 
-After `./build-macos.sh`:
+`./build-macos.sh` signs with **Developer ID Application** when that identity is available (`--options runtime --timestamp`). Nested engines use `macos-app/Helper.entitlements`. Ad-hoc remains the fallback, and `./dev-macos.sh` prefers an Apple Development identity.
+
+Notarization also needs provisioning profiles embedded as `Contents/embedded.provisionprofile` on the app and the Packet Tunnel appex. Restricted entitlements (Network Extension, App Groups) are rejected without them.
 
 ```bash
-ditto -c -k --keepParent V2Open.app /tmp/V2Open.zip
-xcrun notarytool submit /tmp/V2Open.zip --apple-id "$APPLE_ID" --team-id "$TEAM_ID" --password "$APP_SPECIFIC_PASSWORD" --wait
-xcrun stapler staple V2Open.app
-spctl --assess -v V2Open.app
+export V2OPEN_SIGN_IDENTITY="Developer ID Application: Example (TEAMID)"
+export V2OPEN_PROFILE_APP=/path/app.provisionprofile
+export V2OPEN_PROFILE_TUNNEL=/path/tunnel.provisionprofile
+export V2OPEN_NOTARIZE=1
+export APPLE_NOTARY_KEY_PATH=/path/AuthKey.p8
+export APPLE_NOTARY_KEY_ID=ABC123
+export APPLE_NOTARY_ISSUER_ID=00000000-0000-0000-0000-000000000000
+./build-macos.sh
 ```
 
-Do not put Apple ID passwords in the repo. Notarization is not required for ad-hoc local debug.
+`scripts/notarize-macos.sh` submits a zip, waits, staples, and runs `spctl --assess`. An Apple ID app-specific password (`APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_PASSWORD`) works when the API key is not set. Do not put those values in the repo.
+
+Intel builds: `V2OPEN_ARCH=x86_64 ./build-macos.sh` fetches official engines into `binaries/macos-x86_64/` (gitignored) and cross-compiles. See [binaries.md](binaries.md).
+
+### GitHub Actions
+
+[`.github/workflows/release.yml`](../.github/workflows/release.yml) and CI call `scripts/ci-import-certificate.sh`. With these repository secrets the zip is signed and notarized. Without them the job still publishes an ad-hoc zip. Step-by-step: [apple-ci-secrets.md](apple-ci-secrets.md).
+
+| Secret | Purpose |
+| --- | --- |
+| `APPLE_CERTIFICATE_BASE64` | Developer ID Application `.p12`, base64 |
+| `APPLE_CERTIFICATE_PASSWORD` | Password for that `.p12` |
+| `APPLE_PROFILE_APP_BASE64` | Provisioning profile for `local.v2open.desktop` |
+| `APPLE_PROFILE_TUNNEL_BASE64` | Provisioning profile for `local.v2open.desktop.PacketTunnel` |
+| `APPLE_NOTARY_KEY_BASE64` | App Store Connect API key (`.p8`), base64 |
+| `APPLE_NOTARY_KEY_ID` | Key id |
+| `APPLE_NOTARY_ISSUER_ID` | Issuer id |
+
+Fallback instead of the API key: `APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_PASSWORD`.
+
+Notarization is not required for ad-hoc local debug. A stapled app opens without `xattr -cr`. An ad-hoc zip still needs Right-click → Open the first time. The in-app updater clears quarantine only when `spctl` rejects the new bundle.
 
 ---
 

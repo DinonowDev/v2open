@@ -83,3 +83,48 @@ fn parse_text_still_reads_share_links() {
     assert_eq!(nodes[0]["protocol"], "vless");
     assert_eq!(nodes[0]["address"], json!("127.0.0.1"));
 }
+
+#[test]
+fn parses_clash_new_protocols() {
+    let text = r#"
+proxies:
+  - {name: any, type: anytls, server: a.example.com, port: 443, password: pw, sni: a.example.com, client-fingerprint: chrome}
+  - name: awg
+    type: wireguard
+    server: 1.2.3.4
+    port: 51820
+    private-key: cHJpdg==
+    public-key: cHVi
+    ip: 10.0.0.2
+    amnezia-wg-option:
+      jc: 4
+      jmin: 40
+      jmax: 70
+  - name: stls
+    type: ss
+    server: s.example.com
+    port: 443
+    cipher: aes-256-gcm
+    password: pw
+    plugin: shadow-tls
+    plugin-opts:
+      host: www.apple.com
+      password: tlspw
+      version: 3
+  - name: ech
+    type: trojan
+    server: t.example.com
+    port: 443
+    password: pw
+    ech-opts:
+      enable: true
+"#;
+    let nodes = parse_clash_yaml(text);
+    assert_eq!(nodes.len(), 4, "{nodes:?}");
+    assert_eq!(nodes[0]["protocol"], "anytls");
+    assert_eq!(nodes[1]["awg_jc"], "4");
+    assert_eq!(nodes[1]["local_address"], "10.0.0.2/32");
+    assert_eq!(nodes[2]["shadowtls_version"], "3");
+    assert_eq!(nodes[2]["shadowtls_sni"], "www.apple.com");
+    assert_eq!(nodes[3]["ech"], true);
+}

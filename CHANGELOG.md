@@ -15,6 +15,35 @@ How to edit this file: [docs/versioning.md](docs/versioning.md).
 
 ### Fixed
 
+## [1.2.0] - 2026-11-03
+
+Build `3`.
+
+### Added
+
+- Menu bar icon to connect, disconnect, and switch servers. Closing the window leaves the app running; Quit is in the menu. Optional Dock hiding.
+- Update check against GitHub Releases, with a Home and About prompt, a system notification, and download-and-install that verifies the asset digest.
+- Intel release zip (`macos-x86_64`) next to the Apple Silicon zip. Official sing-box, Xray, and pingtunnel are fetched at build time; dnstt-client is built when Go is available. MasterDNS is included only if an Intel `masterdns` binary is supplied.
+- Release signing and notarization when Apple Developer ID, provisioning profiles, and notary credentials are configured. See [docs/signing.md](docs/signing.md) and [docs/apple-ci-secrets.md](docs/apple-ci-secrets.md).
+- TUIC and AnyTLS: `tuic://` and `anytls://` links, Clash YAML, sing-box JSON, the manual editor, and sing-box outbounds. TUIC from Clash no longer fails with "unsupported protocol tuic".
+- ShadowTLS v1–3 on Shadowsocks profiles (`plugin=shadow-tls;…`, Clash `plugin: shadow-tls`, editor). simple-obfs and v2ray-plugin options are passed to sing-box too.
+- NaiveProxy: `naive+https://` / `naive+quic://` links and editor. Runs in the stock sing-box, now bundled as `sing-box-naive`, as a local SOCKS sidecar.
+- ECH for TLS, Hysteria2, TUIC, AnyTLS and Naive: editor toggle, `ech=` link parameter, Clash `ech-opts`, sing-box `tls.ech`, and Xray `echConfigList`.
+- AmneziaWG: `Jc`/`Jmin`/`Jmax`/`S1`–`S4`/`H1`–`H4`/`I1`–`I5` from WireGuard links, `.conf` text, AmneziaVPN `vpn://` exports, Clash `amnezia-wg-option`, and the editor.
+- Built-in WARP: automatic Cloudflare account registration, optional WARP+ license, WARP-on-WARP, Hiddify-style `warp://` links, and a "WARP after config" chain that exits through WARP behind any other profile.
+- Xray UDP noise editor (Settings → Xray advanced). Noise and TLS fragment are applied to Xray-run profiles through a `freedom` dialer outbound.
+
+### Changed
+
+- Profiles that Xray cannot carry exactly (AmneziaWG, Shadowsocks with a plugin or ShadowTLS, Hysteria v1, Hysteria2 with obfs or port hopping) now run on sing-box.
+- Xray WireGuard outbounds now get `reserved`, MTU, keepalive, pre-shared key, allowed IPs, and both IPv4 and IPv6 addresses.
+- The fragment setting now also applies to Xray-run TLS/REALITY profiles.
+- WARP-after-config validates the selected profile at connect time; chain editor supports TUIC, AnyTLS, Naive, WireGuard, and WARP hops.
+- Contributor docs: `development.md` (engines + protocol checklist), `rpc.md` (WARP/noise/fragment settings via `set`).
+- README install steps for both `macos-arm64` and `macos-x86_64` zips; CI and Release workflows build both architectures.
+
+### Fixed
+
 ## [1.1.0] - 2026-10-30
 
 Build `2`.
@@ -53,6 +82,7 @@ Build `1`.
 
 - Initial macOS SwiftUI client, Rust `v2core`, bundled `sing-box` / Xray, routing presets, and local library.
 
-[Unreleased]: https://github.com/DinonowDev/v2open/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/DinonowDev/v2open/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/DinonowDev/v2open/releases/tag/v1.2.0
 [1.1.0]: https://github.com/DinonowDev/v2open/releases/tag/v1.1.0
 [1.0.0]: https://github.com/DinonowDev/v2open/releases/tag/v1.0.0

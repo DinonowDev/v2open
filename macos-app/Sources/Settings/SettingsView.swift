@@ -88,6 +88,34 @@ struct SettingsView: View {
                         }
                     }
                     SettingsCard {
+                        SettingsToggleRow(
+                            title: model.t("menuBar"),
+                            hint: model.t("menuBarHint"),
+                            isOn: model.settings["menu_bar"] as? Bool ?? true
+                        ) { model.set("menu_bar", $0) }
+                        SettingsDivider()
+                        SettingsToggleRow(
+                            title: model.t("hideDockIcon"),
+                            hint: model.t("hideDockHint"),
+                            isOn: model.settings["hide_dock_icon"] as? Bool ?? false
+                        ) {
+                            guard model.settings["menu_bar"] as? Bool ?? true else { return }
+                            model.set("hide_dock_icon", $0)
+                        }
+                        .opacity((model.settings["menu_bar"] as? Bool ?? true) ? 1 : 0.45)
+                        .allowsHitTesting(model.settings["menu_bar"] as? Bool ?? true)
+                        SettingsDivider()
+                        SettingsToggleRow(
+                            title: model.t("autoCheckUpdates"),
+                            hint: model.t("autoCheckUpdatesHint"),
+                            isOn: model.settings["app_update_check"] as? Bool ?? true
+                        ) { model.set("app_update_check", $0) }
+                        SettingsDivider()
+                        SettingsNavRow(icon: "arrow.down.circle", title: model.t("checkForUpdates"), chevron: false) {
+                            AppUpdater.shared.check(interactive: true)
+                        }
+                    }
+                    SettingsCard {
                         SettingsToggleRow(title: model.t("insecure"), isOn: model.settings["allow_insecure"] as? Bool ?? false) { model.set("allow_insecure", $0) }
                         SettingsDivider()
                         SettingsToggleRow(title: model.t("ipv6"), isOn: model.settings["prefer_ipv6"] as? Bool ?? false) { model.set("prefer_ipv6", $0) }
@@ -174,6 +202,8 @@ struct SettingsView: View {
                         SettingsNavRow(icon: "arrow.triangle.branch", title: model.t("routing"), action: { model.push("routing") })
                         SettingsDivider(inset: 58)
                         SettingsNavRow(icon: "server.rack", title: model.t("dns"), action: { model.push("dns") })
+                        SettingsDivider(inset: 58)
+                        SettingsNavRow(icon: "cloud.fill", title: model.t("warpTitle"), value: (model.settings["warp_chain"] as? Bool ?? false) ? model.t("warpChain") : "", action: { model.push("warp") })
                         SettingsDivider(inset: 58)
                         SettingsNavRow(icon: "antenna.radiowaves.left.and.right", title: model.t("inbounds"), action: { model.push("network_settings") })
                         SettingsDivider(inset: 58)

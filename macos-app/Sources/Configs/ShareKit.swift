@@ -9,6 +9,31 @@ enum ShareKit {
         NSPasteboard.general.setString(text, forType: .string)
     }
 
+    static func messageStamp() -> String {
+        let raw = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        return "id:\(raw.prefix(12))"
+    }
+
+    static func stampMessage(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return text }
+        if trimmed.split(whereSeparator: \.isNewline).contains(where: isMessageStamp) {
+            return trimmed
+        }
+        return trimmed + "\n" + messageStamp()
+    }
+
+    static func copyMessage(_ text: String) {
+        copy(stampMessage(text))
+    }
+
+    private static func isMessageStamp(_ line: Substring) -> Bool {
+        let token = line.trimmingCharacters(in: .whitespaces)
+        guard token.hasPrefix("id:") else { return false }
+        let payload = token.dropFirst(3)
+        return (8...16).contains(payload.count) && payload.allSatisfy(\.isHexDigit)
+    }
+
     static func qrImage(from text: String, scale: CGFloat = 8) -> NSImage? {
         let data = text.data(using: .utf8) ?? Data()
         guard let filter = CIFilter(name: "CIQRCodeGenerator") else { return nil }
@@ -115,7 +140,7 @@ struct ProfileShareSheet: View {
                         .padding(.bottom, 12)
                     }
                     VStack(spacing: 0) {
-                        shareRow(model.t("copyLink")) { ShareKit.copy(profile["link"] as? String ?? ""); model.showToast(model.t("saved"), tone: .success) }
+                        shareRow(model.t("copyLink")) { ShareKit.copyMessage(profile["link"] as? String ?? ""); model.showToast(model.t("saved"), tone: .success) }
                         SettingsDivider(inset: 14)
                         shareRow(model.t("copyJsonXray")) { copyJSON("xray") }
                         SettingsDivider(inset: 14)
@@ -129,7 +154,7 @@ struct ProfileShareSheet: View {
                         }
                         SettingsDivider(inset: 14)
                         shareRow(model.t("shareSsr")) {
-                            ShareKit.copy(profile["link"] as? String ?? "")
+                            ShareKit.copyMessage(profile["link"] as? String ?? "")
                             model.showToast(model.t("saved"), tone: .success)
                         }
                     }
@@ -207,8 +232,8 @@ struct ProfileShareSheet: View {
 
     func lockCopy() {
         let response = model.call("share_locked", lockArgs(path: ""))
-        let text = ((response["data"] as? [String: Any])?["text"] as? String)
-            ?? (profile["link"] as? String ?? "")
+        let remote = (response["data"] as? [String: Any])?["text"] as? String ?? ""
+        let text = remote.isEmpty ? ShareKit.stampMessage(profile["link"] as? String ?? "") : remote
         ShareKit.copy(text)
         if response["ok"] as? Bool == false {
             model.showToast(response["error"] as? String ?? model.t("failed"), tone: .error)
@@ -247,7 +272,7 @@ struct ProfileQRSheet: View {
                         model.showToast(model.t("saved"), tone: .success)
                     }
                     SheetActionButton(title: model.t("copyLink"), icon: "link") {
-                        ShareKit.copy(profile["link"] as? String ?? "")
+                        ShareKit.copyMessage(profile["link"] as? String ?? "")
                         model.showToast(model.t("saved"), tone: .success)
                     }
                     SheetActionButton(title: model.t("cancel"), quiet: true, action: onClose)

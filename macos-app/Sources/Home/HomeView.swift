@@ -1,9 +1,9 @@
 import SwiftUI
 import Combine
+import AppKit
 
 struct HomeView: View {
     @EnvironmentObject var model: Model
-    @State private var connectedSince: Date?
 
     var body: some View {
         let runtime = model.runtime
@@ -23,7 +23,7 @@ struct HomeView: View {
 
             VStack(spacing: 8) {
                 if connected {
-                    ConnectionTimer(since: connectedSince)
+                    ConnectionTimer(connectedAt: jsonUInt(runtime["connected_at"]))
                 }
                 if model.settings["legacy_slider"] as? Bool == true {
                     ConnectSlider(
@@ -74,12 +74,6 @@ struct HomeView: View {
             guard model.runtime["connected"] as? Bool == true else { return }
             let response = model.call("tick")
             if let data = response["data"] as? [String: Any] { model.state = data }
-        }
-        .onChange(of: connected) { _, now in
-            connectedSince = now ? Date() : nil
-        }
-        .onAppear {
-            if connected { connectedSince = Date() }
         }
     }
 
@@ -258,16 +252,25 @@ struct HomeStatTile: View {
 
 struct ConnectionTimer: View {
     @Environment(\.themeLight) private var themeLight
-    var since: Date?
+    /// Unix seconds from core (`runtime.connected_at`), set at connect / mark_connected.
+    var connectedAt: UInt64
+    @State private var now = Date()
+
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
-            let _ = themeLight
-            let elapsed = since.map { context.date.timeIntervalSince($0) } ?? 0
-            Text(formatElapsed(elapsed))
-                .font(.custom("Inter", size: 24).weight(.bold))
-                .monospacedDigit()
-                .foregroundStyle(C.text)
-        }
+        let _ = themeLight
+        let elapsed = connectedAt > 0
+            ? max(0, now.timeIntervalSince1970 - Double(connectedAt))
+            : 0
+        Text(formatElapsed(elapsed))
+            .font(.custom("Inter", size: 24).weight(.bold))
+            .monospacedDigit()
+            .foregroundStyle(C.text)
+            .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { tick in
+                now = tick
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                now = Date()
+            }
     }
 
     private func formatElapsed(_ t: TimeInterval) -> String {

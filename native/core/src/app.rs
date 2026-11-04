@@ -699,6 +699,7 @@ impl Core {
                 "kill_switch": self.runtime.blackhole,
                 "tunnel": self.runtime.tunnel,
                 "engine": self.runtime.engine,
+                "connected_at": self.runtime.connected_at,
                 "config_path": self.path.parent().unwrap_or(Path::new(".")).join("config.json"),
                 "log_path": self.path.parent().unwrap_or(Path::new(".")).join("core.log")
             }

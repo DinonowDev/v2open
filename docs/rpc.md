@@ -37,7 +37,7 @@ Do not rename or remove a method without a **MAJOR** version bump. Add new metho
 
 | Method | Args | Result |
 | --- | --- | --- |
-| `import` | `{text, group_id?}` | Parse links / Clash / JSON into a group |
+| `import` | `{text?, data?, password?, group_id?}` | Parse links / Clash / JSON / NPV Tunnel (`.npvt`, `.npvs`) into a group. `data` is base64 file bytes. Passphrase files return `password required` until `password` is set. |
 | `subscribe` | `{name, url}` | Fetch URL, import as a group |
 | `save_profile` | `{profile}` | Create/update one profile object |
 | `warp_create` | `{name?, license?, wow?}` | Registers a Cloudflare WARP account (two for `wow`), saves a `warp` profile; snapshot plus `created_id` |

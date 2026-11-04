@@ -246,6 +246,12 @@ fn apply_stream(node: &mut Value, query: &HashMap<String, String>) {
     if let Some(v) = query.get("mode").filter(|v| !v.is_empty()) {
         set(node, "mode", json!(v));
     }
+    if let Some(v) = query.get("extra").filter(|v| !v.is_empty()) {
+        set(node, "xhttp_extra", json!(v));
+    }
+    if let Some(v) = query.get("x_padding").or(query.get("xPaddingBytes")).filter(|v| !v.is_empty()) {
+        set(node, "x_padding", json!(v));
+    }
     let insecure = query.get("allowInsecure").or(query.get("insecure")).or(query.get("allow_insecure")).map(|v| flag(v)).unwrap_or(false);
     if insecure {
         set(node, "insecure", json!(true));
@@ -358,6 +364,10 @@ fn parse_vmess(rest: &str, name: &str) -> Result<Value, String> {
     set(&mut node, "tls", json!(if !tls.is_empty() && tls != "none" { "tls" } else { "none" }));
     set(&mut node, "sni", json!(obj["sni"].as_str().unwrap_or("")));
     set(&mut node, "fp", json!(obj["fp"].as_str().unwrap_or("")));
+    set(&mut node, "alpn", json!(obj["alpn"].as_str().unwrap_or("")));
+    if flag(obj["insecure"].as_str().unwrap_or("")) {
+        set(&mut node, "insecure", json!(true));
+    }
     if let Some(q) = rest.split_once('?').map(|p| p.1) {
         apply_stream(&mut node, &qs(q));
     }
@@ -917,6 +927,13 @@ fn parse_chain(rest: &str, name: &str) -> Result<Value, String> {
 }
 
 pub fn parse_text(text: &str) -> Vec<Value> {
+    if crate::npv::is_npv_text(text) {
+        return crate::npv::nodes_from_text(text);
+    }
+    parse_text_inner(text)
+}
+
+pub(crate) fn parse_text_inner(text: &str) -> Vec<Value> {
     let mut body = text.trim().to_string();
     if body.is_empty() {
         return Vec::new();

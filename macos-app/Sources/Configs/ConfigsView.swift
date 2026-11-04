@@ -5,6 +5,7 @@ struct ConfigsView: View {
     @State var addStep: ConfigAddStep = .none
     @State var query = ""
     @State var lockedImportB64: String?
+    @State var lockedImportKind = ""
     @State var filePassword = ""
     @State var collapsedGroups: Set<String> = []
     @State var shareProfile: [String: Any]?
@@ -98,6 +99,9 @@ struct ConfigsView: View {
         }
         .animation(.spring(response: 0.34, dampingFraction: 0.88), value: addStep)
         .animation(.spring(response: 0.34, dampingFraction: 0.88), value: lockedImportB64 != nil)
+        .onReceive(model.$pendingLock) { pending in
+            if pending != nil { takePendingLock() }
+        }
         .animation(.spring(response: 0.34, dampingFraction: 0.88), value: model.settings["selected_id"] as? String ?? "")
     }
 }

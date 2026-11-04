@@ -716,8 +716,25 @@ impl Core {
                 Ok(self.state())
             }
             "import" => {
-                self.import_text(args["text"].as_str().unwrap_or(""), args["group_id"].as_str())?;
-                Ok(self.state())
+                let password = args["password"].as_str().unwrap_or("");
+                let group = args["group_id"].as_str();
+                let notice = if let Some(data) = args["data"].as_str().filter(|s| !s.is_empty()) {
+                    let bytes = base64_bytes(data)?;
+                    self.import_npv(&bytes, group, password)?
+                } else {
+                    let text = args["text"].as_str().unwrap_or("");
+                    if crate::npv::is_npv_text(text) {
+                        self.import_npv(text.as_bytes(), group, password)?
+                    } else {
+                        self.import_text(text, group)?;
+                        String::new()
+                    }
+                };
+                let mut state = self.state();
+                if let Some(obj) = state.as_object_mut() {
+                    obj.insert("import_note".into(), json!(notice));
+                }
+                Ok(state)
             }
             "subscribe" => {
                 self.subscribe(args["name"].as_str().unwrap_or("Group"), args["url"].as_str().unwrap_or(""))?;
@@ -1356,6 +1373,12 @@ impl Core {
         self.groups.iter().position(|g| g["kind"].as_str() == Some("local")).unwrap_or(0)
     }
 
+    fn import_npv(&mut self, bytes: &[u8], group_id: Option<&str>, password: &str) -> Result<String, String> {
+        let opened = crate::npv::open_bytes(bytes, password)?;
+        self.store_nodes(opened.nodes, group_id)?;
+        Ok(opened.notice)
+    }
+
     fn import_text(&mut self, text: &str, group_id: Option<&str>) -> Result<(), String> {
         let trimmed = text.trim();
         if trimmed.starts_with("v2box://") || trimmed.starts_with("v2open://") {
@@ -1387,7 +1410,15 @@ impl Core {
     }
 
     fn import_nodes(&mut self, text: &str, group_id: Option<&str>) -> Result<(), String> {
+        if crate::npv::is_npv_text(text) {
+            self.import_npv(text.as_bytes(), group_id, "")?;
+            return Ok(());
+        }
         let nodes = parse_text(text);
+        self.store_nodes(nodes, group_id)
+    }
+
+    fn store_nodes(&mut self, nodes: Vec<Value>, group_id: Option<&str>) -> Result<(), String> {
         if nodes.is_empty() {
             return Err("could not read that config".into());
         }

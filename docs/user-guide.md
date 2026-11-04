@@ -40,7 +40,7 @@ Import menu:
 | Subscription URL | `subscribe` |
 | Manual editor | `save_profile` after editing `draft` |
 | QR (camera or photo) | decoded text → `import` |
-| File (JSON, links, Clash YAML, `.v2box`) | `import` / `import_package` / `import_backup` |
+| File (JSON, links, Clash YAML, `.npvt`, `.npvs`, `.v2box`) | `import` / `import_package` / `import_backup` |
 
 Groups can have a URL (`set_group_url`, `update_group`), pin (`pin_group`), lock (`lock_group` / `unlock_group`), export (`export_group`, `share_locked`).
 
@@ -54,7 +54,7 @@ Sort: `sort_by` = `default` / `name` / ping / newest / download / upload.
 
 `vless`, `vmess`, `trojan`, `shadowsocks`, `shadowsocksr`, `hysteria2`, `hysteria`, `tuic`, `anytls`, `naive`, `warp`, `chain`, `wireguard`, `ssh`, `socks`, `http`, `dnstt`, `masterdns`, `ping`
 
-Share-link schemes parsed in `parser.rs`: `vmess`, `vless`, `trojan`, `ss`, `hysteria2`/`hy2`, `hysteria`, `tuic`, `anytls`, `naive+https`/`naive+quic`/`naive`, `wireguard`/`wg`, `warp` (Hiddify style, `&&detour=` for WARP-on-WARP), `vpn` (AmneziaVPN export), `ssh`, `socks`/`socks5`, `http`/`https`, `dnstt`, `masterdns`, `ping`, `ssr`, `dnst`, `chain`, `v2box`/`v2open` (subscription URL). Plain WireGuard / AmneziaWG `.conf` text (`[Interface]` / `[Peer]`) is also accepted, as are sing-box JSON `outbounds` / `endpoints`.
+Share-link schemes parsed in `parser.rs`: `vmess`, `vless`, `trojan`, `ss`, `hysteria2`/`hy2`, `hysteria`, `tuic`, `anytls`, `naive+https`/`naive+quic`/`naive`, `wireguard`/`wg`, `warp` (Hiddify style, `&&detour=` for WARP-on-WARP), `vpn` (AmneziaVPN export), `ssh`, `socks`/`socks5`, `http`/`https`, `dnstt`, `masterdns`, `ping`, `ssr`, `dnst`, `chain`, `v2box`/`v2open` (subscription URL). Plain WireGuard / AmneziaWG `.conf` text (`[Interface]` / `[Peer]`) is also accepted, as are sing-box JSON `outbounds` / `endpoints`. NPV Tunnel files (`.npvt` text, `.npvs` bundles, including passphrase-locked Gen-2 files) are decrypted locally and imported as ordinary profiles.
 
 Transport chips for proxy protocols include `tcp`, `ws`, `grpc`, `h2`, `httpupgrade`, `xhttp`, `quic`. TLS: `none`, `tls`, `reality`.
 
@@ -167,7 +167,7 @@ tuic, anytls, naive+https, naive+quic, warp, vpn,
 wireguard, ssh, socks, ping, dnstt, masterdns, chain
 ```
 
-`v2open://…?text=` can carry a payload. File types: JSON, YAML, `.v2box` (locked catalog, UTI `local.v2open.v2box`). Locked files start with magic `V2OPEN1`.
+`v2open://…?text=` can carry a payload. File types: JSON, YAML, `.npvt`, `.npvs`, `.v2box` (locked catalog, UTI `local.v2open.v2box`). Locked files start with magic `V2OPEN1`. NPV files use `NPVT1` / `NPVS`.
 
 Camera, photo library, and (for diagnostics BSSID) location usage strings are in Info.plist.
 

@@ -2,6 +2,25 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
+enum ConfigFileKind {
+    static func isNpvText(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.hasPrefix("NPVT1") || trimmed.hasPrefix("NPVTSUB1") || trimmed.hasPrefix("NPVO1") || trimmed.hasPrefix("NPVS")
+    }
+
+    static func isNpv(_ data: Data, pathExtension: String) -> Bool {
+        let ext = pathExtension.lowercased()
+        if ext == "npvt" || ext == "npvs" { return true }
+        if data.starts(with: Data("NPVT".utf8)) || data.starts(with: Data("NPVS".utf8)) || data.starts(with: Data("NPVO".utf8)) {
+            return true
+        }
+        if let text = String(data: data, encoding: .utf8) {
+            return isNpvText(text)
+        }
+        return false
+    }
+}
+
 extension ConfigsView {
 
     func profileIds(in group: [String: Any]) -> Set<String> {
@@ -110,13 +129,64 @@ extension ConfigsView {
         finishImport(text: text)
     }
 
-    func finishImport(text: String) {
-        if let err = model.invoke("import", ["text": text]) {
-            model.showToast(err, tone: .error)
+    func finishImport(text: String, password: String = "") {
+        var args: [String: Any] = ["text": text]
+        if !password.isEmpty { args["password"] = password }
+        let response = model.call("import", args)
+        if response["ok"] as? Bool == false {
+            let err = response["error"] as? String ?? ""
+            if err == "password required" {
+                filePassword = ""
+                lockedImportKind = "npv-text"
+                lockedImportB64 = text
+                return
+            }
+            model.showToast(model.importFailure(err), tone: .error)
             return
         }
+        model.mergeState(from: response)
+        clearLockedImport()
         addStep = .none
         model.showToast(model.t("imported"), tone: .success)
+    }
+
+    func finishNpv(data: Data, password: String) {
+        var args: [String: Any] = ["password": password]
+        if let text = String(data: data, encoding: .utf8), ConfigFileKind.isNpvText(text) {
+            args["text"] = text
+        } else {
+            args["data"] = data.base64EncodedString()
+        }
+        let response = model.call("import", args)
+        if response["ok"] as? Bool == false {
+            let err = response["error"] as? String ?? ""
+            if err == "password required" {
+                filePassword = ""
+                lockedImportKind = args["text"] != nil ? "npv-text" : "npv-data"
+                lockedImportB64 = (args["text"] as? String) ?? (args["data"] as? String)
+                return
+            }
+            model.showToast(model.importFailure(err), tone: .error)
+            return
+        }
+        model.mergeState(from: response)
+        clearLockedImport()
+        addStep = .none
+        model.showToast(model.t("imported"), tone: .success)
+    }
+
+    func clearLockedImport() {
+        lockedImportB64 = nil
+        lockedImportKind = ""
+        filePassword = ""
+    }
+
+    func takePendingLock() {
+        guard let pending = model.pendingLock else { return }
+        lockedImportKind = pending.kind
+        lockedImportB64 = pending.payload
+        filePassword = ""
+        model.pendingLock = nil
     }
 
     func importQRImage() {
@@ -152,7 +222,12 @@ extension ConfigsView {
         }
         if data.starts(with: [0x56, 0x32, 0x4F, 0x50, 0x45, 0x4E, 0x31]) || data.starts(with: [0x50, 0x4B]) {
             filePassword = ""
+            lockedImportKind = "v2box"
             lockedImportB64 = data.base64EncodedString()
+            return
+        }
+        if ConfigFileKind.isNpv(data, pathExtension: url.pathExtension) {
+            finishNpv(data: data, password: "")
             return
         }
         if let text = String(data: data, encoding: .utf8) {
@@ -163,13 +238,24 @@ extension ConfigsView {
     }
 
     func confirmLockedImport() {
-        guard let b64 = lockedImportB64 else { return }
-        if let err = model.invoke("unseal", ["text": b64, "password": filePassword]) {
-            model.showToast(err, tone: .error)
+        guard let payload = lockedImportB64 else { return }
+        if lockedImportKind == "npv-text" {
+            finishImport(text: payload, password: filePassword)
             return
         }
-        lockedImportB64 = nil
-        filePassword = ""
+        if lockedImportKind == "npv-data" {
+            guard let data = Data(base64Encoded: payload) else {
+                model.showToast(model.t("wrong"), tone: .warning)
+                return
+            }
+            finishNpv(data: data, password: filePassword)
+            return
+        }
+        if let err = model.invoke("unseal", ["text": payload, "password": filePassword]) {
+            model.showToast(model.importFailure(err), tone: .error)
+            return
+        }
+        clearLockedImport()
         model.showToast(model.t("imported"), tone: .success)
     }
 

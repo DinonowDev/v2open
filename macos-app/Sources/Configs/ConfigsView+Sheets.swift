@@ -35,10 +35,10 @@ extension ConfigsView {
     }
 
     var filePasswordOverlay: some View {
-        SheetBackdrop(onDismiss: { lockedImportB64 = nil }) {
+        SheetBackdrop(onDismiss: { clearLockedImport() }) {
             SheetCard {
               VStack(alignment: .leading, spacing: 0) {
-                SheetHeader(title: model.t("filePassword"), subtitle: model.t("filePasswordHint"), close: { lockedImportB64 = nil }, closeLabel: model.t("cancel"))
+                SheetHeader(title: model.t("filePassword"), subtitle: model.t(lockedImportKind.hasPrefix("npv") ? "npvPasswordHint" : "filePasswordHint"), close: { clearLockedImport() }, closeLabel: model.t("cancel"))
                 HStack {
                     Spacer()
                     ZStack {
@@ -53,7 +53,7 @@ extension ConfigsView {
                 V2Field(placeholder: "••••••••", text: $filePassword, latin: true, secure: true, icon: "key.fill")
                     .padding(.bottom, 14)
                 SheetActionButton(title: model.t("unlockFile"), primary: true, icon: "lock.open.fill") { confirmLockedImport() }
-                SheetActionButton(title: model.t("cancel"), quiet: true) { lockedImportB64 = nil }
+                SheetActionButton(title: model.t("cancel"), quiet: true) { clearLockedImport() }
               }
             }
         }

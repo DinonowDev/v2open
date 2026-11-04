@@ -8,6 +8,7 @@ mod builder;
 mod diagnostics;
 mod dns_items;
 mod migrate;
+mod npv;
 mod parser;
 mod platform;
 mod routing;

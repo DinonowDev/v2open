@@ -1,6 +1,11 @@
 import Foundation
 import SwiftUI
 
+struct PendingLock: Equatable {
+    var kind: String
+    var payload: String
+}
+
 @MainActor
 final class Model: ObservableObject {
     @Published var state: [String: Any] = [:]
@@ -11,6 +16,7 @@ final class Model: ObservableObject {
     @Published var pingingIds: Set<String> = []
     @Published var about: [String: Any] = [:]
     @Published var pendingNote: String?
+    @Published var pendingLock: PendingLock?
 
     private var booted = false
     private var pingLoopTask: Task<Void, Never>?
@@ -235,6 +241,16 @@ final class Model: ObservableObject {
         )
     }
 
+    func importFailure(_ err: String) -> String {
+        switch err {
+        case "wrong password": return t("wrongPassword")
+        case "password required": return t("npvPasswordHint")
+        case "recipient key required": return t("npvRecipient")
+        case "could not read that config": return t("wrong")
+        default: return err
+        }
+    }
+
     func handleOpenURL(_ url: URL) {
         if url.isFileURL {
             guard let data = try? Data(contentsOf: url) else { return }
@@ -243,10 +259,16 @@ final class Model: ObservableObject {
                 push("backup_settings")
                 return
             }
+            if ConfigFileKind.isNpv(data, pathExtension: url.pathExtension) {
+                importNpv(data, password: "")
+                return
+            }
             if let text = String(data: data, encoding: .utf8) {
-                if let err = invoke("import", ["text": text]) {
-                    showToast(err, tone: .error)
+                let response = call("import", ["text": text])
+                if response["ok"] as? Bool == false {
+                    showToast(importFailure(response["error"] as? String ?? t("failed")), tone: .error)
                 } else {
+                    mergeState(from: response)
                     showToast(t("imported"), tone: .success)
                 }
             }
@@ -256,11 +278,42 @@ final class Model: ObservableObject {
         if url.scheme == "v2open", let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems {
             if let payload = items.first(where: { $0.name == "text" })?.value { text = payload }
         }
-        if let err = invoke("import", ["text": text]) {
-            showToast(err, tone: .error)
+        let response = call("import", ["text": text])
+        if response["ok"] as? Bool == false {
+            let err = response["error"] as? String ?? ""
+            if err == "password required" {
+                pendingLock = PendingLock(kind: "npv-text", payload: text)
+                go("configs")
+                return
+            }
+            showToast(importFailure(err), tone: .error)
         } else {
+            mergeState(from: response)
             showToast(t("imported"), tone: .success)
         }
+    }
+
+    func importNpv(_ data: Data, password: String) {
+        var args: [String: Any] = ["password": password]
+        if let text = String(data: data, encoding: .utf8), ConfigFileKind.isNpvText(text) {
+            args["text"] = text
+        } else {
+            args["data"] = data.base64EncodedString()
+        }
+        let response = call("import", args)
+        if response["ok"] as? Bool == false {
+            let err = response["error"] as? String ?? ""
+            if err == "password required" {
+                let payload = (args["text"] as? String) ?? (args["data"] as? String ?? "")
+                pendingLock = PendingLock(kind: args["text"] != nil ? "npv-text" : "npv-data", payload: payload)
+                go("configs")
+                return
+            }
+            showToast(importFailure(err), tone: .error)
+            return
+        }
+        mergeState(from: response)
+        showToast(t("imported"), tone: .success)
     }
 
     func go(_ name: String) {

@@ -3367,7 +3367,7 @@ impl Core {
             .unwrap_or_default()
             .into_iter()
             .take(120)
-            .map(enrich_clash_connection)
+            .map(|item| enrich_clash_connection(&item))
             .collect::<Vec<_>>();
         Ok(json!({
             "connected": true,

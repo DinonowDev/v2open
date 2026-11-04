@@ -95,6 +95,9 @@ If you add a protocol, update this section, URL schemes below, `Info.plist`, `pa
 | `menu_bar` | `true` | Menu bar icon: connect, disconnect, switch servers. Closing the window leaves the app running. |
 | `hide_dock_icon` | `false` | Dock icon hidden. Only applies while `menu_bar` is on. |
 | `app_update_check` | `true` | Check GitHub Releases for a newer app and notify. Dev builds skip this. |
+| `notify_disconnect` | `true` | macOS notification when the tunnel drops without a manual disconnect. |
+| `notify_errors` | `true` | Notification on connect failure or tunnel error phase. |
+| `notify_subscription` | `true` | Warn when a subscription group is expiring (≤3 days), expired, or ≥90% quota used. |
 | `allow_insecure` | `false` | TLS skip verify |
 | `prefer_ipv6` | `false` | Address family preference |
 | `stop_on_sleep` | `true` | Disconnect on sleep |

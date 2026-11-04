@@ -32,6 +32,8 @@ Build `7`.
 - README version table stays in sync with `VERSION` (`check-version.sh` / `bump-version.sh`).
 - Release workflow skips the flaky remote TCP ping test (same as `pre-release-check.sh`).
 - Clash / sing-box external controller view: search, filters, live speeds, and a short traffic chart.
+- Clash API responses normalize connection metadata (host, process, network, rule fields) for the UI.
+- CI build jobs run `verify-macos-bundle.sh` and attach a signing report to release notes when present.
 
 ## [1.3.2] - 2026-11-05
 

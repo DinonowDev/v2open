@@ -15,6 +15,14 @@ How to edit this file: [docs/versioning.md](docs/versioning.md).
 
 ### Fixed
 
+## [1.3.1] - 2026-11-05
+
+Build `5`.
+
+### Removed
+
+- The extra `id:` line when copying a share link or exporting group links, so pasted text stays a plain URI for other clients.
+
 ## [1.3.0] - 2026-11-05
 
 Build `4`.
@@ -96,7 +104,8 @@ Build `1`.
 
 - Initial macOS SwiftUI client, Rust `v2core`, bundled `sing-box` / Xray, routing presets, and local library.
 
-[Unreleased]: https://github.com/DinonowDev/v2open/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/DinonowDev/v2open/compare/v1.3.1...HEAD
+[1.3.1]: https://github.com/DinonowDev/v2open/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/DinonowDev/v2open/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/DinonowDev/v2open/releases/tag/v1.2.0
 [1.1.0]: https://github.com/DinonowDev/v2open/releases/tag/v1.1.0

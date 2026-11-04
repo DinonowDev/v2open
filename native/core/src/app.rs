@@ -95,23 +95,6 @@ fn id() -> String {
     format!("{:x}{:x}{:x}", now(), std::process::id(), seq)
 }
 
-fn message_stamp() -> String {
-    let seq = ID_SEQ.fetch_add(1, Ordering::Relaxed);
-    let mixed = now()
-        .wrapping_mul(0x9E37_79B1_85EB_CA87)
-        ^ seq.wrapping_mul(0xBF58_476D_1CE4_E5B9)
-        ^ u64::from(std::process::id()).wrapping_mul(0x94D0_49BB_1331_11EB);
-    format!("id:{:012x}", mixed & 0x0000_FFFF_FFFF_FFFF)
-}
-
-fn stamp_message(text: &str) -> String {
-    let trimmed = text.trim();
-    if trimmed.is_empty() {
-        return String::new();
-    }
-    format!("{trimmed}\n{}", message_stamp())
-}
-
 fn tcp_connect_ms(host: &str, port: u16, timeout: Duration, prefer_ipv6: bool) -> Option<u64> {
     let mut addrs: Vec<SocketAddr> = (host, port).to_socket_addrs().ok()?.collect();
     if addrs.is_empty() {
@@ -1132,7 +1115,7 @@ impl Core {
                     let link = p["link"].as_str().unwrap_or("").trim();
                     if link.is_empty() { None } else { Some(link.to_string()) }
                 }).collect();
-                let text = stamp_message(&links.join("\n"));
+                let text = links.join("\n");
                 if !path.is_empty() {
                     fs::write(path, &text).map_err(|e| e.to_string())?;
                 }
@@ -3262,7 +3245,7 @@ impl Core {
             })
         }).unwrap_or_default();
         Ok(json!({
-            "app_version": "1.3.0",
+            "app_version": "1.3.1",
             "sing_box": self.runtime.core,
             "xray": xray,
             "engine": self.runtime.engine,
@@ -4068,7 +4051,7 @@ fn share_locked_text(catalog: &Value) -> String {
     } else {
         format!("# {note}\n{}", uris.join("\n"))
     };
-    stamp_message(&body)
+    body
 }
 
 fn write_v2box_zip(path: &str, password: &str, catalog: &Value) -> Result<(), String> {
@@ -4397,25 +4380,6 @@ mod xray_version_tests {
     fn keeps_plain_version() {
         assert_eq!(xray_core_version("26.10.21"), "26.10.21");
         assert_eq!(xray_core_version(""), "");
-    }
-}
-
-#[cfg(test)]
-mod message_stamp_tests {
-    use super::stamp_message;
-    use crate::parser::parse_text;
-
-    #[test]
-    fn each_message_gets_its_own_id_and_stays_importable() {
-        let body = "vless://11111111-1111-1111-1111-111111111111@example.com:443?encryption=none&security=none&type=tcp#node";
-        let first = stamp_message(body);
-        let second = stamp_message(body);
-        assert_ne!(first, second);
-        assert!(first.starts_with(body));
-        assert!(first.lines().next_back().unwrap_or("").starts_with("id:"));
-        assert_eq!(parse_text(&first).len(), 1);
-        assert_eq!(parse_text(&second).len(), 1);
-        assert!(parse_text(&first)[0]["link"].as_str().unwrap_or("").starts_with("vless://"));
     }
 }
 

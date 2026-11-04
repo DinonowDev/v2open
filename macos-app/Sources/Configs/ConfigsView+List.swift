@@ -249,7 +249,7 @@ extension ConfigsView {
         let pid = profile["id"] as? String ?? ""
         Button(model.t("ping")) { runPing(profileIds: [pid], args: pingArgs(profileId: pid)) }
         Button(model.t("copyLink")) {
-            ShareKit.copyMessage(profile["link"] as? String ?? "")
+            ShareKit.copy(profile["link"] as? String ?? "")
         }
         Button(model.t("copyJsonXray")) { copyProfileJSON(pid, key: "xray") }
         Button(model.t("copyJsonSing")) { copyProfileJSON(pid, key: "singbox") }

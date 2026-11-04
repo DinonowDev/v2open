@@ -4,9 +4,24 @@ import AppKit
 
 struct HomeView: View {
     @EnvironmentObject var model: Model
+    var isActive = true
 
     var body: some View {
-        let runtime = model.runtime
+        if isActive {
+            HomeViewBody()
+        } else {
+            Color.clear
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+}
+
+struct HomeViewBody: View {
+    @EnvironmentObject var model: Model
+    @EnvironmentObject var liveRuntime: LiveRuntime
+
+    var body: some View {
+        let runtime = liveRuntime.values.isEmpty ? model.runtime : liveRuntime.values
         let connected = runtime["connected"] as? Bool ?? false
         let phase = runtime["phase"] as? String ?? "idle"
         let connecting = phase == "connecting"
@@ -70,11 +85,6 @@ struct HomeView: View {
         .padding(.horizontal, PageLayout.horizontal)
         .padding(.bottom, PageLayout.bottom + PageLayout.tabBarClearance)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
-            guard model.runtime["connected"] as? Bool == true else { return }
-            let response = model.call("tick")
-            if let data = response["data"] as? [String: Any] { model.state = data }
-        }
     }
 
     private enum HomeTrafficKind { case upload, download }
@@ -123,7 +133,8 @@ struct HomeView: View {
     }
 
     private var ssidCaption: String? {
-        guard let ssid = model.runtime["ssid"] as? String, !ssid.isEmpty else { return nil }
+        let runtime = liveRuntime.values.isEmpty ? model.runtime : liveRuntime.values
+        guard let ssid = runtime["ssid"] as? String, !ssid.isEmpty else { return nil }
         return "\(model.t("ssid")): \(ssid)"
     }
 

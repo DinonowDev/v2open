@@ -284,7 +284,11 @@ extension ConfigsView {
 
     func updateGroup(gid: String) {
         if let err = model.invoke("update_group", ["id": gid]) {
-            model.showToast(err, tone: .error)
+            if err == "this group has no update url",
+               let group = model.groups.first(where: { ($0["id"] as? String) == gid }) {
+                openGroupUrl(group)
+            }
+            model.showToast(model.importFailure(err), tone: .error)
             return
         }
         model.showToast(model.t("subRefreshed"), tone: .success)
@@ -292,7 +296,7 @@ extension ConfigsView {
 
     func updateAllGroups() {
         if let err = model.invoke("update_group", [:]) {
-            model.showToast(err, tone: .error)
+            model.showToast(model.importFailure(err), tone: .error)
             return
         }
         model.showToast(model.t("subRefreshed"), tone: .success)

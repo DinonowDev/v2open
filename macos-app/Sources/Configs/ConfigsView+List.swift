@@ -82,8 +82,8 @@ extension ConfigsView {
                 ConfigRowIconButton(systemName: "square.and.arrow.up", label: model.t("exportGroup")) {
                     exportGroup(gid: gid, name: name)
                 }
-                ConfigRowIconButton(systemName: "trash", label: model.t("deleteAllLocal")) {
-                    clearGroup(gid: gid)
+                ConfigRowIconButton(systemName: "trash", label: clearGroupActionTitle(group)) {
+                    clearGroup(gid: gid, group: group)
                 }
                 Spacer(minLength: 0)
             }
@@ -99,7 +99,7 @@ extension ConfigsView {
                 Button(model.t("update")) { updateGroup(gid: gid) }
                 Button(model.t("setGroupUrl")) { openGroupUrl(group) }
                 Divider()
-                Button(model.t("deleteAllLocal"), role: .destructive) { clearGroup(gid: gid) }
+                Button(clearGroupActionTitle(group), role: .destructive) { clearGroup(gid: gid, group: group) }
             }
 
             if expanded {
@@ -306,15 +306,26 @@ extension ConfigsView {
         model.showToast(model.t("saved"), tone: .success)
     }
 
-    func clearGroup(gid: String) {
+    func isRemoteGroup(_ group: [String: Any]) -> Bool {
+        if group["kind"] as? String == "remote" { return true }
+        let url = (group["url"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return !url.isEmpty
+    }
+
+    func clearGroupActionTitle(_ group: [String: Any]) -> String {
+        isRemoteGroup(group) ? model.t("deleteSubscription") : model.t("deleteAllLocal")
+    }
+
+    func clearGroup(gid: String, group: [String: Any]) {
+        let remote = isRemoteGroup(group)
         let alert = NSAlert()
-        alert.messageText = model.t("deleteAllLocal")
-        alert.informativeText = model.t("confirmDeleteAll")
+        alert.messageText = clearGroupActionTitle(group)
+        alert.informativeText = model.t(remote ? "confirmDeleteSubscription" : "confirmDeleteAll")
         alert.addButton(withTitle: model.t("delete"))
         alert.addButton(withTitle: model.t("cancel"))
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         _ = model.call("clear_group", ["id": gid])
         model.refresh()
-        model.showToast(model.t("saved"), tone: .success)
+        model.showToast(model.t(remote ? "subscriptionRemoved" : "saved"), tone: .success)
     }
 }

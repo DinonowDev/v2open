@@ -3,11 +3,12 @@ import Combine
 
 struct SelectedConfigCard: View {
     @EnvironmentObject var model: Model
+    @EnvironmentObject var liveRuntime: LiveRuntime
     var profile: [String: Any]
     var showPower = false
 
     var body: some View {
-        let runtime = model.runtime
+        let runtime = liveRuntime.values.isEmpty ? model.runtime : liveRuntime.values
         let connected = runtime["connected"] as? Bool ?? false
         let connecting = (runtime["phase"] as? String ?? "idle") == "connecting"
         let name = profile["remark"] as? String ?? runtime["profile_name"] as? String ?? model.t("none")
@@ -90,11 +91,6 @@ struct SelectedConfigCard: View {
                 .strokeBorder(C.hairline, lineWidth: 1)
         )
         .shadow(color: .black.opacity(C.light ? 0.08 : 0.22), radius: 14, y: 5)
-        .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
-            guard connected else { return }
-            let response = model.call("tick")
-            if let data = response["data"] as? [String: Any] { model.state = data }
-        }
     }
 }
 

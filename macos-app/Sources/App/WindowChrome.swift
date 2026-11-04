@@ -93,29 +93,37 @@ enum HairlineScrollbars {
 }
 
 final class HairlineScrollHost: NSView {
+    private weak var styledWindow: NSWindow?
+
     override var mouseDownCanMoveWindow: Bool { true }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         window?.isMovableByWindowBackground = true
-        HairlineScrollbars.apply(in: window)
+        applyScrollbarsIfNeeded()
     }
 
-    override func layout() {
-        super.layout()
+    private func applyScrollbarsIfNeeded() {
+        guard let window, styledWindow !== window else { return }
+        styledWindow = window
         HairlineScrollbars.apply(in: window)
     }
 }
 
-struct HairlineScrollInstaller: NSViewRepresentable {
+struct HairlineScrollInstaller: NSViewRepresentable, Equatable {
     func makeNSView(context: Context) -> HairlineScrollHost { HairlineScrollHost() }
-    func updateNSView(_ nsView: HairlineScrollHost, context: Context) {
-        HairlineScrollbars.apply(in: nsView.window)
-    }
+    func updateNSView(_ nsView: HairlineScrollHost, context: Context) {}
 }
 
-struct WindowChrome: NSViewRepresentable {
+struct WindowChrome: NSViewRepresentable, Equatable {
     var light: Bool
+
+    final class Coordinator {
+        var lastLight: Bool?
+        var didConfigureWindow = false
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> NSView { HairlineScrollHost() }
 
@@ -127,10 +135,17 @@ struct WindowChrome: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        C.apply(light: light)
+        let themeChanged = context.coordinator.lastLight != light
+        if themeChanged {
+            context.coordinator.lastLight = light
+            C.apply(light: light)
+        }
         let appearance = NSAppearance(named: light ? .aqua : .darkAqua)
-        nsView.window?.appearance = appearance
-        nsView.window?.backgroundColor = C.windowBackground
+        if themeChanged {
+            nsView.window?.appearance = appearance
+            nsView.window?.backgroundColor = C.windowBackground
+        }
+        guard themeChanged || !context.coordinator.didConfigureWindow else { return }
         DispatchQueue.main.async {
             C.apply(light: light)
             guard let window = nsView.window else { return }
@@ -147,7 +162,10 @@ struct WindowChrome: NSViewRepresentable {
             window.minSize = fixed
             window.maxSize = fixed
             Self.roundCorners(window, radius: AppFrame.cornerRadius)
-            HairlineScrollbars.apply(in: window)
+            if themeChanged || !context.coordinator.didConfigureWindow {
+                context.coordinator.didConfigureWindow = true
+                HairlineScrollbars.apply(in: window)
+            }
         }
     }
 }

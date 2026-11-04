@@ -301,6 +301,110 @@ pub fn ech_link_value(node: &Value) -> String {
     config
 }
 
+pub fn looks_like_subscription_url(url: &str) -> bool {
+    let url = url.trim();
+    if !(url.starts_with("http://") || url.starts_with("https://")) {
+        return false;
+    }
+    let authority = url.split("://").nth(1).unwrap_or("");
+    let authority = authority.split('#').next().unwrap_or(authority);
+    let authority = authority.split('?').next().unwrap_or(authority);
+    if authority.contains('@') {
+        return false;
+    }
+    let lower = url.to_ascii_lowercase();
+    if lower.contains("/users-profile/")
+        || lower.contains("/subscribe")
+        || lower.contains("/sub/")
+        || lower.contains("/sub?")
+        || lower.contains("subscri")
+        || lower.contains("/link/")
+        || lower.contains("/api/v1/client/")
+        || lower.contains("getconf")
+        || lower.contains("flag=subscription")
+        || lower.ends_with(".txt")
+        || lower.ends_with(".yaml")
+    {
+        return true;
+    }
+    let path = authority.split('/').skip(1).collect::<Vec<_>>().join("/");
+    !path.is_empty() && path.len() >= 24
+}
+
+pub fn subscribe_name_from_url(url: &str) -> String {
+    if let Some(idx) = url.rfind('#') {
+        let name = decode(&url[idx + 1..]);
+        let name = name.trim();
+        if !name.is_empty() && name.len() <= 80 {
+            return name.to_string();
+        }
+    }
+    "Group".into()
+}
+
+pub fn extract_subscription_url(text: &str) -> Option<String> {
+    for line in text.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') || line.starts_with("//") {
+            continue;
+        }
+        let uri = line.split_whitespace().next().unwrap_or(line);
+        if looks_like_subscription_url(uri) {
+            return Some(uri.to_string());
+        }
+    }
+    None
+}
+
+pub fn subscription_node(url: &str) -> Value {
+    let url = url.trim();
+    let mut node = blank("subscription");
+    set(&mut node, "address", json!(url));
+    set(
+        &mut node,
+        "remark",
+        json!(subscribe_name_from_url(url)),
+    );
+    node
+}
+
+pub fn find_subscription_url_in_value(value: &Value) -> Option<String> {
+    const KEYS: &[&str] = &[
+        "subscriptionUrl",
+        "subscribeUrl",
+        "subUrl",
+        "configUrl",
+        "updateUrl",
+        "remoteUrl",
+        "subscription",
+        "subscription_link",
+        "sub_link",
+        "sub_url",
+        "url",
+        "link",
+    ];
+    match value {
+        Value::String(text) => extract_subscription_url(text).or_else(|| {
+            let text = text.trim();
+            if looks_like_subscription_url(text) {
+                Some(text.to_string())
+            } else {
+                None
+            }
+        }),
+        Value::Object(map) => {
+            for key in KEYS {
+                if let Some(found) = map.get(*key).and_then(find_subscription_url_in_value) {
+                    return Some(found);
+                }
+            }
+            map.values().find_map(find_subscription_url_in_value)
+        }
+        Value::Array(items) => items.iter().find_map(find_subscription_url_in_value),
+        _ => None,
+    }
+}
+
 pub fn parse_link(link: &str) -> Result<Value, String> {
     let trimmed = link.trim();
     let (scheme, rest0) = trimmed.split_once("://").ok_or("not a link")?;
@@ -967,6 +1071,13 @@ pub(crate) fn parse_text_inner(text: &str) -> Vec<Value> {
         let line = line.trim();
         if line.is_empty() || line.starts_with('#') || line.starts_with("//") {
             continue;
+        }
+        if line.starts_with("http://") || line.starts_with("https://") {
+            let uri = line.split_whitespace().next().unwrap_or(line);
+            if looks_like_subscription_url(uri) {
+                links.push(subscription_node(uri));
+                continue;
+            }
         }
         if let Some(idx) = line.find("://") {
             let start = line[..idx].rfind(|c: char| !c.is_ascii_alphanumeric() && c != '+' && c != '-' && c != '.').map(|i| i + 1).unwrap_or(0);
@@ -1848,6 +1959,15 @@ mod tests {
         let rebuilt = build_link(&first);
         let second = parse_link(&rebuilt).unwrap_or_else(|e| panic!("{rebuilt}: {e}"));
         (first, second)
+    }
+
+    #[test]
+    fn subscription_url_detection() {
+        let url = "https://tpmovies.ir/users-profile/1e10169f97c5b2ff147a35c4ce73f8d62eb465b5502ac803257843c3536b3d66#TPVPN-ajyt3mt4";
+        assert!(looks_like_subscription_url(url));
+        assert_eq!(subscribe_name_from_url(url), "TPVPN-ajyt3mt4");
+        assert_eq!(extract_subscription_url(url).as_deref(), Some(url));
+        assert!(parse_text(url).iter().any(|n| n["protocol"].as_str() == Some("subscription")));
     }
 
     #[test]

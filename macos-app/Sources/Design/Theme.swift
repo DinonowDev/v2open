@@ -128,8 +128,12 @@ enum PingMark {
     }
 }
 
+private enum MixedText {
+    static let pattern = try! NSRegularExpression(pattern: "[\\u0600-\\u06FF\\u0750-\\u077F]+|[^\\u0600-\\u06FF\\u0750-\\u077F]+")
+}
+
 func mixed(_ string: String, size: CGFloat, weight: Font.Weight = .regular) -> Text {
-    let pattern = try! NSRegularExpression(pattern: "[\\u0600-\\u06FF\\u0750-\\u077F]+|[^\\u0600-\\u06FF\\u0750-\\u077F]+")
+    let pattern = MixedText.pattern
     let ns = string as NSString
     var result = AttributedString()
     let matches = pattern.matches(in: string, range: NSRange(location: 0, length: ns.length))

@@ -1,10 +1,12 @@
 import AppKit
 import SwiftUI
-import Combine
 
 struct RootView: View {
     @EnvironmentObject var model: Model
+    @State private var mountedTabs: Set<String> = ["home"]
+
     var body: some View { themed(model.themeLight) }
+
     @ViewBuilder func themed(_ light: Bool) -> some View {
         let _ = C.apply(light: light)
         VStack(spacing: 0) {
@@ -17,32 +19,10 @@ struct RootView: View {
             .frame(maxWidth: .infinity)
 
             Group {
-                switch model.current {
-                case "configs": ConfigsView()
-                case "settings": SettingsView()
-                case "routing": RoutingView()
-                case "geo_assets": GeoAssetsView()
-                case "route_editor": RouteEditorView()
-                case "dns": DNSView()
-                case "dns_items": DnsItemsView()
-                case "xray_advanced": XrayAdvancedView()
-                case "warp": WarpView()
-                case "network_settings": NetworkSettingsView()
-                case "speed_settings": SpeedTestSettingsView()
-                case "on_demand": OnDemandView()
-                case "backup_settings": BackupSettingsView()
-                case "logs": LogsView()
-                case "advanced": AdvancedSettingsView()
-                case "diagnostics": DiagnosticsView()
-                case "clash_status": ClashStatusView()
-                case "about": AboutView()
-                case "terms": LegalView(kind: .terms)
-                case "privacy": LegalView(kind: .privacy)
-                case "editor": EditorView()
-                case "more": ToolsView()
-                case "apps": AppsTunnelView()
-                case "speedtest": SpeedTestView()
-                default: HomeView()
+                if model.stack.isEmpty {
+                    mainTabStack
+                } else {
+                    stackedPage
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -67,17 +47,9 @@ struct RootView: View {
         }
         .overlay(alignment: .bottomTrailing) {
             if showFixedPower {
-                PowerConnectButton(
-                    connected: model.runtime["connected"] as? Bool ?? false,
-                    connecting: (model.runtime["phase"] as? String ?? "") == "connecting",
-                    compact: true,
-                    action: {
-                        if model.runtime["connected"] as? Bool == true { model.disconnectTunnel() }
-                        else { model.connectTunnel() }
-                    }
-                )
-                .padding(.trailing, 18)
-                .padding(.bottom, 92)
+                RootFixedPowerButton()
+                    .padding(.trailing, 18)
+                    .padding(.bottom, 92)
             }
         }
         .overlay(alignment: .bottom) {
@@ -94,12 +66,71 @@ struct RootView: View {
             }
         }
         .animation(.easeOut(duration: 0.22), value: model.toast?.id)
-        .onReceive(Timer.publish(every: 4, on: .main, in: .common).autoconnect()) { _ in
-            let response = model.call("tick")
-            if let data = response["data"] as? [String: Any] { model.state = data }
-            if model.settings["icloud"] as? Bool == true { CloudSync.shared.kick() }
+        .onChange(of: model.page) { _, page in
+            mountedTabs.insert(normalizedTab(page))
         }
         .onOpenURL { model.handleOpenURL($0) }
+    }
+
+    private func normalizedTab(_ page: String) -> String {
+        page.isEmpty || page == "home" ? "home" : page
+    }
+
+    private var activeTab: String { normalizedTab(model.page) }
+
+    @ViewBuilder
+    private var mainTabStack: some View {
+        let tab = activeTab
+        ZStack {
+            cachedTab("home", active: tab == "home") { HomeView(isActive: tab == "home") }
+            cachedTab("configs", active: tab == "configs") { ConfigsView() }
+            cachedTab("speedtest", active: tab == "speedtest") { SpeedTestView() }
+            cachedTab("settings", active: tab == "settings") { SettingsView() }
+        }
+        .onAppear { mountedTabs.insert(tab) }
+    }
+
+    @ViewBuilder
+    private func cachedTab<Content: View>(
+        _ id: String,
+        active: Bool,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        if mountedTabs.contains(id) {
+            content()
+                .opacity(active ? 1 : 0)
+                .allowsHitTesting(active)
+                .accessibilityHidden(!active)
+                .zIndex(active ? 1 : 0)
+        }
+    }
+
+    @ViewBuilder
+    private var stackedPage: some View {
+        switch model.current {
+        case "routing": RoutingView()
+        case "geo_assets": GeoAssetsView()
+        case "route_editor": RouteEditorView()
+        case "dns": DNSView()
+        case "dns_items": DnsItemsView()
+        case "xray_advanced": XrayAdvancedView()
+        case "warp": WarpView()
+        case "network_settings": NetworkSettingsView()
+        case "speed_settings": SpeedTestSettingsView()
+        case "on_demand": OnDemandView()
+        case "backup_settings": BackupSettingsView()
+        case "logs": LogsView()
+        case "advanced": AdvancedSettingsView()
+        case "diagnostics": DiagnosticsView()
+        case "clash_status": ClashStatusView()
+        case "about": AboutView()
+        case "terms": LegalView(kind: .terms)
+        case "privacy": LegalView(kind: .privacy)
+        case "editor": EditorView()
+        case "more": ToolsView()
+        case "apps": AppsTunnelView()
+        default: SettingsView()
+        }
     }
 
     var showFixedPower: Bool {
@@ -108,6 +139,26 @@ struct RootView: View {
             return model.current == "home"
         }
         return true
+    }
+}
+
+struct RootFixedPowerButton: View {
+    @EnvironmentObject var model: Model
+    @EnvironmentObject var liveRuntime: LiveRuntime
+
+    var body: some View {
+        let runtime = liveRuntime.values.isEmpty ? model.runtime : liveRuntime.values
+        let connected = runtime["connected"] as? Bool ?? false
+        let connecting = (runtime["phase"] as? String ?? "") == "connecting"
+        PowerConnectButton(
+            connected: connected,
+            connecting: connecting,
+            compact: true,
+            action: {
+                if connected { model.disconnectTunnel() }
+                else { model.connectTunnel() }
+            }
+        )
     }
 }
 

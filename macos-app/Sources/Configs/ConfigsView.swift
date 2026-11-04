@@ -82,6 +82,7 @@ struct ConfigsView: View {
                     .padding(.horizontal, 14)
                     .padding(.bottom, PageLayout.tabBarClearance)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .animation(.spring(response: 0.34, dampingFraction: 0.88), value: model.settings["selected_id"] as? String ?? "")
             }
 
             if addStep == .menu { addMenuOverlay }
@@ -102,6 +103,5 @@ struct ConfigsView: View {
         .onReceive(model.$pendingLock) { pending in
             if pending != nil { takePendingLock() }
         }
-        .animation(.spring(response: 0.34, dampingFraction: 0.88), value: model.settings["selected_id"] as? String ?? "")
     }
 }

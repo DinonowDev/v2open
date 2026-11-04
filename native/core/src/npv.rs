@@ -14,6 +14,23 @@ const SENTINEL_ALPHABET: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstu
 pub struct NpvOpened {
     pub nodes: Vec<Value>,
     pub notice: String,
+    pub subscription_url: Option<String>,
+}
+
+fn merge_subscription_url(
+    notes: &[String],
+    value: Option<&Value>,
+    current: Option<String>,
+) -> Option<String> {
+    if current.is_some() {
+        return current;
+    }
+    for note in notes {
+        if let Some(url) = crate::parser::extract_subscription_url(note) {
+            return Some(url);
+        }
+    }
+    value.and_then(crate::parser::find_subscription_url_in_value)
 }
 
 struct Tables {
@@ -75,7 +92,11 @@ fn open_npvt(text: &str) -> Result<NpvOpened, String> {
     if nodes.is_empty() {
         return Err("could not read that config".into());
     }
-    Ok(NpvOpened { nodes, notice: unique_notice(notes) })
+    Ok(NpvOpened {
+        nodes,
+        subscription_url: merge_subscription_url(&notes, None, None),
+        notice: unique_notice(notes),
+    })
 }
 
 fn open_npvs(data: &[u8], password: &str) -> Result<NpvOpened, String> {
@@ -140,7 +161,11 @@ fn open_v1(data: &[u8], password: &str) -> Result<NpvOpened, String> {
     if nodes.is_empty() {
         return Err("could not read that config".into());
     }
-    Ok(NpvOpened { nodes, notice: unique_notice(notes) })
+    Ok(NpvOpened {
+        nodes,
+        subscription_url: merge_subscription_url(&notes, None, None),
+        notice: unique_notice(notes),
+    })
 }
 
 fn open_gen2(data: &[u8], password: &str) -> Result<NpvOpened, String> {
@@ -266,7 +291,11 @@ fn open_gen2(data: &[u8], password: &str) -> Result<NpvOpened, String> {
     if nodes.is_empty() {
         return Err("could not read that config".into());
     }
-    Ok(NpvOpened { nodes, notice: unique_notice(notes) })
+    Ok(NpvOpened {
+        nodes,
+        subscription_url: merge_subscription_url(&notes, None, None),
+        notice: unique_notice(notes),
+    })
 }
 
 fn open_value(value: Value, notice: &str) -> Result<NpvOpened, String> {
@@ -279,7 +308,11 @@ fn open_value(value: Value, notice: &str) -> Result<NpvOpened, String> {
     if nodes.is_empty() {
         return Err("could not read that config".into());
     }
-    Ok(NpvOpened { nodes, notice: unique_notice(notes) })
+    Ok(NpvOpened {
+        nodes,
+        subscription_url: merge_subscription_url(&notes, Some(&value), None),
+        notice: unique_notice(notes),
+    })
 }
 
 fn absorb_plain(plain: &[u8], nodes: &mut Vec<Value>, notes: &mut Vec<String>) {

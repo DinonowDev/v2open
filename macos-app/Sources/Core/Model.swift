@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import SwiftUI
 
@@ -8,6 +9,7 @@ struct PendingLock: Equatable {
 
 @MainActor
 final class Model: ObservableObject {
+    let liveRuntime = LiveRuntime()
     @Published var state: [String: Any] = [:]
     @Published var page = "home"
     @Published var stack: [String] = []
@@ -21,8 +23,13 @@ final class Model: ObservableObject {
     private var booted = false
     private var pingLoopTask: Task<Void, Never>?
     private let tickActivity = TickActivity()
+    private var tickTimer: AnyCancellable?
+    private var tickInFlight = false
+    private var lastSessionTick = Date.distantPast
     private var connectionMonitor: ConnectionMonitor?
     private static let autoPingInterval: TimeInterval = 60
+    private static let sessionTickInterval: TimeInterval = 1
+    private static let idleTickInterval: TimeInterval = 4
 
     @Published var systemLight = false
 
@@ -42,7 +49,10 @@ final class Model: ObservableObject {
     var routes: [[String: Any]] { state["routes"] as? [[String: Any]] ?? [] }
     var geoAssets: [[String: Any]] { state["geo_assets"] as? [[String: Any]] ?? [] }
     var backups: [[String: Any]] { state["backups"] as? [[String: Any]] ?? [] }
-    var runtime: [String: Any] { state["runtime"] as? [String: Any] ?? [:] }
+    var runtime: [String: Any] {
+        if !liveRuntime.values.isEmpty { return liveRuntime.values }
+        return state["runtime"] as? [String: Any] ?? [:]
+    }
 
     func t(_ key: String) -> String {
         LocaleStore.string(key, language: language)
@@ -113,14 +123,13 @@ final class Model: ObservableObject {
             }
         }
         tickActivity.start { [weak self] in
-            Task { @MainActor in
-                guard let self else { return }
-                let wasConnected = self.runtime["connected"] as? Bool == true
-                let response = self.call("tick")
-                if let data = response["data"] as? [String: Any] { self.state = data }
-                self.connectionMonitor?.afterTick(wasConnected: wasConnected)
-            }
+            Task { await self?.performTick() }
         }
+        tickTimer = Timer.publish(every: Self.sessionTickInterval, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                Task { await self?.sessionTickIfDue() }
+            }
         DevLog.event("boot", "ready")
     }
 
@@ -128,9 +137,67 @@ final class Model: ObservableObject {
         v2RPC(method: method, args: args)
     }
 
+    private var needsLiveRuntime: Bool {
+        guard runtime["connected"] as? Bool == true else { return false }
+        if current == "home" { return true }
+        if current == "configs", selectedProfile != nil { return true }
+        return false
+    }
+
+    private func sessionTickIfDue() async {
+        let interval = needsLiveRuntime ? Self.sessionTickInterval : Self.idleTickInterval
+        let now = Date()
+        guard now.timeIntervalSince(lastSessionTick) >= interval - 0.05 else { return }
+        lastSessionTick = now
+        await performTick()
+    }
+
+    func performTick() async {
+        guard !tickInFlight else { return }
+        tickInFlight = true
+        defer { tickInFlight = false }
+
+        let wasConnected = runtime["connected"] as? Bool == true
+        let response = await Task.detached(priority: .utility) {
+            v2RPC(method: "tick")
+        }.value
+
+        if let data = response["data"] as? [String: Any] {
+            applyTickPayload(data)
+        }
+        connectionMonitor?.afterTick(wasConnected: wasConnected)
+        if settings["icloud"] as? Bool == true { CloudSync.shared.kick() }
+    }
+
+    private func applyTickPayload(_ data: [String: Any]) {
+        let newRuntime = data["runtime"] as? [String: Any] ?? [:]
+        liveRuntime.replaceIfChanged(newRuntime)
+
+        var incoming = data
+        incoming.removeValue(forKey: "runtime")
+        var current = state
+        current.removeValue(forKey: "runtime")
+        guard !NSDictionary(dictionary: current).isEqual(to: incoming) else { return }
+
+        var merged = state
+        for (key, value) in incoming {
+            merged[key] = value
+        }
+        merged["runtime"] = newRuntime
+        state = merged
+    }
+
+    private func setStateIfChanged(_ newState: [String: Any]) {
+        if let runtime = newState["runtime"] as? [String: Any] {
+            liveRuntime.replaceIfChanged(runtime)
+        }
+        guard !NSDictionary(dictionary: state).isEqual(to: newState) else { return }
+        state = newState
+    }
+
     func refresh() {
         let response = call("state")
-        state = response["data"] as? [String: Any] ?? [:]
+        setStateIfChanged(response["data"] as? [String: Any] ?? [:])
     }
 
     func mergeState(from response: [String: Any]) {
@@ -139,17 +206,19 @@ final class Model: ObservableObject {
                 let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty { pendingNote = trimmed }
             }
-            state = data
+            setStateIfChanged(data)
         } else if response["ok"] as? Bool != false {
             refresh()
         }
     }
 
-    func pingRPC(_ args: [String: Any]) async -> String? {
+    func pingRPC(_ args: [String: Any], applyResponse: Bool = true) async -> String? {
         let response = await Task.detached(priority: .userInitiated) {
             v2RPC(method: "ping", args: args)
         }.value
-        mergeState(from: response)
+        if applyResponse {
+            mergeState(from: response)
+        }
         guard response["ok"] as? Bool != false else {
             return response["error"] as? String ?? t("failed")
         }
@@ -170,14 +239,16 @@ final class Model: ObservableObject {
         }
         if toast { showToast(t("pinging"), tone: .info) }
         var failed: String?
+        let trackUI = toast
         for id in ordered {
             if Task.isCancelled { break }
-            pingingIds.insert(id)
+            if trackUI { pingingIds.insert(id) }
             var args: [String: Any] = ["id": id]
             if throughput { args["throughput"] = true }
-            if let err = await pingRPC(args) { failed = err }
-            pingingIds.remove(id)
+            if let err = await pingRPC(args, applyResponse: trackUI) { failed = err }
+            if trackUI { pingingIds.remove(id) }
         }
+        if !trackUI { refresh() }
         if toast {
             if let failed { showToast(failed, tone: .error) }
             else { showToast(t("pingDone"), tone: .success) }
@@ -261,6 +332,8 @@ final class Model: ObservableObject {
         case "password required": return t("npvPasswordHint")
         case "recipient key required": return t("npvRecipient")
         case "could not read that config": return t("wrong")
+        case "this group has no update url": return t("groupNoUpdateUrl")
+        case "no groups with an update url": return t("noGroupUpdateUrl")
         default: return err
         }
     }

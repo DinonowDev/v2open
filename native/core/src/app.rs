@@ -837,17 +837,7 @@ impl Core {
             }
             "clear_group" => {
                 let gid = args["id"].as_str().unwrap_or("");
-                let selected = self.settings["selected_id"].as_str().unwrap_or("").to_string();
-                if let Some(group) = self.groups.iter_mut().find(|g| g["id"].as_str() == Some(gid)) {
-                    if !selected.is_empty() {
-                        let drop_selected = group["profiles"].as_array().map(|arr| arr.iter().any(|p| p["id"].as_str() == Some(selected.as_str()))).unwrap_or(false);
-                        if drop_selected {
-                            self.settings["selected_id"] = json!("");
-                        }
-                    }
-                    group["profiles"] = json!([]);
-                    self.save();
-                }
+                self.clear_group(gid)?;
                 Ok(self.state())
             }
             "ping" => {
@@ -1433,9 +1423,93 @@ impl Core {
         self.groups.iter().position(|g| g["kind"].as_str() == Some("local")).unwrap_or(0)
     }
 
+    fn group_is_remote(group: &Value) -> bool {
+        if group["kind"].as_str() == Some("remote") {
+            return true;
+        }
+        !group["url"].as_str().unwrap_or("").trim().is_empty()
+    }
+
+    fn ensure_local_group(&mut self) {
+        if self.groups.iter().any(|g| g["kind"].as_str() == Some("local")) {
+            return;
+        }
+        self.groups.insert(
+            0,
+            json!({
+                "id": id(), "name": "Local", "kind": "local", "url": "", "pinned": false,
+                "expanded": true, "locked": false, "announcement": "", "expire": 0,
+                "upload": 0, "download": 0, "total": 0, "updated_at": 0, "profiles": []
+            }),
+        );
+    }
+
+    fn clear_selected_if_in_group(&mut self, group: &Value) {
+        let selected = self.settings["selected_id"].as_str().unwrap_or("");
+        if selected.is_empty() {
+            return;
+        }
+        let drop_selected = group["profiles"]
+            .as_array()
+            .map(|arr| arr.iter().any(|p| p["id"].as_str() == Some(selected)))
+            .unwrap_or(false);
+        if drop_selected {
+            self.settings["selected_id"] = json!("");
+        }
+    }
+
+    fn clear_group(&mut self, group_id: &str) -> Result<(), String> {
+        let idx = self
+            .groups
+            .iter()
+            .position(|g| g["id"].as_str() == Some(group_id))
+            .ok_or_else(|| "group not found".to_string())?;
+        let group = self.groups[idx].clone();
+        self.clear_selected_if_in_group(&group);
+        if Self::group_is_remote(&group) {
+            self.groups.remove(idx);
+            self.ensure_local_group();
+        } else {
+            self.groups[idx]["profiles"] = json!([]);
+        }
+        self.save();
+        Ok(())
+    }
+
     fn import_npv(&mut self, bytes: &[u8], group_id: Option<&str>, password: &str) -> Result<String, String> {
         let opened = crate::npv::open_bytes(bytes, password)?;
-        self.store_nodes(opened.nodes, group_id)?;
+        if opened
+            .nodes
+            .iter()
+            .any(|n| n["protocol"].as_str() == Some("subscription"))
+        {
+            self.store_nodes(opened.nodes, group_id)?;
+            return Ok(opened.notice);
+        }
+        if group_id.is_none() {
+            if let Some(url) = opened.subscription_url.as_ref().filter(|u| !u.is_empty()) {
+                let name = crate::parser::subscribe_name_from_url(url);
+                self.subscribe(&name, url)?;
+                return Ok(opened.notice);
+            }
+        }
+        let gid = group_id
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| self.groups[self.local_group_index()]["id"].as_str().unwrap_or("").to_string());
+        self.store_nodes(opened.nodes, Some(&gid))?;
+        if let Some(url) = opened.subscription_url.filter(|u| !u.is_empty()) {
+            let empty = self
+                .groups
+                .iter()
+                .find(|g| g["id"].as_str() == Some(gid.as_str()))
+                .and_then(|g| g["url"].as_str())
+                .unwrap_or("")
+                .trim()
+                .is_empty();
+            if empty {
+                let _ = self.set_group_url(&gid, &url);
+            }
+        }
         Ok(opened.notice)
     }
 
@@ -1451,8 +1525,17 @@ impl Core {
                 }
             }
         }
+        if let Some(url) = crate::parser::extract_subscription_url(trimmed) {
+            if let Some(gid) = group_id {
+                return self.set_group_url(gid, &url).map(|_| ());
+            }
+            let name = crate::parser::subscribe_name_from_url(&url);
+            return self.subscribe(&name, &url);
+        }
         if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
-            return self.subscribe("Group", trimmed);
+            let url = trimmed.lines().next().unwrap_or(trimmed).trim();
+            let name = crate::parser::subscribe_name_from_url(url);
+            return self.subscribe(&name, url);
         }
         if trimmed.starts_with('{') {
             if let Ok(payload) = serde_json::from_str::<Value>(trimmed) {
@@ -1609,18 +1692,64 @@ impl Core {
     }
 
     fn update_group(&mut self, group_id: &str) -> Result<(), String> {
-        let url = self
+        let mut url = self
             .groups
             .iter()
             .find(|g| g["id"].as_str() == Some(group_id))
             .and_then(|g| g["url"].as_str())
             .unwrap_or("")
+            .trim()
             .to_string();
+        if url.is_empty() {
+            if let Some(group) = self.groups.iter().find(|g| g["id"].as_str() == Some(group_id)) {
+                if let Some(inferred) = self.infer_group_update_url(group) {
+                    url = inferred.clone();
+                    if let Some(group) = self.groups.iter_mut().find(|g| g["id"].as_str() == Some(group_id)) {
+                        group["url"] = json!(url.clone());
+                        group["kind"] = json!("remote");
+                        self.save();
+                    }
+                }
+            }
+        }
         if url.is_empty() {
             return Err("this group has no update url".into());
         }
         let (body, info, title, announce) = self.fetch_group_body(&url)?;
         self.apply_group_fetch(group_id, &body, &info, &title, &announce)
+    }
+
+    fn infer_group_update_url(&self, group: &Value) -> Option<String> {
+        if let Some(url) = group["url"].as_str().filter(|u| crate::parser::looks_like_subscription_url(u)) {
+            return Some(url.to_string());
+        }
+        for key in ["subscription_url", "sub_url", "update_url", "remote_url"] {
+            if let Some(url) = group.get(key).and_then(|v| v.as_str()) {
+                if crate::parser::looks_like_subscription_url(url) {
+                    return Some(url.to_string());
+                }
+            }
+        }
+        if let Some(profiles) = group["profiles"].as_array() {
+            for profile in profiles {
+                if let Some(data) = profile.get("data") {
+                    if let Some(url) = crate::parser::find_subscription_url_in_value(data) {
+                        return Some(url);
+                    }
+                }
+                if let Some(link) = profile["link"].as_str() {
+                    if let Some(url) = crate::parser::extract_subscription_url(link) {
+                        return Some(url);
+                    }
+                }
+            }
+        }
+        if let Some(text) = group["announcement"].as_str() {
+            if let Some(url) = crate::parser::extract_subscription_url(text) {
+                return Some(url);
+            }
+        }
+        None
     }
 
     fn set_group_url(&mut self, group_id: &str, url: &str) -> Result<(), String> {
@@ -3318,7 +3447,7 @@ impl Core {
             })
         }).unwrap_or_default();
         Ok(json!({
-            "app_version": "1.3.4",
+            "app_version": "1.3.5",
             "sing_box": self.runtime.core,
             "xray": xray,
             "engine": self.runtime.engine,

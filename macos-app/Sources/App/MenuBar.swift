@@ -40,12 +40,16 @@ final class MenuBarCenter: NSObject, NSMenuDelegate {
     private weak var model: Model?
     var language: String { model?.language ?? "en" }
     private var stateWatch: AnyCancellable?
+    private var runtimeWatch: AnyCancellable?
     private var actions: [MenuAction] = []
     private var iconConnected: Bool?
 
     func attach(_ model: Model) {
         self.model = model
         stateWatch = model.$state.sink { [weak self] _ in
+            self?.sync()
+        }
+        runtimeWatch = model.liveRuntime.objectWillChange.sink { [weak self] _ in
             self?.sync()
         }
         sync()

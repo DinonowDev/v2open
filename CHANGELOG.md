@@ -15,6 +15,16 @@ How to edit this file: [docs/versioning.md](docs/versioning.md).
 
 ### Fixed
 
+## [1.3.5] - 2026-11-05
+
+Build `9`.
+
+### Fixed
+
+- macOS UI: centralize runtime ticks, cache main tabs, and reduce scroll chrome work to cut navigation lag.
+- Subscription import: recognize panel subscription URLs (including `users-profile` links with `#` fragments), store update URLs from NPV/import, and infer missing group URLs on refresh.
+- Remote subscription groups: **Delete subscription** removes the whole group instead of leaving an empty shell.
+
 ## [1.3.4] - 2026-11-05
 
 Build `8`.

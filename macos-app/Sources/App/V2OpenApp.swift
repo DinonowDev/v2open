@@ -88,8 +88,9 @@ struct V2OpenApp: App {
         WindowGroup(id: "main") {
             RootView()
                 .environmentObject(model)
+                .environmentObject(model.liveRuntime)
                 .background(WindowBridgeInstaller())
-                .background(WindowChrome(light: model.themeLight))
+                .background(WindowChrome(light: model.themeLight).equatable())
                 .onAppear { model.boot() }
                 .onReceive(NotificationCenter.default.publisher(for: .v2openOpenURLs)) { note in
                     for url in note.object as? [URL] ?? [] {
@@ -124,11 +125,13 @@ struct V2OpenApp: App {
         Window("Logs", id: "logs-window") {
             LogsView()
                 .environmentObject(model)
+                .environmentObject(model.liveRuntime)
                 .frame(minWidth: 420, minHeight: 520)
         }
         Window("Diagnostics", id: "diagnostics-window") {
             DiagnosticsView()
                 .environmentObject(model)
+                .environmentObject(model.liveRuntime)
                 .frame(minWidth: 420, minHeight: 520)
         }
     }

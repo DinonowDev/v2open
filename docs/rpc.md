@@ -45,7 +45,7 @@ Do not rename or remove a method without a **MAJOR** version bump. Add new metho
 | `warp_license` | `{id, license}` | Applies a WARP+ license to the account behind a WARP profile |
 | `select` | `{id}` | `selected_id` |
 | `delete` | `{id}` | Delete profile or group (id) |
-| `clear_group` | `{id}` | Remove profiles, keep group |
+| `clear_group` | `{id}` | Remote/subscription groups: remove the whole group. Local groups: remove profiles only. |
 | `update_group` | `{id, …}` | Rename / metadata |
 | `set_group_url` | `{id, url}` | Subscription URL |
 | `pin_group` | `{id, pinned}` | Pin |

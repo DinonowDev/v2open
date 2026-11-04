@@ -15,6 +15,20 @@ How to edit this file: [docs/versioning.md](docs/versioning.md).
 
 ### Fixed
 
+## [1.3.0] - 2026-11-05
+
+Build `4`.
+
+### Added
+
+- NPV Tunnel configs import as ordinary profiles. `.npvt` and `.npvs` (NPVT1, open NPVO1, NPVS Gen-1, and Gen-2 including passphrase files) can be added from a file, Finder, the clipboard, or a QR code. A locked file asks for its passphrase. A file bound to another device is refused.
+- Chain hop fields in the editor: TUIC heartbeat, 0-RTT, and disable SNI; Naive ShadowTLS SNI; SSH reserved and MTU; the full AmneziaWG key set; WARP ECH query server name.
+
+### Changed
+
+- The Home connection timer reads the engine `connected_at` time, so it keeps counting after the app becomes active again.
+- Copying a share link appends a unique `id:` stamp so each copy can be told apart.
+
 ## [1.2.0] - 2026-11-03
 
 Build `3`.
@@ -82,7 +96,8 @@ Build `1`.
 
 - Initial macOS SwiftUI client, Rust `v2core`, bundled `sing-box` / Xray, routing presets, and local library.
 
-[Unreleased]: https://github.com/DinonowDev/v2open/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/DinonowDev/v2open/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/DinonowDev/v2open/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/DinonowDev/v2open/releases/tag/v1.2.0
 [1.1.0]: https://github.com/DinonowDev/v2open/releases/tag/v1.1.0
 [1.0.0]: https://github.com/DinonowDev/v2open/releases/tag/v1.0.0

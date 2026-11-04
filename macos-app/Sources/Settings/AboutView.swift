@@ -9,7 +9,7 @@ struct AboutView: View {
     private var appVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
             ?? (about["app_version"] as? String)
-            ?? "1.2.0"
+            ?? "1.3.0"
     }
     private var build: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"

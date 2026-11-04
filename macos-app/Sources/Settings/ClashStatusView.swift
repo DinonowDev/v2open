@@ -1,31 +1,31 @@
 import Charts
 import SwiftUI
 
-private enum ClashConnFilter: String, CaseIterable, Identifiable {
-    case all, tcp, udp, direct, proxy
-    var id: String { rawValue }
-}
-
-private enum ClashConnSort: String, CaseIterable, Identifiable {
-    case recent, download, upload
-    var id: String { rawValue }
-}
-
-private struct TrafficSample: Identifiable {
-    let id = UUID()
-    let time: Date
-    let download: Double
-    let upload: Double
-}
-
 struct ClashStatusView: View {
+    private enum ConnFilter: String, CaseIterable, Identifiable {
+        case all, tcp, udp, direct, proxy
+        var id: String { rawValue }
+    }
+
+    private enum ConnSort: String, CaseIterable, Identifiable {
+        case recent, download, upload
+        var id: String { rawValue }
+    }
+
+    private struct TrafficSample: Identifiable {
+        let id = UUID()
+        let time: Date
+        let download: Double
+        let upload: Double
+    }
+
     @EnvironmentObject var model: Model
     @State private var data: [String: Any] = [:]
     @State private var delays: [String: Int] = [:]
     @State private var busy = ""
     @State private var search = ""
-    @State private var filter: ClashConnFilter = .all
-    @State private var sort: ClashConnSort = .recent
+    @State private var filter: ConnFilter = .all
+    @State private var sort: ConnSort = .recent
     @State private var trafficHistory: [TrafficSample] = []
     @State private var lastTotals: (up: UInt64, down: UInt64, at: Date)?
     @State private var speedByID: [String: (up: Int, down: Int)] = [:]
@@ -89,7 +89,7 @@ struct ClashStatusView: View {
                             .padding(.top, 10)
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 8) {
-                                ForEach(ClashConnFilter.allCases) { item in
+                                ForEach(ConnFilter.allCases) { item in
                                     filterChip(item)
                                 }
                             }
@@ -97,9 +97,9 @@ struct ClashStatusView: View {
                             .padding(.vertical, 8)
                         }
                         Picker("", selection: $sort) {
-                            Text(model.t("clashSortRecent")).tag(ClashConnSort.recent)
-                            Text(model.t("clashSortDownload")).tag(ClashConnSort.download)
-                            Text(model.t("clashSortUpload")).tag(ClashConnSort.upload)
+                            Text(model.t("clashSortRecent")).tag(ConnSort.recent)
+                            Text(model.t("clashSortDownload")).tag(ConnSort.download)
+                            Text(model.t("clashSortUpload")).tag(ConnSort.upload)
                         }
                         .pickerStyle(.segmented)
                         .padding(.horizontal, 12)
@@ -137,7 +137,7 @@ struct ClashStatusView: View {
         }
     }
 
-    func filterChip(_ item: ClashConnFilter) -> some View {
+    private func filterChip(_ item: ConnFilter) -> some View {
         let title: String
         switch item {
         case .all: title = model.t("clashFilterAll")

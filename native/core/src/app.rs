@@ -3318,7 +3318,7 @@ impl Core {
             })
         }).unwrap_or_default();
         Ok(json!({
-            "app_version": "1.3.3",
+            "app_version": "1.3.4",
             "sing_box": self.runtime.core,
             "xray": xray,
             "engine": self.runtime.engine,

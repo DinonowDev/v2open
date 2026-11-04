@@ -34,7 +34,7 @@ Persian overview: [README.fa.md](README.fa.md)
 
 | | |
 | --- | --- |
-| **Current version** | `1.3.3` (build `7`) — see [`VERSION`](VERSION) |
+| **Current version** | `1.3.4` (build `8`) — see [`VERSION`](VERSION) |
 | **Platform** | macOS 13+ (Apple Silicon and Intel) |
 | **UI** | SwiftUI desktop client |
 | **Core** | Rust `v2core` static library |

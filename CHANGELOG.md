@@ -15,6 +15,14 @@ How to edit this file: [docs/versioning.md](docs/versioning.md).
 
 ### Fixed
 
+## [1.3.4] - 2026-11-05
+
+Build `8`.
+
+### Fixed
+
+- Clash connections view: nested filter/sort types so release builds compile with Swift access control.
+
 ## [1.3.3] - 2026-11-05
 
 Build `7`.
@@ -132,7 +140,8 @@ Build `1`.
 
 - Initial macOS SwiftUI client, Rust `v2core`, bundled `sing-box` / Xray, routing presets, and local library.
 
-[Unreleased]: https://github.com/DinonowDev/v2open/compare/v1.3.3...HEAD
+[Unreleased]: https://github.com/DinonowDev/v2open/compare/v1.3.4...HEAD
+[1.3.4]: https://github.com/DinonowDev/v2open/compare/v1.3.3...v1.3.4
 [1.3.3]: https://github.com/DinonowDev/v2open/compare/v1.3.2...v1.3.3
 [1.3.2]: https://github.com/DinonowDev/v2open/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/DinonowDev/v2open/compare/v1.3.0...v1.3.1

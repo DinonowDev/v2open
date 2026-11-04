@@ -251,6 +251,59 @@ fn clash_http(port: u16, path: &str) -> Result<Value, String> {
     clash_request("GET", port, path, None)
 }
 
+fn clash_meta_str(meta: &Value, key: &str) -> String {
+    meta.get(key)
+        .map(|v| {
+            if let Some(s) = v.as_str() {
+                s.to_string()
+            } else if let Some(n) = v.as_u64() {
+                n.to_string()
+            } else if let Some(n) = v.as_i64() {
+                n.to_string()
+            } else {
+                String::new()
+            }
+        })
+        .unwrap_or_default()
+}
+
+fn enrich_clash_connection(item: &Value) -> Value {
+    let meta = item.get("metadata").cloned().unwrap_or(json!({}));
+    let host = {
+        let h = clash_meta_str(&meta, "host");
+        if h.is_empty() {
+            clash_meta_str(&meta, "destinationIP")
+        } else {
+            h
+        }
+    };
+    let process_path = clash_meta_str(&meta, "processPath");
+    let process = {
+        let p = clash_meta_str(&meta, "process");
+        if p.is_empty() {
+            process_path.rsplit('/').next().unwrap_or("").to_string()
+        } else {
+            p
+        }
+    };
+    let network = clash_meta_str(&meta, "network");
+    let destination_port = clash_meta_str(&meta, "destinationPort");
+    let mut out = item.clone();
+    if let Some(obj) = out.as_object_mut() {
+        obj.insert("host".into(), json!(host));
+        obj.insert("process".into(), json!(process));
+        obj.insert("network".into(), json!(network));
+        obj.insert("destinationPort".into(), json!(destination_port));
+        if !obj.contains_key("rule") {
+            obj.insert("rule".into(), item.get("rule").cloned().unwrap_or(json!("")));
+        }
+        if !obj.contains_key("rulePayload") {
+            obj.insert("rulePayload".into(), item.get("rulePayload").cloned().unwrap_or(json!("")));
+        }
+    }
+    out
+}
+
 fn clash_request(method: &str, port: u16, path: &str, body: Option<&str>) -> Result<Value, String> {
     let url = format!("http://127.0.0.1:{port}{path}");
     let req = ureq::request(method, &url).timeout(Duration::from_secs(6));
@@ -416,6 +469,9 @@ fn defaults() -> Value {
         "menu_bar": true,
         "hide_dock_icon": false,
         "app_update_check": true,
+        "notify_disconnect": true,
+        "notify_errors": true,
+        "notify_subscription": true,
         "remote_dns_id": "",
         "domestic_dns_id": "",
         "dns_items": [],
@@ -2946,6 +3002,19 @@ impl Core {
             }
             return Ok(());
         }
+        if self.runtime.connected
+            && self.runtime.pid > 0
+            && now().saturating_sub(self.runtime.connected_at) > 3
+            && !crate::platform::alive(self.runtime.pid)
+            && !self.settings["kill_switch"].as_bool().unwrap_or(false)
+        {
+            self.runtime.connected = false;
+            self.runtime.phase = "error".into();
+            if self.runtime.error.is_empty() {
+                self.runtime.error = "the tunnel stopped unexpectedly".into();
+            }
+            return Ok(());
+        }
         if self.settings["on_demand"].as_bool().unwrap_or(false) && self.runtime.phase != "killswitch" {
             if let Some(action) = demand_action(self.settings["on_demand_text"].as_str().unwrap_or(""), &kind, &ssid) {
                 if action == "connect" && !self.runtime.connected {
@@ -3249,7 +3318,7 @@ impl Core {
             })
         }).unwrap_or_default();
         Ok(json!({
-            "app_version": "1.3.2",
+            "app_version": "1.3.3",
             "sing_box": self.runtime.core,
             "xray": xray,
             "engine": self.runtime.engine,
@@ -3290,15 +3359,21 @@ impl Core {
             }));
         }
         let proxies = clash_http(port, "/proxies").unwrap_or(json!({}));
-        let mut connections = clash_http(port, "/connections").unwrap_or(json!({}));
-        if let Some(arr) = connections.get_mut("connections").and_then(|v| v.as_array_mut()) {
-            arr.truncate(120);
-        }
+        let connections = clash_http(port, "/connections").unwrap_or(json!({}));
+        let rows = connections
+            .get("connections")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .take(120)
+            .map(enrich_clash_connection)
+            .collect::<Vec<_>>();
         Ok(json!({
             "connected": true,
             "port": port,
             "proxies": proxies.get("proxies").cloned().unwrap_or(proxies),
-            "connections": connections.get("connections").cloned().unwrap_or(json!([])),
+            "connections": rows,
             "upload_total": connections.get("uploadTotal").cloned().unwrap_or(json!(0)),
             "download_total": connections.get("downloadTotal").cloned().unwrap_or(json!(0))
         }))

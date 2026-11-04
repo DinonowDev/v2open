@@ -21,6 +21,7 @@ final class Model: ObservableObject {
     private var booted = false
     private var pingLoopTask: Task<Void, Never>?
     private let tickActivity = TickActivity()
+    private var connectionMonitor: ConnectionMonitor?
     private static let autoPingInterval: TimeInterval = 60
 
     @Published var systemLight = false
@@ -100,11 +101,24 @@ final class Model: ObservableObject {
             self?.showToast(message, tone: tone)
         }
         AppUpdater.shared.start(auto: settings["app_update_check"] as? Bool ?? true)
+        AppNotifications.prepare()
+        connectionMonitor = ConnectionMonitor(model: self)
+        NotificationCenter.default.addObserver(
+            forName: .v2openTunnelDropped,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.connectionMonitor?.tunnelDroppedExternally()
+            }
+        }
         tickActivity.start { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
+                let wasConnected = self.runtime["connected"] as? Bool == true
                 let response = self.call("tick")
                 if let data = response["data"] as? [String: Any] { self.state = data }
+                self.connectionMonitor?.afterTick(wasConnected: wasConnected)
             }
         }
         DevLog.event("boot", "ready")
@@ -453,6 +467,7 @@ final class Model: ObservableObject {
             let err = response["error"] as? String ?? t("failed")
             DevLog.error("connect", err)
             showToast(err, tone: .error)
+            connectionMonitor?.notifyConnectFailure(err)
         } else if runtime["connected"] as? Bool == true {
             showToast(t("connected"), tone: .success)
         }
@@ -473,6 +488,7 @@ final class Model: ObservableObject {
     }
 
     func disconnectTunnel() {
+        connectionMonitor?.markUserDisconnect()
         if TunnelManager.shared.usingSystem { TunnelManager.shared.disconnect() }
         _ = call("disconnect")
         refresh()

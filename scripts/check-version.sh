@@ -81,6 +81,46 @@ PY
 )"
 check "AboutView.swift fallback" "$ABOUT" "$VERSION"
 
+README_EN="$(python3 - "$ROOT/README.md" "$VERSION" "$BUILD" <<'PY'
+import re, sys
+text = open(sys.argv[1], encoding="utf-8").read()
+ver, build = sys.argv[2], sys.argv[3]
+m = re.search(r'\*\*Current version\*\*\s*\|\s*`(\d+\.\d+\.\d+)`\s*\(build `(\d+)`\)', text)
+if not m:
+    print("")
+else:
+    print(f"{m.group(1)}|{m.group(2)}")
+PY
+)"
+README_FA="$(python3 - "$ROOT/README.fa.md" "$VERSION" "$BUILD" <<'PY'
+import re, sys
+text = open(sys.argv[1], encoding="utf-8").read()
+m = re.search(r'\*\*نسخه فعلی\*\*\s*\|\s*`(\d+\.\d+\.\d+)`\s*\(بیلد `(\d+)`\)', text)
+if not m:
+    print("")
+else:
+    print(f"{m.group(1)}|{m.group(2)}")
+PY
+)"
+if [[ -n "$README_EN" ]]; then
+  got_ver="${README_EN%%|*}"
+  got_build="${README_EN#*|}"
+  check "README.md Current version" "$got_ver" "$VERSION"
+  check "README.md build" "$got_build" "$BUILD"
+else
+  echo "check-version: README.md Current version row not found" >&2
+  fail=1
+fi
+if [[ -n "$README_FA" ]]; then
+  got_ver="${README_FA%%|*}"
+  got_build="${README_FA#*|}"
+  check "README.fa.md نسخه فعلی" "$got_ver" "$VERSION"
+  check "README.fa.md build" "$got_build" "$BUILD"
+else
+  echo "check-version: README.fa.md نسخه فعلی row not found" >&2
+  fail=1
+fi
+
 if [[ "$fail" -ne 0 ]]; then
   echo "check-version: failed. Run ./scripts/bump-version.sh $VERSION --build $BUILD" >&2
   exit 1

@@ -185,6 +185,7 @@ EOF
     "${SWIFT_SOURCES[@]}" \
     -L "$LIB" -lv2core \
     "${V2OPEN_SWIFT_FRAMEWORKS[@]}"
+  rm -rf "$APP/Contents/MacOS/V2Open.dSYM"
   v2open_codesign "$EXE"
   v2open_codesign "$APP" "$ROOT/macos-app/V2Open.entitlements"
   echo "built $APP"

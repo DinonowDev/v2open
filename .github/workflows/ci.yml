@@ -69,6 +69,11 @@ jobs:
           V2OPEN_ARCH: ${{ matrix.arch }}
         run: ./build-macos.sh
 
+      - name: Verify bundle signature
+        run: |
+          chmod +x ./scripts/verify-macos-bundle.sh
+          ./scripts/verify-macos-bundle.sh V2Open.app
+
       - name: Package zip
         run: |
           VERSION="$(sed -n '1p' VERSION | tr -d '[:space:]')"

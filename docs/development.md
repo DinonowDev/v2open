@@ -32,6 +32,7 @@ There is no Xcode project. The app is compiled with `swiftc -parse-as-library` o
 | `scripts/notarize-macos.sh` | `notarytool` submit, staple, `spctl`. |
 | `scripts/ci-import-certificate.sh` | GitHub Actions keychain import. No-op without secrets; requires both profiles when the certificate secret is set. |
 | `scripts/encode-apple-secrets.sh` | Base64 payloads and `gh secret set` hints — see [apple-ci-secrets.md](apple-ci-secrets.md). |
+| `scripts/setup-github-secrets.sh` | Upload cert/profile/notary secrets to GitHub when `V2OPEN_APPLE_*` env paths are set. |
 | `scripts/pre-release-check.sh` | Run before `git tag`: docs, `## [x.y.z]` in CHANGELOG, tests, clean tree. |
 
 Do not copy compiler flags into a new script; extend `macos-env.sh`.

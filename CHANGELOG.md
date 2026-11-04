@@ -15,6 +15,24 @@ How to edit this file: [docs/versioning.md](docs/versioning.md).
 
 ### Fixed
 
+## [1.3.3] - 2026-11-05
+
+Build `7`.
+
+### Added
+
+- Intel `masterdns` sidecar: built from [MasterDnsVPN](https://github.com/masterking32/MasterDnsVPN) during `fetch-macos-engines.sh` when Go is installed.
+- [scripts/setup-github-secrets.sh](../scripts/setup-github-secrets.sh) uploads Apple signing secrets via `gh secret set` when local cert paths are in env vars.
+- System notifications for unexpected disconnect, tunnel errors, and subscription refresh (Settings toggles). Update notifications reuse the same helper.
+- About shows whether this copy is notarized, Developer ID–signed, or ad hoc (`SigningInfo`).
+- [scripts/verify-macos-bundle.sh](../scripts/verify-macos-bundle.sh) prints codesign, stapler, and Gatekeeper status for a built `.app`.
+
+### Changed
+
+- README version table stays in sync with `VERSION` (`check-version.sh` / `bump-version.sh`).
+- Release workflow skips the flaky remote TCP ping test (same as `pre-release-check.sh`).
+- Clash / sing-box external controller view: search, filters, live speeds, and a short traffic chart.
+
 ## [1.3.2] - 2026-11-05
 
 Build `6`.
@@ -112,7 +130,8 @@ Build `1`.
 
 - Initial macOS SwiftUI client, Rust `v2core`, bundled `sing-box` / Xray, routing presets, and local library.
 
-[Unreleased]: https://github.com/DinonowDev/v2open/compare/v1.3.2...HEAD
+[Unreleased]: https://github.com/DinonowDev/v2open/compare/v1.3.3...HEAD
+[1.3.3]: https://github.com/DinonowDev/v2open/compare/v1.3.2...v1.3.3
 [1.3.2]: https://github.com/DinonowDev/v2open/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/DinonowDev/v2open/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/DinonowDev/v2open/compare/v1.2.0...v1.3.0

@@ -83,7 +83,9 @@ v2open_codesign() {
   else
     args+=(--sign -)
   fi
-  if [[ -n "$ents" && -f "$ents" ]]; then
+  # Restricted entitlements (Network Extension, app groups) make launchd refuse
+  # ad-hoc bundles; only embed them when a real codesigning identity is used.
+  if [[ -n "$id" && -n "$ents" && -f "$ents" ]]; then
     args+=(--entitlements "$ents")
   fi
   codesign "${args[@]}" "$target"
@@ -136,6 +138,6 @@ V2OPEN_SWIFT_FRAMEWORKS=(
   -framework Security -framework CoreFoundation -framework SystemConfiguration -framework NetworkExtension
   -framework CloudKit -framework WebKit -framework CoreWLAN -framework CoreLocation -framework CoreImage
   -framework PhotosUI -framework Photos -framework CreateML -framework TabularData -framework CoreML
-  -framework NaturalLanguage -framework UserNotifications -framework CryptoKit
+  -framework NaturalLanguage -framework UserNotifications -framework CryptoKit -framework Charts
   -lc++ -liconv
 )

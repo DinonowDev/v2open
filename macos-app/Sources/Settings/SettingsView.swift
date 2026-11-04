@@ -115,6 +115,26 @@ struct SettingsView: View {
                             AppUpdater.shared.check(interactive: true)
                         }
                     }
+                    SettingsSectionLabel(text: model.t("notificationsSection"))
+                    SettingsCard {
+                        SettingsToggleRow(
+                            title: model.t("notifyDisconnect"),
+                            hint: model.t("notifyDisconnectHint"),
+                            isOn: model.settings["notify_disconnect"] as? Bool ?? true
+                        ) { model.set("notify_disconnect", $0) }
+                        SettingsDivider()
+                        SettingsToggleRow(
+                            title: model.t("notifyErrors"),
+                            hint: model.t("notifyErrorsHint"),
+                            isOn: model.settings["notify_errors"] as? Bool ?? true
+                        ) { model.set("notify_errors", $0) }
+                        SettingsDivider()
+                        SettingsToggleRow(
+                            title: model.t("notifySubscription"),
+                            hint: model.t("notifySubscriptionHint"),
+                            isOn: model.settings["notify_subscription"] as? Bool ?? true
+                        ) { model.set("notify_subscription", $0) }
+                    }
                     SettingsCard {
                         SettingsToggleRow(title: model.t("insecure"), isOn: model.settings["allow_insecure"] as? Bool ?? false) { model.set("allow_insecure", $0) }
                         SettingsDivider()

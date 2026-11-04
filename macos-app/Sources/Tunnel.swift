@@ -25,6 +25,8 @@ final class TunnelManager: NSObject {
     private var manager: NETunnelProviderManager?
     private(set) var usingSystem = false
     private(set) var lastReloaded = false
+    private var expectingDisconnect = false
+    private var statusObserver: NSObjectProtocol?
 
     func connect(_ options: TunnelStartOptions, completion: @escaping (Bool) -> Void) {
         NETunnelProviderManager.loadAllFromPreferences { [weak self] managers, error in
@@ -53,6 +55,8 @@ final class TunnelManager: NSObject {
                         self.manager = manager
                         self.usingSystem = true
                         self.lastReloaded = false
+                        self.expectingDisconnect = false
+                        self.observeStatus(on: manager.connection)
                         completion(true)
                     } catch {
                         DevLog.error("tunnel", "start: \(error.localizedDescription)")
@@ -100,9 +104,42 @@ final class TunnelManager: NSObject {
     }
 
     func disconnect() {
+        expectingDisconnect = true
         manager?.connection.stopVPNTunnel()
         usingSystem = false
         lastReloaded = false
+        if let statusObserver {
+            NotificationCenter.default.removeObserver(statusObserver)
+            self.statusObserver = nil
+        }
+    }
+
+    private func observeStatus(on connection: NEVPNConnection) {
+        if let statusObserver {
+            NotificationCenter.default.removeObserver(statusObserver)
+        }
+        statusObserver = NotificationCenter.default.addObserver(
+            forName: .NEVPNStatusDidChange,
+            object: connection,
+            queue: .main
+        ) { [weak self] _ in
+            self?.handleStatusChange()
+        }
+    }
+
+    private func handleStatusChange() {
+        guard let connection = manager?.connection else { return }
+        switch connection.status {
+        case .disconnected, .invalid:
+            let expected = expectingDisconnect
+            expectingDisconnect = false
+            usingSystem = false
+            if !expected {
+                NotificationCenter.default.post(name: .v2openTunnelDropped, object: nil)
+            }
+        default:
+            break
+        }
     }
 
     func resetConfiguration(completion: @escaping (Bool) -> Void) {

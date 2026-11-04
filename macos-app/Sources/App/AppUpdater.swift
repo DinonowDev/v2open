@@ -349,15 +349,14 @@ final class AppUpdater: ObservableObject {
         if UserDefaults.standard.string(forKey: notifiedKey) == marker { return }
         UserDefaults.standard.set(marker, forKey: notifiedKey)
         let body = text("updateReady", vars: ["version": release.display])
-        let center = UNUserNotificationCenter.current()
-        center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
-            guard granted else { return }
-            let content = UNMutableNotificationContent()
-            content.title = "V2Open"
-            content.body = body
-            content.sound = .default
-            content.userInfo = ["kind": "update"]
-            center.add(UNNotificationRequest(identifier: "v2open-update-\(marker)", content: content, trigger: nil))
+        Task { @MainActor in
+            AppNotifications.post(
+                kind: .update,
+                title: "V2Open",
+                body: body,
+                identifier: "v2open-update-\(marker)",
+                userInfo: ["version": release.display]
+            )
         }
     }
 

@@ -36,8 +36,16 @@ final class AppTerminator: NSObject, NSApplicationDelegate, UNUserNotificationCe
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
+        let kind = response.notification.request.content.userInfo["kind"] as? String ?? AppNotificationKind.update.rawValue
         Task { @MainActor in
-            MenuBarCenter.shared.open(page: "about")
+            switch kind {
+            case AppNotificationKind.subscription.rawValue:
+                MenuBarCenter.shared.open(page: "configs")
+            case AppNotificationKind.error.rawValue, AppNotificationKind.disconnect.rawValue:
+                MenuBarCenter.shared.open(page: "home")
+            default:
+                MenuBarCenter.shared.open(page: "about")
+            }
         }
         completionHandler()
     }

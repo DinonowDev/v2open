@@ -11,6 +11,9 @@ DEST="${2:-$ROOT/binaries/macos-$ARCH}"
 SING_BOX_VERSION="${SING_BOX_VERSION:-1.14.4}"
 XRAY_VERSION="${XRAY_VERSION:-26.10.21}"
 PINGTUNNEL_VERSION="${PINGTUNNEL_VERSION:-3.1}"
+MASTERDNS_REPO="${MASTERDNS_REPO:-https://github.com/masterking32/MasterDnsVPN.git}"
+MASTERDNS_REF="${MASTERDNS_REF:-v2026.10.26.100415-5f83ee9}"
+MASTERDNS_VERSION="${MASTERDNS_VERSION:-v2026.10.26.100415-5f83ee9}"
 
 case "$ARCH" in
   arm64)
@@ -111,8 +114,26 @@ if need "$DEST/dnstt-client"; then
   fi
 fi
 
-if [[ ! -f "$DEST/masterdns" ]]; then
-  echo "fetch-macos-engines: masterdns has no public Intel build; place one at $DEST/masterdns to include it" >&2
+if need "$DEST/masterdns"; then
+  if command -v go >/dev/null 2>&1; then
+    echo "fetch-macos-engines: masterdns $MASTERDNS_VERSION via go ($GOARCH)"
+    work="$(mktemp -d)"
+    if ! git clone --depth 1 --branch "$MASTERDNS_REF" "$MASTERDNS_REPO" "$work/src" 2>/dev/null; then
+      git clone --depth 1 "$MASTERDNS_REPO" "$work/src"
+      git -C "$work/src" checkout --detach "$MASTERDNS_REF"
+    fi
+    (
+      cd "$work/src"
+      GOOS=darwin GOARCH="$GOARCH" CGO_ENABLED=0 go build -trimpath \
+        -ldflags="-s -w -X masterdnsvpn-go/internal/version.BuildVersion=${MASTERDNS_VERSION}" \
+        -o "$DEST/masterdns" ./cmd/client
+    )
+    chmod +x "$DEST/masterdns"
+    xattr -cr "$DEST/masterdns" 2>/dev/null || true
+    rm -rf "$work"
+  else
+    echo "fetch-macos-engines: go is not installed; masterdns skipped (place one at $DEST/masterdns)" >&2
+  fi
 fi
 
 for tool in sing-box xray; do

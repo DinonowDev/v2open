@@ -9,7 +9,7 @@ struct AboutView: View {
     private var appVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
             ?? (about["app_version"] as? String)
-            ?? "1.3.2"
+            ?? "1.3.3"
     }
     private var build: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
@@ -57,6 +57,8 @@ struct AboutView: View {
                     SettingsSectionLabel(text: model.t("updates"))
                     UpdateBanner()
                     updateCard
+                    SettingsSectionLabel(text: model.t("signingStatus"))
+                    signingCard
                     SettingsSectionLabel(text: model.t("versions"))
                     versionsCard
                     SheetActionButton(title: model.t("copyVersions"), icon: "doc.on.clipboard") {
@@ -97,6 +99,30 @@ struct AboutView: View {
             }
             .scrollIndicators(.hidden)
             .onAppear { model.refreshAbout() }
+        }
+    }
+
+    private var signingInfo: SigningInfo { SigningInfo.current() }
+
+    private var signingCard: some View {
+        SettingsCard {
+            row(model.t("signingStatus"), signingLabel)
+            SettingsDivider()
+            row(model.t("signingTeam"), signingInfo.teamID)
+            SettingsDivider()
+            Mix(text: signingInfo.authority, size: 11, color: C.muted)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 14)
+                .padding(.bottom, 10)
+        }
+    }
+
+    private var signingLabel: String {
+        switch signingInfo.kind {
+        case "notarized": return model.t("signingNotarized")
+        case "developer-id": return model.t("signingDeveloperID")
+        case "development": return model.t("signingDevelopment")
+        default: return model.t("signingAdhoc")
         }
     }
 

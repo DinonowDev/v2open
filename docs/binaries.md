@@ -35,7 +35,7 @@ There is no committed Intel tree. `V2OPEN_ARCH=x86_64 ./build-macos.sh` runs [sc
 | `xray` | `26.10.21` `Xray-macos-64.zip` |
 | `pingtunnel` | `esrrhs/pingtunnel` `3.1` `darwin_amd64` |
 | `dnstt-client` | `go install` of `www.bamsoftware.com/git/dnstt.git/dnstt-client@latest` when Go is on `PATH` |
-| `masterdns` | Not downloaded. Copy an Intel binary to `binaries/macos-x86_64/masterdns` before building if that protocol must work. |
+| `masterdns` | Not downloaded. Built from [MasterDnsVPN](https://github.com/masterking32/MasterDnsVPN) tag `v2026.10.26.100415-5f83ee9` when Go is on `PATH`. Override with `MASTERDNS_REF` / `MASTERDNS_VERSION`. |
 
 `geoip.dat` and `geosite.dat` are still copied from `binaries/macos/`. Override versions with `SING_BOX_VERSION`, `XRAY_VERSION`, or `PINGTUNNEL_VERSION`. `V2OPEN_FETCH_FORCE=1` re-downloads.
 

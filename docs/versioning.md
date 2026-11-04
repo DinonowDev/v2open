@@ -46,6 +46,8 @@ Version-bearing commits live on `release/x.y.z` or `hotfix/x.y.z` (or inside a f
 | `native/core/Cargo.toml` | `package.version` (marketing version only) |
 | `native/core/src/app.rs` | `"app_version": "x.y.z"` in `about_info` |
 | `macos-app/Sources/Settings/AboutView.swift` | fallback `"1.1.0"` string |
+| `README.md` | `**Current version**` row |
+| `README.fa.md` | `**نسخه فعلی**` row |
 
 `CHANGELOG.md` must have a `[x.y.z]` section **before** the tag is pushed (see [release.md](release.md)).
 

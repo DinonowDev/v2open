@@ -81,5 +81,31 @@ if n != 1:
 path.write_text(new, encoding="utf-8")
 PY
 
+python3 - "$ROOT/README.md" "$VERSION" "$BUILD" <<'PY'
+from pathlib import Path
+import re, sys
+path = Path(sys.argv[1])
+version, build = sys.argv[2], sys.argv[3]
+text = path.read_text(encoding="utf-8")
+pat = r'(\*\*Current version\*\*\s*\|\s*`)\d+\.\d+\.\d+(`\s*\(build `)\d+(`\))'
+new, n = re.subn(pat, rf'\g<1>{version}\g<2>{build}\g<3>', text, count=1)
+if n != 1:
+    raise SystemExit("bump-version: could not patch README.md version row")
+path.write_text(new, encoding="utf-8")
+PY
+
+python3 - "$ROOT/README.fa.md" "$VERSION" "$BUILD" <<'PY'
+from pathlib import Path
+import re, sys
+path = Path(sys.argv[1])
+version, build = sys.argv[2], sys.argv[3]
+text = path.read_text(encoding="utf-8")
+pat = r'(\*\*نسخه فعلی\*\*\s*\|\s*`)\d+\.\d+\.\d+(`\s*\(بیلد `)\d+(`\))'
+new, n = re.subn(pat, rf'\g<1>{version}\g<2>{build}\g<3>', text, count=1)
+if n != 1:
+    raise SystemExit("bump-version: could not patch README.fa.md version row")
+path.write_text(new, encoding="utf-8")
+PY
+
 echo "bump-version: set $VERSION (build $BUILD)"
 "$ROOT/scripts/check-version.sh"

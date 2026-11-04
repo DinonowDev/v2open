@@ -108,13 +108,15 @@ V2OPEN_ARCH=x86_64 ./build-macos.sh
 
 ## Intel `masterdns`
 
-There is no public Intel build of `masterdns` in this repo. Intel zips omit it unless you place a Mach-O x86_64 binary at `binaries/macos-x86_64/masterdns` before building (see [binaries.md](binaries.md)).
+Intel zips include `masterdns` when Go is available during `./build-macos.sh` (via [fetch-macos-engines.sh](../scripts/fetch-macos-engines.sh)), compiled from [masterking32/MasterDnsVPN](https://github.com/masterking32/MasterDnsVPN) at tag **`v2026.10.26.100415-5f83ee9`** (same lineage as the committed Apple Silicon binary). To pin another upstream revision, set `MASTERDNS_REF` and `MASTERDNS_VERSION` before building.
 
 ---
 
 ## After secrets are set
 
 1. Merge release prep to `main` ([release.md](release.md)).
-2. `./scripts/pre-release-check.sh 1.2.0`
-3. `git tag -a v1.2.0 -m "V2Open 1.2.0"` and `git push origin v1.2.0`
+2. `./scripts/pre-release-check.sh` (defaults to the version in `VERSION`).
+3. `git tag -a vX.Y.Z -m "V2Open X.Y.Z"` and `git push origin vX.Y.Z` (tag must match `VERSION` line 1).
 4. Watch the **Release** workflow; download both zips and smoke-test on Apple Silicon and Intel Macs.
+
+Or run [scripts/setup-github-secrets.sh](../scripts/setup-github-secrets.sh) once Apple files are on disk (see env vars in that script).

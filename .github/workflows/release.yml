@@ -30,7 +30,7 @@ jobs:
 
       - name: Rust tests
         working-directory: native
-        run: cargo test -p v2core
+        run: cargo test -p v2core -- --skip ping_sets_positive_ms_for_real_host
 
       - name: Swift tests
         run: ./scripts/test-swift.sh
@@ -74,6 +74,20 @@ jobs:
           V2OPEN_ARCH: ${{ matrix.arch }}
         run: ./build-macos.sh
 
+      - name: Verify bundle signature
+        id: signing
+        run: |
+          chmod +x ./scripts/verify-macos-bundle.sh
+          ./scripts/verify-macos-bundle.sh V2Open.app | tee "signing-report-${{ matrix.arch }}.txt"
+
+      - name: Upload signing report
+        uses: actions/upload-artifact@v4
+        with:
+          name: signing-report-${{ matrix.arch }}
+          path: signing-report-${{ matrix.arch }}.txt
+          retention-days: 1
+          if-no-files-found: error
+
       - name: Package zip
         run: |
           VERSION="$(sed -n '1p' VERSION | tr -d '[:space:]')"
@@ -102,12 +116,36 @@ jobs:
           path: dist
           merge-multiple: true
 
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: signing-report-*
+          path: signing-reports
+          merge-multiple: true
+
       - name: Release notes from CHANGELOG
         run: |
           ./scripts/changelog-section.sh "${GITHUB_REF_NAME#v}" > release-notes.md
           {
             echo ""
             echo "---"
+            echo ""
+            echo "### Code signature"
+            echo ""
+            if compgen -G "signing-reports/*.txt" > /dev/null; then
+              for report in signing-reports/*.txt; do
+                echo "**$(basename "$report" .txt)**"
+                echo '```'
+                cat "$report"
+                echo '```'
+              done
+              if grep -q "V2OPEN_SIGNING=notarized" signing-reports/*.txt 2>/dev/null; then
+                echo "These builds are **notarized** and should open without \`xattr -cr\`."
+              else
+                echo "These builds are **not notarized**. Use **Right-click → Open** the first time, or set Apple signing secrets (see docs/apple-ci-secrets.md)."
+              fi
+            else
+              echo "Signing report unavailable for this release."
+            fi
             echo ""
             echo "### Download checksums (SHA-256)"
             echo ""

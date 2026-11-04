@@ -44,9 +44,10 @@ pingtunnel
   Text:     https://github.com/esrrhs/pingtunnel/blob/master/LICENSE
 
 masterdns
+  Upstream: https://github.com/masterking32/MasterDnsVPN
+  License:  MIT (see upstream LICENSE)
   Bundled helper identified at runtime as "MasterDnsVPN Client".
-  Keep the upstream URL and license next to any replacement binary.
-  Do not ship a replacement whose license you cannot document here.
+  Intel builds compile `cmd/client` at tag v2026.10.26.100415-5f83ee9 via fetch-macos-engines.sh.
 
 -----------------------------------------------------------------------------
 Geo databases (binaries/macos/geoip.dat, geosite.dat)

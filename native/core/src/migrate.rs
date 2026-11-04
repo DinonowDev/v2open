@@ -77,6 +77,15 @@ pub fn migrate_settings(settings: &mut Value) {
     if settings.get("app_icon").is_none() {
         settings["app_icon"] = json!("default");
     }
+    if settings.get("notify_disconnect").is_none() {
+        settings["notify_disconnect"] = json!(true);
+    }
+    if settings.get("notify_errors").is_none() {
+        settings["notify_errors"] = json!(true);
+    }
+    if settings.get("notify_subscription").is_none() {
+        settings["notify_subscription"] = json!(true);
+    }
     if settings.get("legacy_slider").is_none() {
         settings["legacy_slider"] = json!(false);
     }

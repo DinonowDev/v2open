@@ -15,6 +15,14 @@ How to edit this file: [docs/versioning.md](docs/versioning.md).
 
 ### Fixed
 
+## [1.3.2] - 2026-11-05
+
+Build `6`.
+
+### Fixed
+
+- CI ping regression test no longer treats a fast datacenter link to `8.8.8.8` as a TUN-local path; TCP ping display uses microsecond timing with millisecond rounding.
+
 ## [1.3.1] - 2026-11-05
 
 Build `5`.
@@ -104,7 +112,8 @@ Build `1`.
 
 - Initial macOS SwiftUI client, Rust `v2core`, bundled `sing-box` / Xray, routing presets, and local library.
 
-[Unreleased]: https://github.com/DinonowDev/v2open/compare/v1.3.1...HEAD
+[Unreleased]: https://github.com/DinonowDev/v2open/compare/v1.3.2...HEAD
+[1.3.2]: https://github.com/DinonowDev/v2open/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/DinonowDev/v2open/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/DinonowDev/v2open/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/DinonowDev/v2open/releases/tag/v1.2.0

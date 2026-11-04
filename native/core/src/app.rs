@@ -95,7 +95,7 @@ fn id() -> String {
     format!("{:x}{:x}{:x}", now(), std::process::id(), seq)
 }
 
-fn tcp_connect_ms(host: &str, port: u16, timeout: Duration, prefer_ipv6: bool) -> Option<u64> {
+fn tcp_connect_us(host: &str, port: u16, timeout: Duration, prefer_ipv6: bool) -> Option<u64> {
     let mut addrs: Vec<SocketAddr> = (host, port).to_socket_addrs().ok()?.collect();
     if addrs.is_empty() {
         return None;
@@ -111,10 +111,14 @@ fn tcp_connect_ms(host: &str, port: u16, timeout: Duration, prefer_ipv6: bool) -
         }
         let started = Instant::now();
         if tcp_connect_addr(addr, timeout, bind_index).is_ok() {
-            return Some(started.elapsed().as_millis().max(1) as u64);
+            return Some(started.elapsed().as_micros() as u64);
         }
     }
     None
+}
+
+fn tcp_connect_ms(host: &str, port: u16, timeout: Duration, prefer_ipv6: bool) -> Option<u64> {
+    tcp_connect_us(host, port, timeout, prefer_ipv6).map(|us| ((us + 999) / 1000).max(1))
 }
 
 fn physical_bind_index() -> Option<u32> {
@@ -3245,7 +3249,7 @@ impl Core {
             })
         }).unwrap_or_default();
         Ok(json!({
-            "app_version": "1.3.1",
+            "app_version": "1.3.2",
             "sing_box": self.runtime.core,
             "xray": xray,
             "engine": self.runtime.engine,
@@ -4502,13 +4506,25 @@ mod ping_measure_tests {
     }
 
     #[test]
-    fn remote_tcp_ping_is_not_one_millisecond() {
-        let Some(ms) = tcp_connect_ms("8.8.8.8", 443, Duration::from_secs(3), false) else {
+    fn remote_tcp_ping_is_not_loopback_fast() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        thread::spawn(move || {
+            let _ = listener.accept();
+        });
+        let timeout = Duration::from_secs(3);
+        let Some(loop_us) = tcp_connect_us("127.0.0.1", port, timeout, false) else {
             return;
         };
-        // Sub-ms handshakes are clamped to 1 ms; that usually means a local/tun path, not WAN.
-        // Fast CI/datacenter links can legitimately measure 2–4 ms to 8.8.8.8.
-        assert!(ms > 1, "remote ping {ms}ms is still tun-local");
+        let Some(remote_us) = tcp_connect_us("8.8.8.8", 443, timeout, false) else {
+            return;
+        };
+        // When ping is accidentally measured through TUN, 8.8.8.8 completes in loopback time.
+        let margin = 100u64;
+        assert!(
+            remote_us > loop_us.saturating_add(margin),
+            "remote {remote_us}µs vs loopback {loop_us}µs — still on a local/tun path"
+        );
     }
 }
 

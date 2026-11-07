@@ -12,8 +12,9 @@
 1. `git fetch` → checkout/pull `dev` → `git checkout -b <type>/<slug>`
 2. پیاده‌سازی، کامیت‌های Conventional Commits، `CHANGELOG`/`docs`/`locales` طبق CONTRIBUTING
 3. `./scripts/check-docs.sh` (+ تست در صورت نیاز) → push → **PR به `dev`**
-4. پایان تسک / درخواست انتشار: **PR `dev`→`stage`** سپس **`stage`→`production`**
-5. روی **`production`**: `./scripts/bump-version.sh`, `check-version.sh`, چنج‌لاگ، سپس تگ `vX.Y.Z` و `git push origin vX.Y.Z` برای ریلیز
+4. بعد از merge در `dev`: `./scripts/mark-merge.sh merged dev <branch> HEAD --push` (تگ `merged/dev/...`؛ لیبل PR با workflow)
+5. پایان تسک / درخواست انتشار: **PR `dev`→`stage`** سپس **`stage`→`production`** + `./scripts/mark-merge.sh sync ... --push`
+6. روی **`production`**: `./scripts/bump-version.sh`, `check-version.sh`, چنج‌لاگ، سپس تگ `vX.Y.Z` و `git push origin vX.Y.Z` برای ریلیز
 
 روی `production` / `stage` / `dev` مستقیم کامیت نکن. force-push به `production` ممنوع.
 

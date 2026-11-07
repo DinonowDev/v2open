@@ -11,9 +11,15 @@ How to edit this file: [docs/versioning.md](docs/versioning.md).
 
 ### Added
 
+- Visual routing editor with Clash-style matchers, quick templates, and Clash `rules:` import (merge or replace).
+- `hiddify://` and `sub://` deep links; Hiddify panel subscription headers (`Profile-Title`, `profile-update-interval`, `moved-permanently-to`, `profile-web-page-url`, `support-url`).
+- Settings toggle to send `X-HWID` on subscription refresh; engine updates for sing-box and Xray from **Settings → About**.
+- Git merge tracking: `scripts/mark-merge.sh` tags (`merged/dev/*`, `sync/stage/*`, …) and GitHub PR labels (`merged-to-dev`, `on-stage`, `on-production`).
+
 ### Changed
 
 - macOS: refresh subscription groups with an update URL in the background when the app launches.
+- Packet Tunnel and the core prefer user-installed engines under `~/Library/Application Support/V2Open/engines/`.
 
 ### Fixed
 

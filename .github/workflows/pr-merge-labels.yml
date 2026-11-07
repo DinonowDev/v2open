@@ -6,6 +6,7 @@ on:
     types: [closed]
 
 permissions:
+  contents: write
   pull-requests: write
   issues: write
 
@@ -107,7 +108,12 @@ jobs:
               core.info(`Promoted ${count} merged-to-dev PR(s) → ${cfg.add} @ ${tipSha?.slice(0, 7)}`);
             }
 
-            if (base === 'dev' || base === 'main') {
+            if (base === 'main') {
+              core.setFailed('PRs targeting main are disabled; use dev / stage / production.');
+              return;
+            }
+
+            if (base === 'dev') {
               await addLabel(promoNumber, 'merged-to-dev');
               return;
             }
@@ -125,3 +131,11 @@ jobs:
               await promoteDevPrs('production');
               return;
             }
+
+      - name: Promote git tags after tier merge
+        if: github.event.pull_request.base.ref == 'stage' || github.event.pull_request.base.ref == 'production'
+        env:
+          PUSH_TAGS: "1"
+        run: |
+          chmod +x ./scripts/promote-dev-tags.sh
+          ./scripts/promote-dev-tags.sh "${{ github.event.pull_request.base.ref }}" "${{ github.event.pull_request.merge_commit_sha }}"

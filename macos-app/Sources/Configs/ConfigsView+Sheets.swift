@@ -105,6 +105,38 @@ extension ConfigsView {
         }
     }
 
+    var groupRenameOverlay: some View {
+        SheetBackdrop(onDismiss: { groupRenameTarget = nil }) {
+            SheetCard {
+                VStack(alignment: .leading, spacing: 0) {
+                    SheetHeader(
+                        title: model.t("renameGroup"),
+                        subtitle: model.t("groupRenameHint"),
+                        close: { groupRenameTarget = nil },
+                        closeLabel: model.t("cancel")
+                    )
+                    V2Field(placeholder: model.t("groupName"), text: $groupRenameDraft, icon: "pencil")
+                        .padding(.bottom, 14)
+                    SheetActionButton(title: model.t("save"), primary: true, icon: "checkmark") {
+                        let gid = groupRenameTarget?["id"] as? String ?? ""
+                        let name = groupRenameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if name.isEmpty {
+                            model.showToast(model.t("groupNameRequired"), tone: .warning)
+                            return
+                        }
+                        if let err = model.invoke("rename_group", ["id": gid, "name": name]) {
+                            model.showToast(err, tone: .error)
+                            return
+                        }
+                        groupRenameTarget = nil
+                        model.showToast(model.t("saved"), tone: .success)
+                    }
+                    SheetActionButton(title: model.t("cancel"), quiet: true) { groupRenameTarget = nil }
+                }
+            }
+        }
+    }
+
     var groupUrlOverlay: some View {
         SheetBackdrop(onDismiss: { groupUrlTarget = nil }) {
             SheetCard {

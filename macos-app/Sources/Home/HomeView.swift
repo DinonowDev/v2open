@@ -431,12 +431,15 @@ struct SpeedUnitSwitch: View {
     @Binding var useMegabit: Bool
     var mbps: String
     var mBps: String
+    var toggleLabel: String
+    var mbpsHelp: String
+    var mBpsHelp: String
     @Namespace private var unitNS
 
     var body: some View {
         HStack(spacing: 0) {
-            chip(mbps, megabit: true)
-            chip(mBps, megabit: false)
+            chip(mbps, icon: "antenna.radiowaves.left.and.right", megabit: true, help: mbpsHelp)
+            chip(mBps, icon: "arrow.down.circle", megabit: false, help: mBpsHelp)
         }
         .padding(3)
         .background(C.fieldFill)
@@ -445,21 +448,28 @@ struct SpeedUnitSwitch: View {
             Capsule()
                 .strokeBorder(C.line, lineWidth: 1)
         )
+        .fixedSize(horizontal: true, vertical: false)
+        .layoutPriority(0)
         .accessibilityElement(children: .contain)
+        .accessibilityLabel(toggleLabel)
+        .accessibilityValue(useMegabit ? mbps : mBps)
     }
 
-    private func chip(_ title: String, megabit: Bool) -> some View {
+    private func chip(_ title: String, icon: String, megabit: Bool, help: String) -> some View {
         let on = useMegabit == megabit
         return Button {
             withAnimation(.easeOut(duration: 0.16)) { useMegabit = megabit }
         } label: {
-            Mix(
-                text: title,
-                size: 12,
-                weight: .bold,
-                color: on ? C.onAccent : C.muted
-            )
-            .padding(.horizontal, 11)
+            HStack(spacing: 5) {
+                Image(systemName: icon)
+                    .font(.system(size: 10, weight: .bold))
+                Text(title)
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            .foregroundStyle(on ? C.onAccent : C.muted)
+            .padding(.horizontal, 9)
             .frame(height: 28)
             .background {
                 if on {
@@ -472,7 +482,8 @@ struct SpeedUnitSwitch: View {
             .contentShape(Capsule())
         }
         .buttonStyle(QuietPressStyle())
-        .accessibilityLabel(title)
+        .help(help)
+        .accessibilityLabel("\(title). \(help)")
         .accessibilityAddTraits(on ? .isSelected : AccessibilityTraits())
     }
 }

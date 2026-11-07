@@ -306,4 +306,9 @@ extension ConfigsView {
         groupUrlDraft = group["url"] as? String ?? ""
         groupUrlTarget = group
     }
+
+    func openGroupRename(_ group: [String: Any]) {
+        groupRenameDraft = group["name"] as? String ?? ""
+        groupRenameTarget = group
+    }
 }

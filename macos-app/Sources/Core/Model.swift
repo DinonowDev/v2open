@@ -206,11 +206,13 @@ final class Model: ObservableObject {
     private func refreshSubscriptionGroupsOnLaunch() {
         Task.detached(priority: .utility) { [weak self] in
             let response = v2RPC(method: "update_group")
-            await MainActor.run {
+            let ok = response["ok"] as? Bool != false
+            let err = response["error"] as? String
+            await MainActor.run { [weak self] in
                 guard let self else { return }
-                if response["ok"] as? Bool != false {
+                if ok {
                     self.mergeState(from: response)
-                } else if let err = response["error"] as? String, err != "no groups with an update url" {
+                } else if let err, err != "no groups with an update url" {
                     DevLog.error("boot", "subscription refresh: \(err)")
                 }
             }

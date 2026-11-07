@@ -174,7 +174,7 @@ struct RoutingView: View {
                     SheetActionButton(title: model.t("duplicateRouteSet"), icon: "doc.on.doc") {
                         duplicateRouteSet()
                     }
-                    SheetActionButton(title: model.t("renameRouteSet"), icon: "pencil", quiet: true) {
+                    SheetActionButton(title: model.t("renameRouteSet"), quiet: true, icon: "pencil") {
                         renameSetName = activeRouteSetName
                         showRenameSet = true
                     }

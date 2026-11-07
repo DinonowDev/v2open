@@ -42,7 +42,7 @@ Import menu:
 | QR (camera or photo) | decoded text → `import` |
 | File (JSON, links, Clash YAML, `.npvt`, `.npvs`, `.v2box`) | `import` / `import_package` / `import_backup` |
 
-Groups can have a URL (`set_group_url`, `update_group`), pin (`pin_group`), lock (`lock_group` / `unlock_group`), export (`export_group`, `share_locked`).
+Groups can have a URL (`set_group_url`, `update_group`), a display name (`rename_group`), pin (`pin_group`), lock (`lock_group` / `unlock_group`), export (`export_group`, `share_locked`).
 
 Ping: per profile or **Ping all**. Optional throughput test (`throughput_test`) hits the configured hosts. Auto-ping every 60 seconds from `Model`.
 

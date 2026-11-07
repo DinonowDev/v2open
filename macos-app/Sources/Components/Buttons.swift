@@ -82,6 +82,7 @@ struct SheetActionButton: View {
 struct AppToastView: View {
     @Environment(\.themeLight) private var themeLight
     var item: AppToastItem
+    var onAction: (() -> Void)?
 
     private var accent: Color {
         switch item.tone {
@@ -112,6 +113,13 @@ struct AppToastView: View {
                 .foregroundStyle(C.text)
                 .lineLimit(3)
                 .multilineTextAlignment(.leading)
+            Spacer(minLength: 8)
+            if let title = item.actionTitle, let onAction {
+                Button(title, action: onAction)
+                    .buttonStyle(.plain)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(accent)
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)

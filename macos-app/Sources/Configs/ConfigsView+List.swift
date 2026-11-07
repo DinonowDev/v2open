@@ -49,24 +49,6 @@ extension ConfigsView {
             .buttonStyle(.plain)
 
             HStack(spacing: 8) {
-                if !profiles.isEmpty {
-                    Button {
-                        model.connectTunnel(groupId: gid, smart: true)
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "sparkles")
-                                .font(.system(size: 10, weight: .bold))
-                            Mix(text: model.t("smartConnect"), size: 11, weight: .semibold)
-                        }
-                        .foregroundStyle(C.cyan)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
-                        .background(C.cyan.opacity(0.14))
-                        .clipShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(model.connectBusy)
-                }
                 ConfigRowIconButton(systemName: "dot.radiowaves.left.and.right", label: model.t("pingAll")) {
                     runPing(profileIds: profileIds(in: group), args: pingArgs(groupId: gid))
                 }
@@ -82,6 +64,9 @@ extension ConfigsView {
                     ConfigRowIconButton(systemName: "lifepreserver", label: model.t("openSupport")) {
                         NSWorkspace.shared.open(link)
                     }
+                }
+                ConfigRowIconButton(systemName: "pencil", label: model.t("renameGroup")) {
+                    openGroupRename(group)
                 }
                 ConfigRowIconButton(systemName: group["pinned"] as? Bool == true ? "pin.slash" : "pin", label: model.t("pinGroup")) {
                     _ = model.call("pin_group", ["id": gid, "pinned": !(group["pinned"] as? Bool == true)])
@@ -105,6 +90,7 @@ extension ConfigsView {
                     _ = model.call("pin_group", ["id": gid, "pinned": !(group["pinned"] as? Bool == true)])
                     model.refresh()
                 }
+                Button(model.t("renameGroup")) { openGroupRename(group) }
                 Button(model.t("copyAllLinks")) { copyGroupLinks(gid: gid) }
                 Button(model.t("exportGroup")) { exportGroup(gid: gid, name: name) }
                 Button(model.t("update")) { updateGroup(gid: gid) }
@@ -330,19 +316,35 @@ extension ConfigsView {
     }
 
     func clearGroupActionTitle(_ group: [String: Any]) -> String {
-        isRemoteGroup(group) ? model.t("deleteSubscription") : model.t("deleteAllLocal")
+        isRemoteGroup(group) ? model.t("deleteSubscription") : model.t("deleteGroup")
     }
 
     func clearGroup(gid: String, group: [String: Any]) {
         let remote = isRemoteGroup(group)
         let alert = NSAlert()
         alert.messageText = clearGroupActionTitle(group)
-        alert.informativeText = model.t(remote ? "confirmDeleteSubscription" : "confirmDeleteAll")
+        alert.informativeText = model.t(remote ? "confirmDeleteSubscription" : "confirmDeleteGroup")
         alert.addButton(withTitle: model.t("delete"))
         alert.addButton(withTitle: model.t("cancel"))
         guard alert.runModal() == .alertFirstButtonReturn else { return }
-        _ = model.call("clear_group", ["id": gid])
+        let snapshot = group
+        let displayName = {
+            let raw = group["name"] as? String ?? ""
+            return raw.isEmpty ? model.t("local") : raw
+        }()
+        let response = model.call("clear_group", ["id": gid])
+        guard response["ok"] as? Bool != false else {
+            model.showToast(response["error"] as? String ?? model.t("failed"), tone: .error)
+            return
+        }
         model.refresh()
-        model.showToast(model.t(remote ? "subscriptionRemoved" : "saved"), tone: .success)
+        let message = model.t(remote ? "subscriptionDeleted" : "groupDeleted", vars: ["name": displayName])
+        model.showToast(message, tone: .info, action: {
+            if let err = model.invoke("restore_group", ["group": snapshot]) {
+                model.showToast(err, tone: .error)
+                return
+            }
+            model.showToast(model.t("groupRestored"), tone: .success)
+        })
     }
 }

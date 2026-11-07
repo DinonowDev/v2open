@@ -891,6 +891,11 @@ impl Core {
                 self.clear_group(gid)?;
                 Ok(self.state())
             }
+            "restore_group" => {
+                let group = args.get("group").cloned().ok_or("missing group")?;
+                self.restore_group(group)?;
+                Ok(self.state())
+            }
             "ping" => {
                 let bench = args["throughput"].as_bool().unwrap_or(false);
                 if let Some(group) = args["group_id"].as_str() {
@@ -1299,6 +1304,12 @@ impl Core {
                 }
                 Ok(self.state())
             }
+            "rename_group" => {
+                let gid = args["id"].as_str().unwrap_or("");
+                let name = args["name"].as_str().unwrap_or("");
+                self.rename_group(gid, name)?;
+                Ok(self.state())
+            }
             "profile_json" => {
                 let id = args["id"].as_str().unwrap_or("");
                 let profile = self.find_profile(if id.is_empty() { self.settings["selected_id"].as_str().unwrap_or("") } else { id }).ok_or("no profile")?;
@@ -1542,13 +1553,6 @@ impl Core {
         self.groups.iter().position(|g| g["kind"].as_str() == Some("local")).unwrap_or(0)
     }
 
-    fn group_is_remote(group: &Value) -> bool {
-        if group["kind"].as_str() == Some("remote") {
-            return true;
-        }
-        !group["url"].as_str().unwrap_or("").trim().is_empty()
-    }
-
     fn ensure_local_group(&mut self) {
         if self.groups.iter().any(|g| g["kind"].as_str() == Some("local")) {
             return;
@@ -1577,6 +1581,29 @@ impl Core {
         }
     }
 
+    fn restore_group(&mut self, group: Value) -> Result<(), String> {
+        let id = group["id"].as_str().ok_or("missing group id")?;
+        if self.groups.iter().any(|g| g["id"].as_str() == Some(id)) {
+            return Err("group already exists".into());
+        }
+        let pinned = group["pinned"].as_bool().unwrap_or(false);
+        let at = if pinned { 0 } else { self.groups.len() };
+        self.groups.insert(at.min(self.groups.len()), group.clone());
+        if group["kind"].as_str() == Some("local") {
+            self.groups.retain(|g| {
+                if g["id"].as_str() == Some(id) {
+                    return true;
+                }
+                let placeholder = g["kind"].as_str() == Some("local")
+                    && g["name"].as_str() == Some("Local")
+                    && g["profiles"].as_array().map(|p| p.is_empty()).unwrap_or(true);
+                !placeholder
+            });
+        }
+        self.save();
+        Ok(())
+    }
+
     fn clear_group(&mut self, group_id: &str) -> Result<(), String> {
         let idx = self
             .groups
@@ -1585,12 +1612,8 @@ impl Core {
             .ok_or_else(|| "group not found".to_string())?;
         let group = self.groups[idx].clone();
         self.clear_selected_if_in_group(&group);
-        if Self::group_is_remote(&group) {
-            self.groups.remove(idx);
-            self.ensure_local_group();
-        } else {
-            self.groups[idx]["profiles"] = json!([]);
-        }
+        self.groups.remove(idx);
+        self.ensure_local_group();
         self.save();
         Ok(())
     }
@@ -1895,6 +1918,20 @@ impl Core {
             "profiles": []
         }));
         self.apply_group_fetch(&gid, &fetch)
+    }
+
+    fn rename_group(&mut self, group_id: &str, name: &str) -> Result<(), String> {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err("name required".into());
+        }
+        let Some(group) = self.groups.iter_mut().find(|g| g["id"].as_str() == Some(group_id)) else {
+            return Err("group not found".into());
+        };
+        group["name"] = json!(name);
+        group["updated_at"] = json!(now());
+        self.save();
+        Ok(())
     }
 
     fn update_group(&mut self, group_id: &str) -> Result<(), String> {

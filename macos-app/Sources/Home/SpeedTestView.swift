@@ -71,12 +71,15 @@ struct SpeedTestView: View {
 
         VStack(alignment: .leading, spacing: 0) {
             PageHeader(title: model.t("speed")) {
-                HStack(spacing: 8) {
+                HStack(alignment: .center, spacing: 8) {
                     Button(action: openSpeedSettings) {
                         HStack(spacing: 6) {
                             Image(systemName: "gearshape.fill")
                                 .font(.system(size: 12, weight: .bold))
-                            Mix(text: speedMethodShort, size: 11, weight: .bold, color: C.cyan)
+                            Text(speedMethodShort)
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
                         }
                         .foregroundStyle(C.cyan)
                         .padding(.horizontal, 10)
@@ -87,14 +90,19 @@ struct SpeedTestView: View {
                             Capsule()
                                 .strokeBorder(C.cyan.opacity(0.22), lineWidth: 1)
                         )
+                        .fixedSize(horizontal: true, vertical: false)
                     }
                     .buttonStyle(QuietPressStyle())
+                    .layoutPriority(2)
                     .accessibilityLabel(model.t("speedTestSettings"))
                     .help(model.t("speedTestSettings"))
                     SpeedUnitSwitch(
                         useMegabit: $useMegabit,
                         mbps: model.t("unitMbps"),
-                        mBps: model.t("unitMBps")
+                        mBps: model.t("unitMBps"),
+                        toggleLabel: model.t("speedUnitToggle"),
+                        mbpsHelp: model.t("speedUnitMbpsHelp"),
+                        mBpsHelp: model.t("speedUnitMBpsHelp")
                     )
                 }
             }

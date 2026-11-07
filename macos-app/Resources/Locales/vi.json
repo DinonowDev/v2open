@@ -704,5 +704,19 @@
   "dragToReorder": "Drag rules to reorder",
   "openWebPage": "User page",
   "renameRouteSet": "Rename set",
-  "smartConnectProgress": "Smart Connect — racing configs…"
+  "smartConnectProgress": "Smart Connect — racing configs…",
+  "renameGroup": "Rename group",
+  "groupName": "Group name",
+  "groupRenameHint": "Remote groups may get a new title when you refresh the subscription.",
+  "groupNameRequired": "Enter a group name",
+  "deleteGroup": "Delete group",
+  "confirmDeleteGroup": "This deletes the group and every config inside it.",
+  "groupRemoved": "Group removed",
+  "groupDeleted": "“{name}” deleted",
+  "subscriptionDeleted": "“{name}” subscription removed",
+  "groupRestored": "Group restored",
+  "undo": "Undo",
+  "speedUnitToggle": "Speed unit",
+  "speedUnitMbpsHelp": "Show results in megabits per second (Mbps)",
+  "speedUnitMBpsHelp": "Show results in megabytes per second (MB/s)"
 }

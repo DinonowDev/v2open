@@ -54,7 +54,7 @@ struct RootView: View {
         }
         .overlay(alignment: .bottom) {
             if let toast = model.toast {
-                AppToastView(item: toast)
+                AppToastView(item: toast, onAction: toast.actionTitle == nil ? nil : { model.runToastAction() })
                     .padding(.horizontal, 18)
                     .padding(.bottom, 90)
                     .transition(.move(edge: .bottom).combined(with: .opacity))

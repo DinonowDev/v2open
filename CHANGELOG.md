@@ -26,11 +26,21 @@ How to edit this file: [docs/versioning.md](docs/versioning.md).
 
 ### Changed
 
+- macOS Speed tab: speed unit toggle shows Mbps / MB/s labels with icons instead of clipped dots.
 - macOS: refresh subscription groups with an update URL in the background when the app launches.
 - Packet Tunnel and the core resolve sing-box from bundled extended or optional upstream binary under `~/Library/Application Support/V2Open/engines/`.
 
+### Added
+
+- Config groups: rename via `rename_group` and pencil action on the group row.
+
+### Changed
+
+- Smart Connect toggle/action only on Home (removed from config group toolbar).
+
 ### Fixed
 
+- `clear_group` now removes local/custom groups entirely (not only their configs); delete toast shows name with Undo (`restore_group`).
 - Smart Connect no longer blocks the UI during group ping; toasts use system text so Persian labels render reliably.
 
 ## [1.3.5] - 2026-11-05

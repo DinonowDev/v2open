@@ -13,6 +13,8 @@ struct ConfigsView: View {
     @State var qrProfile: [String: Any]?
     @State var groupUrlTarget: [String: Any]?
     @State var groupUrlDraft = ""
+    @State var groupRenameTarget: [String: Any]?
+    @State var groupRenameDraft = ""
 
     var body: some View {
         let groups = filteredGroups()
@@ -96,6 +98,9 @@ struct ConfigsView: View {
             }
             if groupUrlTarget != nil {
                 groupUrlOverlay
+            }
+            if groupRenameTarget != nil {
+                groupRenameOverlay
             }
         }
         .animation(.spring(response: 0.34, dampingFraction: 0.88), value: addStep)

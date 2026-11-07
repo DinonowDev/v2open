@@ -7,7 +7,9 @@ WATCH=(
   "$ROOT/macos-app/Resources/speedometer"
   "$ROOT/native/core/src"
 )
-DEBOUNCE="${DEV_WATCH_DEBOUNCE:-0.6}"
+DEBOUNCE="${DEV_WATCH_DEBOUNCE:-1.2}"
+BUILDING=0
+PENDING=0
 CORE_LOG="${V2OPEN_CORE_LOG:-$HOME/Library/Application Support/V2Open/core.log}"
 RUNTIME_LOG="$ROOT/dev-logs/runtime.log"
 LOG_TAIL_PIDS=()
@@ -42,9 +44,20 @@ need_tool() {
 }
 
 rebuild() {
+  if [[ "$BUILDING" -eq 1 ]]; then
+    PENDING=1
+    return 0
+  fi
+  BUILDING=1
+  PENDING=0
   echo "—— $(date '+%H:%M:%S') rebuild ——"
   if ! "$ROOT/dev-macos.sh" relaunch; then
     echo "build failed; fix errors and save again" >&2
+  fi
+  BUILDING=0
+  if [[ "$PENDING" -eq 1 ]]; then
+    sleep 0.2
+    rebuild
   fi
 }
 

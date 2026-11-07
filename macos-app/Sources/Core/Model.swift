@@ -15,6 +15,7 @@ final class Model: ObservableObject {
     @Published var stack: [String] = []
     @Published var draft: [String: Any] = [:]
     @Published var toast: AppToastItem?
+    private var toastAction: (() -> Void)?
     @Published var pingingIds: Set<String> = []
     @Published var about: [String: Any] = [:]
     @Published var pendingNote: String?
@@ -68,16 +69,33 @@ final class Model: ObservableObject {
         return text
     }
 
-    func showToast(_ text: String, tone: ToastTone = .info) {
+    func showToast(
+        _ text: String,
+        tone: ToastTone = .info,
+        actionTitle: String? = nil,
+        action: (() -> Void)? = nil
+    ) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        let item = AppToastItem(text: trimmed, tone: tone)
+        toastAction = action
+        let item = AppToastItem(text: trimmed, tone: tone, actionTitle: action == nil ? actionTitle : (actionTitle ?? t("undo")))
         toast = item
         let token = item.id
+        let dwell: UInt64 = action == nil ? 2_400_000_000 : 8_000_000_000
         Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 2_400_000_000)
-            if toast?.id == token { toast = nil }
+            try? await Task.sleep(nanoseconds: dwell)
+            if toast?.id == token {
+                toast = nil
+                toastAction = nil
+            }
         }
+    }
+
+    func runToastAction() {
+        let action = toastAction
+        toastAction = nil
+        toast = nil
+        action?()
     }
 
     func boot() {
@@ -476,7 +494,7 @@ final class Model: ObservableObject {
     func connectTunnel(id: String? = nil, groupId: String = "", smart: Bool? = nil) {
         guard !connectBusy else { return }
         var id = id ?? (settings["selected_id"] as? String ?? "")
-        let smart = smart ?? (settings["smart_connect"] as? Bool == true) || !groupId.isEmpty
+        let smart = smart ?? (settings["smart_connect"] as? Bool == true)
         if !smart, settings["auto_connect_best"] as? Bool == true {
             let pick = call("pick_best")
             if pick["ok"] as? Bool != false, let best = (pick["data"] as? [String: Any])?["id"] as? String, !best.isEmpty {

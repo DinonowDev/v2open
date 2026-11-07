@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, dev, stage, production]
 
 jobs:
   check:
@@ -13,6 +13,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Locale keys and version copies
         run: ./scripts/check-docs.sh
+      - name: Branch flow rules self-test
+        run: ./scripts/test-branch-flow.sh
 
   test:
     name: macOS tests

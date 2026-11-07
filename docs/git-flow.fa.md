@@ -9,13 +9,13 @@
 ## برنچ‌های اصلی
 
 ```
-production          ← کاربر نهایی، تگ و GitHub Release
+production          ← کاربر نهایی، تگ و GitHub Release  (فقط از stage / release / hotfix)
     ↑
-  stage             ← QA، smoke، pre-prod
+  stage             ← QA؛ dev + fix/* + release/* / hotfix/*
     ↑
-   dev              ← یکپارچه‌سازی feature/fix
+   dev              ← feature/docs/chore/…
     ↑
- feature/* fix/* …
+ feature/* docs/* chore/* …          fix/* ──→ stage (مستقیم)
 ```
 
 | برنچ | هدف | push مستقیم |
@@ -56,13 +56,27 @@ CI: در `.github/workflows/ci.yml` شاخه‌های `dev`, `stage`, `productio
 
 همان قرارداد [branching.md](branching.md):
 
-| نوع | مثال | مرج به |
+| نوع | مثال | PR به (base) |
 | --- | --- | --- |
-| `feature/<slug>` | `feature/hy2-hop` | `dev` |
-| `fix/<slug>` | `fix/sleep-disconnect` | `dev` |
-| `docs/<slug>` | `docs/rpc-prepare` | `dev` |
-| `release/x.y.z` | `release/1.4.0` | `stage` سپس `production` |
-| `hotfix/x.y.z` | `hotfix/1.3.6` | `production` (+ back-merge به `dev`/`stage`) |
+| `feature/*`, `docs/*`, `refactor/*`, `test/*`, `chore/*` | `feature/hy2-hop` | **`dev` فقط** |
+| `fix/<slug>` | `fix/sleep-disconnect` | **`stage` فقط** |
+| `release/x.y.z` | `release/1.4.0` | **`stage`** یا **`production`** |
+| `hotfix/x.y.z` | `hotfix/1.3.6` | **`stage`** یا **`production`** |
+
+**پروموت لایه‌ها (فقط این سرشاخه‌ها):**
+
+| از → به | مجاز |
+| --- | --- |
+| `dev` → `stage` | PR با head=`dev` |
+| `stage` → `production` | PR با head=`stage` (**نه** `dev` و نه ساب‌برنچ تسک) |
+| `main` | فقط legacy؛ PR جدید به `main` **رد** می‌شود |
+
+CI: [`.github/workflows/branch-flow-guard.yml`](../.github/workflows/branch-flow-guard.yml). لوکال: `./scripts/branch-flow-validate.sh` و `./scripts/install-git-hooks.sh`.
+
+```bash
+./scripts/bootstrap-tier-branches.sh    # ساخت stage/production روی origin
+./scripts/protect-tier-branches.sh      # نیاز admin + یک بار CI برای نام checkها
+```
 
 ---
 

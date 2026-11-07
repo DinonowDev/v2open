@@ -9,9 +9,9 @@ alwaysApply: true
 
 | برنچ | نقش | مرج از |
 | --- | --- | --- |
-| `dev` | یکپارچه‌سازی روزانه | ساب‌برنچ‌های توسعه |
-| `stage` | QA و پیش‌انتشار | `dev` |
-| `production` | کد منتشرشده برای کاربر | `stage` (یا `hotfix/*` در اضطرار) |
+| `dev` | یکپارچه‌سازی روزانه | `feature/*`, `docs/*`, `refactor/*`, `test/*`, `chore/*` |
+| `stage` | QA | پروموت `dev`، یا `fix/*`, `release/*`, `hotfix/*` |
+| `production` | انتشار کاربر | **فقط** head=`stage`، یا `release/*` / `hotfix/*` — هرگز مستقیم از `dev` یا تسک |
 
 تا وقتی این برنچ‌ها روی ریموت ساخته نشده‌اند، پایهٔ کار از `main` است؛ بعد از bootstrap همان `main` را به `production` تغییر نام بده یا `production` را از آن بساز و `dev`/`stage` را از همان نقطه فورک کن ([docs/git-flow.fa.md](../docs/git-flow.fa.md)).
 
@@ -19,9 +19,9 @@ alwaysApply: true
 
 ```
 dev
- ├─ feature/<slug>
- ├─ fix/<slug>
- ├─ docs/<slug>
+ ├─ feature/<slug>   → PR base: dev
+ ├─ fix/<slug>       → PR base: stage (نه dev)
+ ├─ docs/<slug>      → PR base: dev
  ├─ refactor/<slug>
  ├─ test/<slug>
  ├─ chore/<slug>

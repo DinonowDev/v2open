@@ -68,54 +68,6 @@ cmd_merged() {
   push_tag "$tag"
 }
 
-delete_remote_tag() {
-  local tag="$1"
-  if [[ "$PUSH" -eq 1 ]]; then
-    git push origin ":refs/tags/${tag}" 2>/dev/null || true
-  fi
-}
-
-move_tag_tier() {
-  local from_tag="$1"
-  local to_tag="$2"
-  local sha
-  sha="$(git rev-parse "$from_tag^{commit}")"
-  if git rev-parse "$to_tag" >/dev/null 2>&1; then
-    echo "mark-merge: $to_tag already exists; skipping move from $from_tag" >&2
-    return 0
-  fi
-  git tag -a "$to_tag" -m "Promoted from ${from_tag}" "$sha"
-  git tag -d "$from_tag" 2>/dev/null || true
-  delete_remote_tag "$from_tag"
-  echo "mark-merge: $from_tag -> $to_tag ($(git rev-parse --short "$sha"))"
-  push_tag "$to_tag"
-}
-
-promote_dev_tags() {
-  local to_tier="$1"
-  local tip
-  tip="$(git rev-parse "${2:-HEAD}")"
-  local tag
-
-  if [[ "$to_tier" == "stage" ]]; then
-    while IFS= read -r tag; do
-      [[ -z "$tag" ]] && continue
-      if git merge-base --is-ancestor "$(git rev-parse "$tag^{commit}")" "$tip" 2>/dev/null; then
-        move_tag_tier "$tag" "on-stage/${tag#merged/dev/}"
-      fi
-    done < <(git tag -l 'merged/dev/*')
-  elif [[ "$to_tier" == "production" ]]; then
-    while IFS= read -r tag; do
-      [[ -z "$tag" ]] && continue
-      if git merge-base --is-ancestor "$(git rev-parse "$tag^{commit}")" "$tip" 2>/dev/null; then
-        local slug="${tag#on-stage/}"
-        slug="${slug#merged/dev/}"
-        move_tag_tier "$tag" "on-production/${slug}"
-      fi
-    done < <(git tag -l 'on-stage/*' 'merged/dev/*' 2>/dev/null | sort -u)
-  fi
-}
-
 cmd_sync() {
   local to_tier="$1"
   local from_tier="$2"
@@ -131,7 +83,7 @@ cmd_sync() {
     push_tag "$tag"
   fi
   if [[ "$to_tier" == "stage" || "$to_tier" == "production" ]]; then
-    promote_dev_tags "$to_tier" "$commit"
+    PUSH_TAGS="$PUSH" "$(cd "$(dirname "$0")" && pwd)/promote-dev-tags.sh" "$to_tier" "$commit"
   fi
 }
 

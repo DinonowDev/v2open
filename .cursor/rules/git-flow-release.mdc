@@ -1,0 +1,47 @@
+---
+description: ورژن و GitHub Release با هر مرج به production
+alwaysApply: true
+---
+
+# ورژن و ریلیز روی `production`
+
+هر مرج معنادار به `production` (پروموت از `stage` یا `release/*` / `hotfix/*`) **باید** ورژن همگام و تگ ریلیز داشته باشد.
+
+## bump
+
+طبق [docs/versioning.md](../docs/versioning.md):
+
+| تغییر | bump |
+| --- | --- |
+| باگ / کپی / locale | PATCH + build +1 |
+| قابلیت / RPC / UI جدید | MINOR, PATCH→0, build +1 |
+| breaking | MAJOR, MINOR/PATCH→0, build +1 |
+
+```bash
+./scripts/bump-version.sh x.y.z
+./scripts/check-version.sh
+```
+
+`[Unreleased]` → `[x.y.z] - YYYY-MM-DD`؛ `[Unreleased]` خالی جدید؛ لینک‌های compare در `CHANGELOG.md`.
+
+کامیت روی برنچ release/PR: `chore(release): x.y.z`
+
+## بعد از merge به `production`
+
+```bash
+git checkout production
+git pull --ff-only origin production
+git tag -a "vX.Y.Z" -m "V2Open X.Y.Z"
+git push origin "vX.Y.Z"
+```
+
+تگ `v*` workflow [`.github/workflows/release.yml`](../.github/workflows/release.yml) را اجرا می‌کند. تگ جابجا یا force نشود.
+
+## چک‌لیست ایجنت
+
+- [ ] `VERSION` و همهٔ کپی‌ها (`check-version.sh`)
+- [ ] `CHANGELOG.md` بخش `[x.y.z]`
+- [ ] تگ روی commit روی `production` که bump را دارد
+- [ ] بدون secret در کامیت
+
+راهنمای کامل: [docs/git-flow.fa.md](../docs/git-flow.fa.md)، [docs/release.md](../docs/release.md).

@@ -1,0 +1,34 @@
+---
+description: برنچ‌های اصلی production / stage / dev و نام‌گذاری ساب‌برنچ‌ها
+alwaysApply: true
+---
+
+# برنچ‌های اصلی و نام‌گذاری
+
+## سه برنچ بلندمدت (هرگز مستقیم روی آن‌ها کامیت نکن)
+
+| برنچ | نقش | مرج از |
+| --- | --- | --- |
+| `dev` | یکپارچه‌سازی روزانه | ساب‌برنچ‌های توسعه |
+| `stage` | QA و پیش‌انتشار | `dev` |
+| `production` | کد منتشرشده برای کاربر | `stage` (یا `hotfix/*` در اضطرار) |
+
+تا وقتی این برنچ‌ها روی ریموت ساخته نشده‌اند، پایهٔ کار از `main` است؛ بعد از bootstrap همان `main` را به `production` تغییر نام بده یا `production` را از آن بساز و `dev`/`stage` را از همان نقطه فورک کن ([docs/git-flow.fa.md](../docs/git-flow.fa.md)).
+
+## ساب‌برنچ (همیشه از `dev` جدا شود)
+
+```
+dev
+ ├─ feature/<slug>
+ ├─ fix/<slug>
+ ├─ docs/<slug>
+ ├─ refactor/<slug>
+ ├─ test/<slug>
+ ├─ chore/<slug>
+ ├─ release/x.y.z
+ └─ hotfix/x.y.z
+```
+
+- `slug`: lowercase، خط‌تیره، کوتاه؛ بدون نام شخص.
+- نوع برنچ را از ماهیت تسک حدس بزن (باگ → `fix/`، قابلیت → `feature/`، …).
+- ورژن فقط روی `release/x.y.z`، `hotfix/x.y.z`، یا هنگام پروموت به `production` — نه روی `feature/*` معمولی.

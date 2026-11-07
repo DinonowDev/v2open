@@ -1,0 +1,46 @@
+---
+description: اجرای هر تسک — برنچ، کامیت، PR، پروموت تا production
+alwaysApply: true
+---
+
+# اجرای تسک (ایجنت و چت اصلی)
+
+برای **هر** تسک کد، قبل از ویرایش فایل این ترتیب اجباری است:
+
+## ۱. آماده‌سازی
+
+```bash
+git fetch origin
+git checkout dev
+git pull --ff-only origin dev
+git checkout -b <type>/<slug>
+```
+
+اگر `dev` وجود ندارد، از `origin/main` یا `origin/production` همان کار را بکن و در PR توضیح بده.
+
+## ۲. کار روی برنچ
+
+- کامیت‌ها: [Conventional Commits](https://www.conventionalcommits.org/) (`fix(tunnel): …`, `feat(ui): …`).
+- تغییر قابل‌دیدن برای کاربر → `CHANGELOG.md` زیر `[Unreleased]`.
+- داکیومنت و locale طبق [CONTRIBUTING.md](../CONTRIBUTING.md).
+- پیش از پوش: `./scripts/check-docs.sh` و در صورت نیاز `cargo test -p v2core`.
+
+## ۳. ادغام در `dev`
+
+```bash
+git push -u origin HEAD
+```
+
+PR به `dev`؛ عنوان = subject کامیت conv.؛ پیش‌فرض **squash merge**؛ بعد از merge برنچ ریموت را حذف کن.
+
+## ۴. پروموت (وقتی تسک «تمام» است یا کاربر خواست)
+
+1. `dev` → `stage` (PR، بدون bump ورژن مگر توافق شده).
+2. `stage` → `production` (PR؛ **الزام** bump ورژن و ریلیز — قانون جدا).
+
+هرگز `production` را force-push نکن. کامیت/مرج بدون درخواست صریح کاربر فقط تا مرحلهٔ PR به `dev` پیش‌فرض است؛ پروموت به `stage`/`production` وقتی کاربر «تمام»، «منتشر کن»، یا «روی production ببر» گفت.
+
+## ۵. استثناها
+
+- **فقط سوال/بررسی** بدون تغییر کد → برنچ نساز.
+- **hotfix تولید**: از تگ `vX.Y.Z` روی `production` → `hotfix/x.y.z` → PR به `production` و back-merge به `dev` و `stage`.

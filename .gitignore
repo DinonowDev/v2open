@@ -20,8 +20,10 @@ V2Open.app.bak-release-test/
 *.app.bak-release-test/
 *.dSYM/
 
-# Editor-local
-.cursor/
+# Editor-local (project rules in .cursor/rules/ are tracked)
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
 
 # Legacy stacks (removed — do not re-add)
 .dart_tool/

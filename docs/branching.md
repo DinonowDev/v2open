@@ -2,6 +2,8 @@
 
 This is the Git workflow for V2Open. Policy summary: [CONTRIBUTING.md](../CONTRIBUTING.md).
 
+**Tiered flow (`production` / `stage` / `dev`) for agents and releases:** [git-flow.fa.md](git-flow.fa.md) and [AGENTS.md](../AGENTS.md). Cursor enforces this via `.cursor/rules/git-flow-*.mdc`.
+
 ---
 
 ## Branch types

@@ -105,7 +105,8 @@ If you add a protocol, update this section, URL schemes below, `Info.plist`, `pa
 | `reconnect_after_wake` | `false` | Connect after wake |
 | `mux_enabled` | `false` | Mux |
 | `mux_concurrency` | `8` | Mux streams |
-| `hwid` | generated | Device id (copy only; `send_hwid` exists in defaults) |
+| `send_hwid` | `false` | Send `X-HWID` when refreshing subscription URLs (Hiddify / Marzban panels) |
+| `hwid` | generated | Device id shown under **Settings**; copied for panel registration |
 
 ### Configs behavior
 
@@ -125,7 +126,8 @@ If you add a protocol, update this section, URL schemes below, `Info.plist`, `pa
 
 From Settings:
 
-- **Routing** — presets `global` / `iran` / `russia` / `white` / `black` (`preset` RPC), custom rules, geo assets, route editor. `routing_enabled`, `final` (`proxy`/`direct`), `bypass_lan`, `block_udp_443`, `apple_direct`, `domain_strategy`, `route_only`.
+- **Routing** — presets `global` / `iran` / `russia` / `white` / `black` (`preset` RPC), visual rule editor (Clash-style matchers, templates, Clash `rules:` import), **named rule sets** (create / duplicate / rename / delete, switch active set; drag reorder in edit mode), geo assets. `routing_enabled`, `final` (`proxy`/`direct`), `bypass_lan`, `block_udp_443`, `apple_direct`, `domain_strategy`, `route_only`, `active_route_set_id`.
+- **About → Engine updates** — download stock **sing-box** to `~/Library/Application Support/V2Open/engines/sing-box-upstream` and Xray to `engines/xray`. Setting `singbox_engine`: `bundled` (default extended in the app) or `upstream` (downloaded stock). Reconnect after switching or updating.
 - **DNS** — `remote_dns`, `domestic_dns`, `query_strategy`, `dns_cache`, `dns_split` (`none` / `ir` / `cn` / …), FakeDNS, hosts file, DNS item catalog (`save_dns_item`, `set_active_dns`).
 - **Inbounds / network** — SOCKS/HTTP ports, LAN sharing, Clash API port (`clash_port`, default 9097), MTU, include local/all/APNs/cellular, kill switch, fragment, sniffing.
 - **Speed test settings** — `speed_mode` `http` / `tcp` / `icmp`, `speed_endpoint`, `speed_timeout`, `speed_concurrency`.
@@ -154,9 +156,12 @@ Xray policy / balancers (`xray_advanced`, `save_xray_balancer`), xhttp optimizat
 - **Backup** — local snapshots (`backup` / `restore` / `export_backup` / `import_backup`), locked `.v2box` (`seal` / `unseal` / `share_locked`), optional iCloud (`icloud`).
 - **Reset** — `reset` (settings → defaults, keep profiles).
 - **Erase** — `erase` (wipe library).
-- **Logs / Diagnostics / About** — core logs, interface dump, version plate, legal.
+- **Logs / Diagnostics / About** — core logs, interface dump, version plate, engine versions and updates, legal.
+- **Remote groups** — when the panel sends `profile-web-page-url` / `support-url`, **User page** and **Support** open those URLs from the group card.
 
 Routing preset files live in `assets/routing/*.json` and are compiled into `routing.rs` via `include_str!`.
+
+**Not Clash Verge parity:** V2Open does not load external Clash rule-set URLs as separate profiles or mirror Clash Verge’s full profile editor. Rule sets are local named snapshots stored in `library.json` (`route_sets`).
 
 ---
 
@@ -165,10 +170,16 @@ Routing preset files live in `assets/routing/*.json` and are compiled into `rout
 Registered in `macos-app/Info.plist`:
 
 ```
-v2open, v2box, vless, vmess, trojan, ss, ssr, hy2, hysteria, hysteria2,
+v2open, v2box, hiddify, sub, clash, clashx, vless, vmess, trojan, ss, ssr, hy2, hysteria, hysteria2,
 tuic, anytls, naive+https, naive+quic, warp, vpn,
 wireguard, ssh, socks, ping, dnstt, masterdns, chain
 ```
+
+`hiddify://import/<url-or-link>#name` and `sub://…` open the same import path as clipboard subscribe. Legacy `hiddify://install-sub?url=…` is supported.
+
+`clash://install-config?url=https://…` and `clashx://install-config?url=…` subscribe to the encoded HTTPS URL (optional `#` fragment as group name).
+
+Locked catalogs and iCloud packages include `route_sets.json` plus the active `routes.json` snapshot. Local **Backup** snapshots store full `route_sets` in the payload.
 
 `v2open://…?text=` can carry a payload. File types: JSON, YAML, `.npvt`, `.npvs`, `.v2box` (locked catalog, UTI `local.v2open.v2box`). Locked files start with magic `V2OPEN1`. NPV files use `NPVT1` / `NPVS`.
 

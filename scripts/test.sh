@@ -8,6 +8,7 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
 else
   echo "test: skip Swift tests on $(uname -s)"
 fi
+"$ROOT/scripts/ui-smoke.sh"
 (
   cd "$ROOT/native"
   cargo test -p v2core

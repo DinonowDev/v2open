@@ -148,8 +148,14 @@ struct SettingsView: View {
                         SettingsDivider()
                         SettingsNavRow(icon: "number.square", title: model.t("deviceId"), value: String((model.settings["hwid"] as? String ?? "").prefix(10)), chevron: false) {
                             ShareKit.copy(model.settings["hwid"] as? String ?? "")
-                            model.showToast(model.t("saved"), tone: .success)
+                            model.showToast(model.t("copied"), tone: .success)
                         }
+                        SettingsDivider()
+                        SettingsToggleRow(
+                            title: model.t("sendHwid"),
+                            hint: model.t("sendHwidHint"),
+                            isOn: model.settings["send_hwid"] as? Bool ?? false
+                        ) { model.set("send_hwid", $0) }
                         SettingsDivider()
                         SettingsToggleRow(title: "Mux", isOn: model.settings["mux_enabled"] as? Bool ?? false) { model.set("mux_enabled", $0) }
                         if model.settings["mux_enabled"] as? Bool == true {

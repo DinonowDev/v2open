@@ -4,6 +4,8 @@ import SwiftUI
 struct AboutView: View {
     @EnvironmentObject var model: Model
     @ObservedObject private var updater = AppUpdater.shared
+    @State private var enginesInfo: [String: Any] = [:]
+    @State private var engineBusy = false
 
     private var about: [String: Any] { model.about }
     private var appVersion: String {
@@ -61,6 +63,8 @@ struct AboutView: View {
                     signingCard
                     SettingsSectionLabel(text: model.t("versions"))
                     versionsCard
+                    SettingsSectionLabel(text: model.t("engineUpdates"))
+                    enginesCard
                     SheetActionButton(title: model.t("copyVersions"), icon: "doc.on.clipboard") {
                         let text = [
                             "V2Open v\(appVersion) (\(build))",
@@ -98,7 +102,90 @@ struct AboutView: View {
                 .padding(.bottom, PageLayout.bottom + PageLayout.tabBarClearance)
             }
             .scrollIndicators(.hidden)
-            .onAppear { model.refreshAbout() }
+            .onAppear {
+                model.refreshAbout()
+                refreshEngines()
+            }
+        }
+    }
+
+    private func refreshEngines() {
+        enginesInfo = (model.call("engines_status")["data"] as? [String: Any]) ?? [:]
+    }
+
+    private func updateEngine(_ target: String) {
+        guard !engineBusy else { return }
+        engineBusy = true
+        let resp = model.call("engines_update", ["target": target])
+        engineBusy = false
+        if resp["ok"] as? Bool == true {
+            refreshEngines()
+            model.refreshAbout()
+            model.showToast(model.t("engineUpdateDone"), tone: .success)
+        } else {
+            model.showToast(resp["error"] as? String ?? model.t("failed"), tone: .error)
+        }
+    }
+
+    private var enginesCard: some View {
+        let sing = enginesInfo["singbox"] as? [String: Any] ?? [:]
+        let xray = enginesInfo["xray"] as? [String: Any] ?? [:]
+        let mode = sing["engine_mode"] as? String ?? "bundled"
+        let upstreamInstalled = sing["upstream_installed"] as? Bool == true
+        let bundledExtended = sing["bundled_is_extended"] as? Bool == true
+        return SettingsCard {
+            VStack(alignment: .leading, spacing: 10) {
+                Mix(text: model.t("engineUpdateHint"), size: 12, color: C.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                if bundledExtended {
+                    Mix(text: model.t("engineExtendedKept"), size: 11, color: C.green)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                row(model.t("engineBundled"), sing["bundled_version"] as? String ?? "—")
+                SettingsDivider()
+                if upstreamInstalled {
+                    row(model.t("engineUpstream"), sing["upstream_version"] as? String ?? "—")
+                    SettingsDivider()
+                }
+                row(model.t("engineUser"), sing["active_version"] as? String ?? singBoxRaw)
+                SettingsDivider()
+                row("Xray", xray["active_version"] as? String ?? xrayRaw)
+                SettingsDivider()
+                SettingsSelectRow(
+                    title: model.t("singboxEngineMode"),
+                    value: mode == "upstream" ? model.t("singboxEngineUpstream") : model.t("singboxEngineBundled"),
+                    options: [
+                        ("bundled", model.t("singboxEngineBundled")),
+                        ("upstream", model.t("singboxEngineUpstream"))
+                    ]
+                ) { pick in
+                    setSingboxEngine(pick)
+                }
+                if engineBusy {
+                    Mix(text: model.t("engineUpdating"), size: 12, color: C.muted)
+                }
+                HStack(spacing: 8) {
+                    SheetActionButton(title: model.t("updateSingBox"), icon: "arrow.down.circle") {
+                        updateEngine("sing-box")
+                    }
+                    SheetActionButton(title: model.t("updateXray"), icon: "arrow.down.circle") {
+                        updateEngine("xray")
+                    }
+                }
+            }
+            .padding(12)
+        }
+    }
+
+    private func setSingboxEngine(_ mode: String) {
+        let resp = model.call("set_singbox_engine", ["mode": mode])
+        if resp["ok"] as? Bool == true {
+            enginesInfo = (resp["data"] as? [String: Any]) ?? enginesInfo
+            refreshEngines()
+            model.refreshAbout()
+            model.showToast(model.t("saved"), tone: .success)
+        } else {
+            model.showToast(resp["error"] as? String ?? model.t("failed"), tone: .error)
         }
     }
 
@@ -451,7 +538,11 @@ private struct AboutSchemeItem: Identifiable {
         .init(scheme: "hy2://", tint: C.pingWarn),
         .init(scheme: "hysteria://", tint: Color(red: 1.0, green: 0.62, blue: 0.28)),
         .init(scheme: "wireguard://", tint: C.ping),
-        .init(scheme: "v2box://", tint: C.cyan)
+        .init(scheme: "v2box://", tint: C.cyan),
+        .init(scheme: "hiddify://", tint: C.green, brand: true),
+        .init(scheme: "sub://", tint: C.ping),
+        .init(scheme: "clash://", tint: C.pingWarn),
+        .init(scheme: "clashx://", tint: C.pingWarn)
     ]
 }
 

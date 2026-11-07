@@ -23,6 +23,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private var lastSocks = 10808
     private var lastLaunch = true
     private var lastUseXrayTun = false
+    private var lastSingboxBin = ""
+    private var lastXrayBin = ""
 
     override func startTunnel(options: [String: NSObject]?, completionHandler: @escaping (Error?) -> Void) {
         let config = (protocolConfiguration as? NETunnelProviderProtocol)?.providerConfiguration ?? [:]
@@ -79,6 +81,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         let includeLocal = obj["includeLocal"] as? Bool ?? lastIncludeLocal
         let dns = obj["dns"] as? String ?? lastDNS
         let launch = obj["launchCore"] as? Bool ?? lastLaunch
+        let singboxBin = obj["singboxBin"] as? String ?? lastSingboxBin
+        let xrayBin = obj["xrayBin"] as? String ?? lastXrayBin
+        lastSingboxBin = singboxBin
+        lastXrayBin = xrayBin
         lastUseXrayTun = obj["useXrayTun"] as? Bool ?? lastUseXrayTun
         lastPath = path
         lastEngine = engine
@@ -120,6 +126,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         lastLaunch = (config["launchCore"] as? Bool) ?? true
         lastEngine = config["engine"] as? String ?? "sing-box"
         lastUseXrayTun = (config["useXrayTun"] as? Bool) ?? (lastEngine == "xray")
+        lastSingboxBin = config["singboxBin"] as? String ?? ""
+        lastXrayBin = config["xrayBin"] as? String ?? ""
     }
 
     /// V2Box PacketTunnel always runs a userspace (gVisor-like) stack that
@@ -136,7 +144,13 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private func launchCore(configPath: String, engine: String) throws {
         let contents = Bundle.main.bundleURL.deletingLastPathComponent().deletingLastPathComponent()
         let binaryName = engine == "xray" ? "xray" : "sing-box"
-        let binary = contents.appendingPathComponent("MacOS/\(binaryName)")
+        let override = engine == "xray" ? lastXrayBin : lastSingboxBin
+        let binary: URL = {
+            if !override.isEmpty, FileManager.default.isExecutableFile(atPath: override) {
+                return URL(fileURLWithPath: override)
+            }
+            return contents.appendingPathComponent("MacOS/\(binaryName)")
+        }()
         guard FileManager.default.isExecutableFile(atPath: binary.path) else {
             throw NSError(domain: "V2Open", code: 2, userInfo: [NSLocalizedDescriptionKey: "\(binaryName) is missing from the app"])
         }

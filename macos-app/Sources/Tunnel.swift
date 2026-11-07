@@ -18,6 +18,8 @@ struct TunnelStartOptions {
     var enforceRoutes: Bool
     var includeCellular: Bool
     var useXrayTun: Bool
+    var singboxBin: String
+    var xrayBin: String
 }
 
 final class TunnelManager: NSObject {
@@ -82,7 +84,9 @@ final class TunnelManager: NSObject {
             "dns": options.dns,
             "launchCore": options.launchCore,
             "engine": options.engine,
-            "useXrayTun": options.useXrayTun
+            "useXrayTun": options.useXrayTun,
+            "singboxBin": options.singboxBin,
+            "xrayBin": options.xrayBin
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: payload) else {
             connect(options, completion: completion)
@@ -188,7 +192,9 @@ final class TunnelManager: NSObject {
             "dns": options.dns,
             "launchCore": options.launchCore,
             "engine": options.engine,
-            "useXrayTun": options.useXrayTun
+            "useXrayTun": options.useXrayTun,
+            "singboxBin": options.singboxBin,
+            "xrayBin": options.xrayBin
         ]
         proto.includeAllNetworks = options.killSwitch || options.combiner || options.includeAll
         proto.excludeLocalNetworks = !options.includeLocal

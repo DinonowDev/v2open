@@ -14,6 +14,12 @@ How to edit this file: [docs/versioning.md](docs/versioning.md).
 - Visual routing editor with Clash-style matchers, quick templates, and Clash `rules:` import (merge or replace).
 - `hiddify://` and `sub://` deep links; Hiddify panel subscription headers (`Profile-Title`, `profile-update-interval`, `moved-permanently-to`, `profile-web-page-url`, `support-url`).
 - Settings toggle to send `X-HWID` on subscription refresh; engine updates for sing-box and Xray from **Settings → About**.
+- Named routing rule sets (create, duplicate, delete, switch), drag reorder in Routing edit mode, `clash://` / `clashx://`, panel **User page** / **Support** on config groups.
+- sing-box stock downloads to `sing-box-upstream`; bundled extended kept unless **Upstream** runtime is selected in About.
+- Local backups and v2box catalogs include `route_sets`; legacy `engines/sing-box` migrates to `sing-box-upstream`.
+- `./scripts/ui-smoke.sh` for About/Routing RPC smoke; rename rule set in Routing UI.
+- Panel User page / Support in group context menu; v2box import test for `route_sets.json`; live library ping test gated behind `V2OPEN_LIVE_PING`.
+- Rust integration tests (deeplink, panel, route sets, v2box, backup, clash, engines, UI smoke RPC) and Swift tests for `ImportURL` / route matchers.
 - Git merge tracking: `scripts/mark-merge.sh` tags (`merged/dev/*`, `sync/stage/*`, …) and GitHub PR labels (`merged-to-dev`, `on-stage`, `on-production`).
 - PR labels and `merged/dev/*` git tags promote to `on-stage` / `on-production` when tier sync merges land on `stage` or `production`.
 - Enforced tier PR directions (CI `Branch flow guard`, `branch-flow-validate.sh`, pre-push hook); bootstrap/protect scripts for `dev` / `stage` / `production`.
@@ -21,7 +27,7 @@ How to edit this file: [docs/versioning.md](docs/versioning.md).
 ### Changed
 
 - macOS: refresh subscription groups with an update URL in the background when the app launches.
-- Packet Tunnel and the core prefer user-installed engines under `~/Library/Application Support/V2Open/engines/`.
+- Packet Tunnel and the core resolve sing-box from bundled extended or optional upstream binary under `~/Library/Application Support/V2Open/engines/`.
 
 ### Fixed
 

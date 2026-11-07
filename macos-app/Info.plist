@@ -47,6 +47,10 @@
 			<array>
 				<string>v2open</string>
 				<string>v2box</string>
+				<string>hiddify</string>
+				<string>sub</string>
+				<string>clash</string>
+				<string>clashx</string>
 				<string>vless</string>
 				<string>vmess</string>
 				<string>trojan</string>

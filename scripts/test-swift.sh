@@ -15,6 +15,8 @@ swiftc -parse-as-library -g -Onone -target "$SWIFT_TARGET" \
   "$ROOT/macos-app/Sources/Core/LocaleStore.swift" \
   "$ROOT/macos-app/Sources/Core/Localization.swift" \
   "$ROOT/macos-app/Sources/Tools/TunnelAppList.swift" \
+  "$ROOT/macos-app/Sources/Core/ImportURL.swift" \
+  "$ROOT/macos-app/Sources/Shared/RouteMatcherLogic.swift" \
   -framework Foundation -framework AppKit -framework SwiftUI
 
 "$OUT/v2open-swift-tests"

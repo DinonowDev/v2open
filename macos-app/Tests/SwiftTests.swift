@@ -43,6 +43,38 @@ enum SwiftTests {
             ) == "V2Open-1.2.0-build9-macos-x86_64.zip"
         )
         failed += check("locale appsChoose en", LocaleStore.string("appsChoose", language: "en") == "Choose apps")
+
+        if let hiddify = URL(string: "hiddify://import/https://example.com/sub#MyName") {
+            let t = ImportURL.linkText(from: hiddify)
+            failed += check("import url hiddify https", t == "hiddify://import/https://example.com/sub#MyName")
+        }
+        if let hiddifyVless = URL(string: "hiddify://import/vless://uuid@host:443#n") {
+            let t = ImportURL.linkText(from: hiddifyVless)
+            failed += check("import url hiddify vless", t.hasPrefix("hiddify://import/vless://"))
+        }
+        if let sub = URL(string: "sub://https://example.com/a") {
+            failed += check("import url sub", ImportURL.linkText(from: sub).hasPrefix("sub://https://"))
+        }
+        if let clash = URL(string: "clash://install-config?url=https://example.com/sub") {
+            failed += check("import url clash", ImportURL.linkText(from: clash).hasPrefix("clash://"))
+        }
+
+        let enc = RouteMatcherKind.domainSuffix.encode("google.com")
+        failed += check("matcher suffix encode", enc.domains == ["suffix:google.com"])
+        let rows = RouteMatcherKind.rows(
+            domains: ["suffix:test.com", "geosite:cn"],
+            ips: ["geoip:ir"],
+            port: "443",
+            network: "tcp",
+            protocolName: ""
+        )
+        failed += check("matcher rows count", rows.count == 5)
+        let flat = RouteMatcherKind.flatten([
+            MatcherRow(kind: .geosite, value: "google"),
+            MatcherRow(kind: .geoip, value: "ir")
+        ])
+        failed += check("matcher flatten geosite", flat.domains.contains("geosite:google"))
+        failed += check("matcher flatten geoip", flat.ips.contains("geoip:ir"))
         if failed > 0 {
             fputs("swift-tests: \(failed) failed\n", stderr)
             exit(1)

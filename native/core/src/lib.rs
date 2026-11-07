@@ -5,6 +5,7 @@ compile_error!("v2core is macOS-only");
 
 mod app;
 mod builder;
+mod engines;
 mod diagnostics;
 mod dns_items;
 mod migrate;
@@ -22,8 +23,12 @@ mod xray_balancers;
 pub use app::{locate_core, support_dir, Core};
 pub use builder::{build_config, preset};
 pub use migrate::migrate_settings;
-pub use parser::{parse_clash_yaml, parse_link, parse_text};
-pub use routing::{export_routes, parse_routes};
+pub use engines::{engines_dir, migrate_legacy_layout, resolve_singbox, resolve_xray, SINGBOX_UPSTREAM};
+pub use parser::{
+    decode_profile_title, parse_clash_deeplink, parse_clash_yaml, parse_hiddify_deeplink, parse_link,
+    parse_sub_scheme, parse_text, profile_title_from_headers,
+};
+pub use routing::{export_routes, parse_clash_rules, parse_routes};
 pub use xray::document as xray_document;
 
 use std::ffi::{CStr, CString};

@@ -89,8 +89,16 @@ Swift path: `prepare` → `TunnelManager.connect/reload` → `mark_connected`. I
 | `delete_route` | `{id}` |
 | `toggle_route` | `{id}` |
 | `reorder_routes` | `{ids}` |
-| `import_routes` | `{text}` |
+| `select_route_set` | `{id}` — load a named rule set into active routes |
+| `create_route_set` | `{name}` — snapshot current routes as a new set |
+| `duplicate_route_set` | `{id}` |
+| `delete_route_set` | `{id}` — refuses when only one set remains |
+| `rename_route_set` | `{id, name}` |
+| `import_routes` | `{text, merge?}` — JSON rules, V2Box export, or Clash `rules:` / comma rules; `merge: true` appends |
 | `export_routes` | — returns `{text}` |
+| `engines_status` | `{}` — bundled vs active sing-box / Xray under Application Support |
+| `engines_update` | `{target}` — `sing-box` (stock → `engines/sing-box-upstream`) or `xray` |
+| `set_singbox_engine` | `{mode}` — `bundled` (default extended) or `upstream` (downloaded stock) |
 | `add_geo_asset` | `{url or name}` |
 | `update_geo_asset` | `{id}` |
 | `delete_geo_asset` | `{id}` |

@@ -1,0 +1,38 @@
+# Label merged PRs by target branch (dev / stage / production).
+name: PR merge labels
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  label:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const base = context.payload.pull_request.base.ref;
+            const number = context.payload.pull_request.number;
+            const map = {
+              dev: 'merged-to-dev',
+              stage: 'on-stage',
+              production: 'on-production',
+              main: 'merged-to-dev',
+            };
+            const label = map[base];
+            if (!label) return;
+            try {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: number,
+                labels: [label],
+              });
+            } catch (e) {
+              core.warning(`Could not add label ${label}: ${e.message}`);
+            }

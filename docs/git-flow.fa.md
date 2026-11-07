@@ -74,6 +74,41 @@ CI: در `.github/workflows/ci.yml` شاخه‌های `dev`, `stage`, `productio
 4. `./scripts/check-docs.sh` (و تست‌های مرتبط)
 5. `git push -u origin HEAD` → PR به **`dev`**
 6. squash merge، حذف برنچ ریموت
+7. **ردیابی:** بعد از merge (PR یا merge محلی):
+
+```bash
+./scripts/mark-merge.sh merged dev <type>/<slug> <merge-commit> --push
+```
+
+لیست تگ‌های مرج روی `dev`:
+
+```bash
+git tag -l 'merged/dev/*'
+```
+
+### لیبل‌های GitHub (PR)
+
+یک‌بار: `./scripts/sync-github-labels.sh` (نیاز به `gh`).
+
+| لیبل | معنی |
+| --- | --- |
+| `merged-to-dev` | PR به `dev` merge شد (workflow خودکار) |
+| `on-stage` | PR پروموت `dev` → `stage` merge شد |
+| `on-production` | PR پروموت `stage` → `production` merge شد |
+
+بدون PR هم می‌توان فقط از **تگ‌های git** بالا استفاده کرد.
+
+### تگ پروموت بین لایه‌ها
+
+```bash
+git checkout stage && git pull --ff-only origin stage
+./scripts/mark-merge.sh sync stage dev HEAD --push
+
+# production بعد از merge و bump:
+./scripts/mark-merge.sh sync production stage HEAD --push
+```
+
+روی `production` تگ **`vX.Y.Z`** همان مرجع انتشار رسمی است؛ `sync/production/...` تکمیلی است.
 
 ---
 

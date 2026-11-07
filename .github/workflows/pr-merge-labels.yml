@@ -1,4 +1,4 @@
-# Label merged PRs by target branch (dev / stage / production).
+# Label merged PRs; propagate dev PR labels on stage/production promotion.
 name: PR merge labels
 
 on:
@@ -7,32 +7,121 @@ on:
 
 permissions:
   pull-requests: write
+  issues: write
 
 jobs:
   label:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        if: github.event.pull_request.base.ref == 'stage' || github.event.pull_request.base.ref == 'production'
+        with:
+          fetch-depth: 0
+
       - uses: actions/github-script@v7
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         with:
           script: |
-            const base = context.payload.pull_request.base.ref;
-            const number = context.payload.pull_request.number;
-            const map = {
-              dev: 'merged-to-dev',
-              stage: 'on-stage',
-              production: 'on-production',
-              main: 'merged-to-dev',
-            };
-            const label = map[base];
-            if (!label) return;
-            try {
-              await github.rest.issues.addLabels({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: number,
-                labels: [label],
-              });
-            } catch (e) {
-              core.warning(`Could not add label ${label}: ${e.message}`);
+            const { execSync } = require('child_process');
+
+            const base = process.env.BASE_REF;
+            const tipSha = process.env.MERGE_SHA;
+            const promoNumber = Number(process.env.PR_NUMBER);
+
+            function isAncestor(ancestor, descendant) {
+              if (!ancestor || !descendant) return false;
+              try {
+                execSync(`git merge-base --is-ancestor ${ancestor} ${descendant}`, { stdio: 'pipe' });
+                return true;
+              } catch {
+                return false;
+              }
+            }
+
+            async function addLabel(number, name) {
+              try {
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: number,
+                  labels: [name],
+                });
+              } catch (e) {
+                core.warning(`add ${name} on #${number}: ${e.message}`);
+              }
+            }
+
+            async function removeLabel(number, name) {
+              try {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: number,
+                  name,
+                });
+              } catch (_) {
+                /* label may be absent */
+              }
+            }
+
+            async function promoteDevPrs(tier) {
+              const cfg =
+                tier === 'stage'
+                  ? { add: 'on-stage', remove: ['merged-to-dev'] }
+                  : { add: 'on-production', remove: ['merged-to-dev', 'on-stage'] };
+
+              const devPrs = [];
+              let page = 1;
+              while (page <= 40) {
+                const { data } = await github.rest.pulls.list({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  state: 'closed',
+                  base: 'dev',
+                  per_page: 100,
+                  page,
+                  sort: 'updated',
+                  direction: 'desc',
+                });
+                for (const pr of data) {
+                  if (pr.merged_at) devPrs.push(pr);
+                }
+                if (data.length < 100) break;
+                page += 1;
+              }
+
+              let count = 0;
+              for (const pr of devPrs) {
+                const sha = pr.merge_commit_sha;
+                if (!isAncestor(sha, tipSha)) continue;
+                for (const name of cfg.remove) {
+                  await removeLabel(pr.number, name);
+                }
+                await addLabel(pr.number, cfg.add);
+                count += 1;
+              }
+              core.info(`Promoted ${count} merged-to-dev PR(s) → ${cfg.add} @ ${tipSha?.slice(0, 7)}`);
+            }
+
+            if (base === 'dev' || base === 'main') {
+              await addLabel(promoNumber, 'merged-to-dev');
+              return;
+            }
+
+            if (base === 'stage') {
+              await addLabel(promoNumber, 'on-stage');
+              await addLabel(promoNumber, 'tier-sync');
+              await promoteDevPrs('stage');
+              return;
+            }
+
+            if (base === 'production') {
+              await addLabel(promoNumber, 'on-production');
+              await addLabel(promoNumber, 'tier-sync');
+              await promoteDevPrs('production');
+              return;
             }

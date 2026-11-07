@@ -92,11 +92,13 @@ git tag -l 'merged/dev/*'
 
 | لیبل | معنی |
 | --- | --- |
-| `merged-to-dev` | PR به `dev` merge شد (workflow خودکار) |
-| `on-stage` | PR پروموت `dev` → `stage` merge شد |
-| `on-production` | PR پروموت `stage` → `production` merge شد |
+| `merged-to-dev` | PR تسک به `dev` merge شد |
+| `on-stage` | همان PR بعد از رسیدن کدش به `stage` (لیبل قبلی حذف می‌شود) |
+| `on-production` | همان PR بعد از رسیدن به `production` (`on-stage` / `merged-to-dev` حذف) |
 
-بدون PR هم می‌توان فقط از **تگ‌های git** بالا استفاده کرد.
+PR پروموت لایه‌ها (`dev`→`stage` و …) لیبل `tier-sync` می‌گیرند.
+
+بعد از merge محلی (بدون PR): `./scripts/mark-merge.sh sync … --push` (تگ‌ها) و `./scripts/promote-pr-labels.sh stage|production HEAD`.
 
 ### تگ پروموت بین لایه‌ها
 

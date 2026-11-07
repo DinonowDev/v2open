@@ -15,6 +15,7 @@ How to edit this file: [docs/versioning.md](docs/versioning.md).
 - `hiddify://` and `sub://` deep links; Hiddify panel subscription headers (`Profile-Title`, `profile-update-interval`, `moved-permanently-to`, `profile-web-page-url`, `support-url`).
 - Settings toggle to send `X-HWID` on subscription refresh; engine updates for sing-box and Xray from **Settings → About**.
 - Git merge tracking: `scripts/mark-merge.sh` tags (`merged/dev/*`, `sync/stage/*`, …) and GitHub PR labels (`merged-to-dev`, `on-stage`, `on-production`).
+- PR labels and `merged/dev/*` git tags promote to `on-stage` / `on-production` when tier sync merges land on `stage` or `production`.
 
 ### Changed
 

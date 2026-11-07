@@ -43,8 +43,8 @@ PR به `dev`؛ عنوان = subject کامیت conv.؛ پیش‌فرض **squash
 
 ## ۴. پروموت (وقتی تسک «تمام» است یا کاربر خواست)
 
-1. `dev` → `stage` (PR، بدون bump ورژن مگر توافق شده). بعد از merge: `./scripts/mark-merge.sh sync stage dev HEAD --push`
-2. `stage` → `production` (PR؛ **الزام** bump ورژن و ریلیز — قانون جدا). بعد از merge: `./scripts/mark-merge.sh sync production stage HEAD --push`
+1. `dev` → `stage` (PR، بدون bump ورژن مگر توافق شده). بعد از merge: `./scripts/mark-merge.sh sync stage dev HEAD --push` (تگ‌ها `merged/dev/*` → `on-stage/*`؛ لیبل PRها در GitHub خودکار یا `promote-pr-labels.sh stage HEAD`)
+2. `stage` → `production` (PR؛ **الزام** bump ورژن و ریلیز — قانون جدا). بعد از merge: `./scripts/mark-merge.sh sync production stage HEAD --push` (تگ/لیبل → `on-production`)
 
 هرگز `production` را force-push نکن. کامیت/مرج بدون درخواست صریح کاربر فقط تا مرحلهٔ PR به `dev` پیش‌فرض است؛ پروموت به `stage`/`production` وقتی کاربر «تمام»، «منتشر کن»، یا «روی production ببر» گفت.
 

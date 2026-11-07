@@ -100,6 +100,7 @@ final class Model: ObservableObject {
             }
         }
         refresh()
+        refreshSubscriptionGroupsOnLaunch()
         refreshAbout()
         AppIconStore.apply(settings["app_icon"] as? String ?? "default")
         LogClassifier.shared.prepare()
@@ -198,6 +199,20 @@ final class Model: ObservableObject {
     func refresh() {
         let response = call("state")
         setStateIfChanged(response["data"] as? [String: Any] ?? [:])
+    }
+
+    private func refreshSubscriptionGroupsOnLaunch() {
+        Task.detached(priority: .utility) { [weak self] in
+            let response = v2RPC(method: "update_group")
+            await MainActor.run {
+                guard let self else { return }
+                if response["ok"] as? Bool != false {
+                    self.mergeState(from: response)
+                } else if let err = response["error"] as? String, err != "no groups with an update url" {
+                    DevLog.error("boot", "subscription refresh: \(err)")
+                }
+            }
+        }
     }
 
     func mergeState(from response: [String: Any]) {

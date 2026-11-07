@@ -13,6 +13,8 @@ How to edit this file: [docs/versioning.md](docs/versioning.md).
 
 ### Changed
 
+- macOS: refresh subscription groups with an update URL in the background when the app launches.
+
 ### Fixed
 
 ## [1.3.5] - 2026-11-05

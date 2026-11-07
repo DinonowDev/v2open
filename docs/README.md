@@ -19,6 +19,7 @@ Canonical process: [CONTRIBUTING.md](../CONTRIBUTING.md). Persian: [CONTRIBUTING
 | Run or add tests | [testing.md](testing.md) |
 | Bump the version | [versioning.md](versioning.md) |
 | Name a branch or open a PR | [branching.md](branching.md) |
+| Agent / production–stage–dev flow (FA) | [git-flow.fa.md](git-flow.fa.md), [../AGENTS.md](../AGENTS.md) |
 | Cut a GitHub release | [release.md](release.md) |
 | Configure Apple signing on Actions | [apple-ci-secrets.md](apple-ci-secrets.md) |
 | Replace sing-box / Xray / sidecars | [binaries.md](binaries.md), [../NOTICE](../NOTICE) |

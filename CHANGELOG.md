@@ -31,6 +31,8 @@ How to edit this file: [docs/versioning.md](docs/versioning.md).
 
 ### Fixed
 
+- Smart Connect no longer blocks the UI during group ping; toasts use system text so Persian labels render reliably.
+
 ## [1.3.5] - 2026-11-05
 
 Build `9`.

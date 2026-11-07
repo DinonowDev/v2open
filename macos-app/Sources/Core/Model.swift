@@ -19,6 +19,7 @@ final class Model: ObservableObject {
     @Published var about: [String: Any] = [:]
     @Published var pendingNote: String?
     @Published var pendingLock: PendingLock?
+    @Published private(set) var connectBusy = false
 
     private var booted = false
     private var pingLoopTask: Task<Void, Never>?
@@ -473,6 +474,7 @@ final class Model: ObservableObject {
     }
 
     func connectTunnel(id: String? = nil, groupId: String = "", smart: Bool? = nil) {
+        guard !connectBusy else { return }
         var id = id ?? (settings["selected_id"] as? String ?? "")
         let smart = smart ?? (settings["smart_connect"] as? Bool == true) || !groupId.isEmpty
         if !smart, settings["auto_connect_best"] as? Bool == true {
@@ -492,25 +494,55 @@ final class Model: ObservableObject {
             return
         }
 
-        // Dev / unsigned builds have no PacketTunnel; NE "connected" would not run sing-box.
+        connectBusy = true
+        showToast(smart ? t("smartConnectProgress") : t("connecting"), tone: .info)
+        let connectId = id
+        let useSmart = smart
+        let gid = groupId
+        Task { [weak self] in
+            await self?.performConnect(id: connectId, groupId: gid, smart: useSmart)
+        }
+    }
+
+    private func performConnect(id: String, groupId: String, smart: Bool) async {
+        defer { connectBusy = false }
         guard Self.hasPacketTunnelExtension else {
-            startCoreConnect(id: id, smart: smart, groupId: groupId)
+            let response = await Task.detached(priority: .userInitiated) {
+                var args: [String: Any] = ["id": id, "smart": smart]
+                if !groupId.isEmpty { args["group_id"] = groupId }
+                return v2RPC(method: "connect", args: args)
+            }.value
+            applyConnectResponse(response, id: id, smart: smart, groupId: groupId)
             return
         }
 
         let persist = settings["persist_tunnel"] as? Bool == true
-        var args: [String: Any] = ["id": id, "smart": smart, "keep_alive": persist && TunnelManager.shared.usingSystem]
-        if !groupId.isEmpty { args["group_id"] = groupId }
-        let prepared = call("prepare", args)
+        var prepareArgs: [String: Any] = [
+            "id": id,
+            "smart": smart,
+            "keep_alive": persist && TunnelManager.shared.usingSystem
+        ]
+        if !groupId.isEmpty { prepareArgs["group_id"] = groupId }
+
+        let prepared = await Task.detached(priority: .userInitiated) {
+            v2RPC(method: "prepare", args: prepareArgs)
+        }.value
+
         let data = prepared["data"] as? [String: Any] ?? [:]
         let path = data["path"] as? String ?? ""
         guard (prepared["ok"] as? Bool) == true, !path.isEmpty else {
             if let err = prepared["error"] as? String, !err.isEmpty {
                 DevLog.error("connect", "prepare: \(err)")
             }
-            startCoreConnect(id: id, smart: smart, groupId: groupId)
+            let response = await Task.detached(priority: .userInitiated) {
+                var args: [String: Any] = ["id": id, "smart": smart]
+                if !groupId.isEmpty { args["group_id"] = groupId }
+                return v2RPC(method: "connect", args: args)
+            }.value
+            applyConnectResponse(response, id: id, smart: smart, groupId: groupId)
             return
         }
+
         let options = TunnelStartOptions(
             configPath: path,
             socksPort: data["socks_port"] as? Int ?? 10808,
@@ -532,30 +564,18 @@ final class Model: ObservableObject {
             xrayBin: data["xray_bin"] as? String ?? ""
         )
         let tunnel = TunnelManager.shared
-        let finish: (Bool) -> Void = { [weak self] system in
-            Task { @MainActor in
-                self?.finishTunnelConnect(id: id, smart: smart, groupId: groupId, system: system)
+        let system = await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
+            let finish: (Bool) -> Void = { ok in cont.resume(returning: ok) }
+            if persist && tunnel.usingSystem {
+                tunnel.reload(options, completion: finish)
+            } else {
+                tunnel.connect(options, completion: finish)
             }
         }
-        if persist && tunnel.usingSystem {
-            tunnel.reload(options, completion: finish)
-        } else {
-            tunnel.connect(options, completion: finish)
-        }
+        finishTunnelConnect(id: id, smart: smart, groupId: groupId, system: system)
     }
 
-    private func firstProfileId(in groupId: String) -> String {
-        if !groupId.isEmpty, let group = groups.first(where: { ($0["id"] as? String) == groupId }) {
-            let profiles = group["profiles"] as? [[String: Any]] ?? []
-            return profiles.first?["id"] as? String ?? ""
-        }
-        return allProfileIds().first ?? ""
-    }
-
-    private func startCoreConnect(id: String, smart: Bool, groupId: String = "") {
-        var args: [String: Any] = ["id": id, "smart": smart]
-        if !groupId.isEmpty { args["group_id"] = groupId }
-        let response = call("connect", args)
+    private func applyConnectResponse(_ response: [String: Any], id: String, smart: Bool, groupId: String) {
         refresh()
         if response["ok"] as? Bool == false {
             let err = response["error"] as? String ?? t("failed")
@@ -567,17 +587,34 @@ final class Model: ObservableObject {
         }
     }
 
+    private func firstProfileId(in groupId: String) -> String {
+        if !groupId.isEmpty, let group = groups.first(where: { ($0["id"] as? String) == groupId }) {
+            let profiles = group["profiles"] as? [[String: Any]] ?? []
+            return profiles.first?["id"] as? String ?? ""
+        }
+        return allProfileIds().first ?? ""
+    }
+
     private func finishTunnelConnect(id: String, smart: Bool, groupId: String, system: Bool) {
         if system {
             _ = call("mark_connected", ["id": id])
             refresh()
             if TunnelManager.shared.lastReloaded {
                 showToast(t("coreReloaded"), tone: .success)
-            } else if runtime["connected"] as? Bool == true {
+            } else {
                 showToast(t("connected"), tone: .success)
             }
         } else {
-            startCoreConnect(id: id, smart: smart, groupId: groupId)
+            Task { [weak self] in
+                let response = await Task.detached(priority: .userInitiated) {
+                    var args: [String: Any] = ["id": id, "smart": smart]
+                    if !groupId.isEmpty { args["group_id"] = groupId }
+                    return v2RPC(method: "connect", args: args)
+                }.value
+                await MainActor.run { [weak self] in
+                    self?.applyConnectResponse(response, id: id, smart: smart, groupId: groupId)
+                }
+            }
         }
     }
 

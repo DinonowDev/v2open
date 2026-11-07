@@ -107,7 +107,9 @@ struct AppToastView: View {
             Image(systemName: icon)
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(accent)
-            Mix(text: item.text, size: 14, weight: .semibold)
+            Text(item.text)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(C.text)
                 .lineLimit(3)
                 .multilineTextAlignment(.leading)
         }

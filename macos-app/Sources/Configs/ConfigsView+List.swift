@@ -65,6 +65,7 @@ extension ConfigsView {
                         .clipShape(Capsule())
                     }
                     .buttonStyle(.plain)
+                    .disabled(model.connectBusy)
                 }
                 ConfigRowIconButton(systemName: "dot.radiowaves.left.and.right", label: model.t("pingAll")) {
                     runPing(profileIds: profileIds(in: group), args: pingArgs(groupId: gid))

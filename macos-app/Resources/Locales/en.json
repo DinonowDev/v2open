@@ -278,6 +278,7 @@
   "subLastUpdate": "Refresh groups that have an update URL",
   "geoAutoUpdate": "Auto update geo files",
   "smartConnect": "Smart Connect",
+  "smartConnectProgress": "Smart Connect — racing configs…",
   "smartConnectHint": "Races every config in the group, then connects to the winner. Optional urltest keeps the top 8.",
   "smartStrategy": "Smart strategy",
   "smartWinner": "Race then winner",

@@ -703,5 +703,6 @@
   "routeSetName": "Set name",
   "dragToReorder": "Drag rules to reorder",
   "openWebPage": "User page",
-  "renameRouteSet": "Rename set"
+  "renameRouteSet": "Rename set",
+  "smartConnectProgress": "Smart Connect — racing configs…"
 }

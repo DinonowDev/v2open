@@ -66,13 +66,26 @@ impl Default for Runtime {
     }
 }
 
+struct GroupFetch {
+    body: String,
+    info: String,
+    title: String,
+    announce: String,
+    moved_to: String,
+    refresh_hours: u64,
+    web_page: String,
+    support_url: String,
+}
+
 pub struct Core {
     path: PathBuf,
     singbox: PathBuf,
+    bundled_singbox: PathBuf,
     rules: PathBuf,
     settings: Value,
     groups: Vec<Value>,
     routes: Vec<Value>,
+    route_sets: Vec<Value>,
     backups: Vec<Value>,
     runtime: Runtime,
     child: Option<std::process::Child>,
@@ -502,23 +515,28 @@ fn defaults() -> Value {
         "sort_by": "default",
         "throughput_test": false,
         "throughput_duration": 10,
-        "auto_connect_best": false
+        "auto_connect_best": false,
+        "singbox_engine": "bundled",
+        "active_route_set_id": ""
     })
 }
 
 impl Core {
     pub fn open(data_dir: PathBuf, singbox: PathBuf, rules: PathBuf) -> Self {
         let _ = fs::create_dir_all(&data_dir);
+        let bundled_singbox = singbox.clone();
         install_rules(&rules);
         seed_geo_files(&data_dir, &singbox);
         let path = data_dir.join("library.json");
         let mut core = Self {
             path,
-            singbox,
+            singbox: bundled_singbox.clone(),
+            bundled_singbox,
             rules,
             settings: defaults(),
             groups: Vec::new(),
             routes: Vec::new(),
+            route_sets: Vec::new(),
             backups: Vec::new(),
             runtime: Runtime::default(),
             child: None,
@@ -533,6 +551,7 @@ impl Core {
         crate::migrate::migrate_settings(&mut core.settings);
         crate::dns_items::ensure_dns_items(&mut core.settings);
         crate::xray_balancers::ensure_balancers(&mut core.settings);
+        core.refresh_singbox_binary();
         core.ensure_unique_profile_ids();
         core.forget_session_pings();
         if core.singbox.exists() {
@@ -559,6 +578,16 @@ impl Core {
         crate::migrate::migrate_settings(&mut self.settings);
         crate::dns_items::ensure_dns_items(&mut self.settings);
         crate::xray_balancers::ensure_balancers(&mut self.settings);
+        if crate::engines::migrate_legacy_layout(&self.data_dir()) {
+            let up = crate::engines::engines_dir(&self.data_dir()).join(crate::engines::SINGBOX_UPSTREAM);
+            if up.is_file() && self.settings["singbox_engine"].as_str().unwrap_or("bundled") == "bundled" {
+                self.settings["singbox_engine"] = json!("upstream");
+                self.save();
+            }
+        }
+        self.refresh_singbox_binary();
+        self.ensure_route_sets();
+        self.load_routes_from_active_set();
     }
 
     fn merge_icloud(&mut self) {
@@ -646,6 +675,7 @@ impl Core {
                 }
                 self.groups = data["groups"].as_array().cloned().unwrap_or_default();
                 self.routes = data["routes"].as_array().cloned().unwrap_or_default();
+                self.route_sets = data["route_sets"].as_array().cloned().unwrap_or_default();
                 self.backups = data["backups"].as_array().cloned().unwrap_or_default();
             }
         }
@@ -655,7 +685,13 @@ impl Core {
         if let Some(parent) = self.path.parent() {
             let _ = fs::create_dir_all(parent);
         }
-        let data = json!({"settings": self.settings, "groups": self.groups, "routes": self.routes, "backups": self.backups});
+        let data = json!({
+            "settings": self.settings,
+            "groups": self.groups,
+            "routes": self.routes,
+            "route_sets": self.route_sets,
+            "backups": self.backups
+        });
         let _ = fs::write(&self.path, serde_json::to_string_pretty(&data).unwrap_or_else(|_| "{}".into()));
         if self.settings["icloud"].as_bool().unwrap_or(false) {
             if let Some(cloud) = crate::platform::icloud_library() {
@@ -700,18 +736,27 @@ impl Core {
                 "expires_at": expires,
                 "note": note,
                 "allowed_ids": allowed,
-                "files": ["settings.json", "groups.json", "routes.json", "dns.json", "balancers.json"]
+                "files": [
+                    "settings.json",
+                    "groups.json",
+                    "routes.json",
+                    "route_sets.json",
+                    "dns.json",
+                    "balancers.json"
+                ]
             },
             "catalog": {
                 "settings.json": self.settings,
                 "groups.json": self.groups,
                 "routes.json": self.routes,
+                "route_sets.json": self.route_sets,
                 "dns.json": self.settings["dns_items"],
                 "balancers.json": self.settings["xray_balancers"]
             },
             "settings": self.settings,
             "groups": self.groups,
             "routes": self.routes,
+            "route_sets": self.route_sets,
             "dns_items": self.settings["dns_items"],
             "xray_balancers": self.settings["xray_balancers"]
         })
@@ -727,6 +772,11 @@ impl Core {
             "settings": cat.get("settings.json").cloned().unwrap_or(data["settings"].clone()),
             "groups": cat.get("groups.json").cloned().unwrap_or(data["groups"].clone()),
             "routes": cat.get("routes.json").cloned().unwrap_or(data["routes"].clone()),
+            "route_sets": cat
+                .get("route_sets.json")
+                .cloned()
+                .or_else(|| data.get("route_sets").cloned())
+                .unwrap_or(json!([])),
             "dns_items": cat.get("dns.json").cloned().unwrap_or(data["dns_items"].clone()),
             "xray_balancers": cat.get("balancers.json").cloned().unwrap_or(data["xray_balancers"].clone())
         })
@@ -739,6 +789,7 @@ impl Core {
             "settings": self.settings,
             "groups": self.public_groups(),
             "routes": self.public_routes(),
+            "route_sets": self.public_route_sets(),
             "geo_assets": self.list_geo_assets(),
             "backups": self.backups.iter().map(|b| json!({"id": b["id"], "name": b["name"]})).collect::<Vec<_>>(),
             "runtime": {
@@ -880,6 +931,7 @@ impl Core {
             "delete_route" => {
                 let id = args["id"].as_str().unwrap_or("");
                 self.routes.retain(|r| r["id"].as_str() != Some(id));
+                self.persist_active_routes();
                 self.save();
                 Ok(self.state())
             }
@@ -889,6 +941,7 @@ impl Core {
                 if let Some(rule) = self.routes.iter_mut().find(|r| r["id"].as_str() == Some(id)) {
                     let next = enabled.unwrap_or(!rule["enabled"].as_bool().unwrap_or(true));
                     rule["enabled"] = json!(next);
+                    self.persist_active_routes();
                     self.save();
                 }
                 Ok(self.state())
@@ -897,17 +950,85 @@ impl Core {
                 self.reorder_routes(&args["ids"])?;
                 Ok(self.state())
             }
+            "select_route_set" => {
+                let id = args["id"].as_str().unwrap_or("");
+                self.select_route_set(id)?;
+                Ok(self.state())
+            }
+            "create_route_set" => {
+                let name = args["name"].as_str().unwrap_or("Set");
+                let created = self.create_route_set(name)?;
+                Ok(json!({ "state": self.state(), "id": created["id"] }))
+            }
+            "duplicate_route_set" => {
+                let id = args["id"].as_str().unwrap_or("");
+                let created = self.duplicate_route_set(id)?;
+                Ok(json!({ "state": self.state(), "id": created["id"] }))
+            }
+            "delete_route_set" => {
+                let id = args["id"].as_str().unwrap_or("");
+                self.delete_route_set(id)?;
+                Ok(self.state())
+            }
+            "rename_route_set" => {
+                let id = args["id"].as_str().unwrap_or("");
+                let name = args["name"].as_str().unwrap_or("");
+                self.rename_route_set(id, name)?;
+                Ok(self.state())
+            }
+            "set_singbox_engine" => {
+                let mode = args["mode"].as_str().unwrap_or("bundled");
+                if mode != "bundled" && mode != "upstream" {
+                    return Err("mode must be bundled or upstream".into());
+                }
+                self.settings["singbox_engine"] = json!(mode);
+                self.refresh_singbox_binary();
+                if self.singbox.exists() {
+                    if let Ok(out) = Command::new(&self.singbox).arg("version").output() {
+                        self.runtime.core =
+                            String::from_utf8_lossy(&out.stdout).lines().next().unwrap_or("").trim().to_string();
+                    }
+                }
+                self.save();
+                Ok(crate::engines::status(&self.bundled_singbox, &self.data_dir(), &self.singbox_engine_mode()))
+            }
             "import_routes" => {
                 let text = args["text"].as_str().unwrap_or("");
-                let rules = parse_routes(text)?;
+                let rules = parse_routes(text)
+                    .or_else(|_| crate::routing::parse_clash_rules(text))?;
                 if rules.is_empty() {
                     return Err("routing json is invalid".into());
                 }
-                self.routes = rules;
-                self.settings["block_udp_443"] = json!(false);
-                self.settings["bypass_lan"] = json!(false);
+                let merge = args["merge"].as_bool().unwrap_or(false);
+                if merge {
+                    for rule in rules {
+                        let _ = self.save_route(&rule);
+                    }
+                } else {
+                    self.routes = rules;
+                    self.settings["block_udp_443"] = json!(false);
+                    self.settings["bypass_lan"] = json!(false);
+                }
+                self.persist_active_routes();
                 self.save();
                 Ok(self.state())
+            }
+            "engines_status" => {
+                Ok(crate::engines::status(
+                    &self.bundled_singbox,
+                    &self.data_dir(),
+                    &self.singbox_engine_mode(),
+                ))
+            }
+            "engines_update" => {
+                let target = args["target"].as_str().unwrap_or("xray");
+                let mode = self.singbox_engine_mode();
+                let status = crate::engines::update(&self.bundled_singbox, &self.data_dir(), target, &mode)?;
+                self.refresh_singbox_binary();
+                if let Ok(out) = Command::new(&self.singbox).arg("version").output() {
+                    self.runtime.core = String::from_utf8_lossy(&out.stdout).lines().next().unwrap_or("").trim().to_string();
+                }
+                Ok(status)
             }
             "export_routes" => Ok(json!({"text": export_routes(&self.routes)})),
             "add_geo_asset" => {
@@ -1046,26 +1167,24 @@ impl Core {
                 Ok(self.state())
             }
             "backup" => {
-                self.backups.insert(0, json!({"id": id(), "name": now().to_string(), "payload": {"settings": self.settings, "groups": self.groups, "routes": self.routes}}));
+                self.persist_active_routes();
+                self.backups.insert(0, json!({
+                    "id": id(),
+                    "name": now().to_string(),
+                    "payload": {
+                        "settings": self.settings,
+                        "groups": self.groups,
+                        "routes": self.routes,
+                        "route_sets": self.route_sets
+                    }
+                }));
                 self.save();
                 Ok(self.state())
             }
             "restore" => {
                 let bid = args["id"].as_str().unwrap_or("");
                 if let Some(item) = self.backups.iter().find(|b| b["id"].as_str() == Some(bid)).cloned() {
-                    let payload = &item["payload"];
-                    if let Some(settings) = payload.get("settings") {
-                        let mut merged = defaults();
-                        if let (Some(dst), Some(src)) = (merged.as_object_mut(), settings.as_object()) {
-                            for (k, v) in src {
-                                dst.insert(k.clone(), v.clone());
-                            }
-                        }
-                        self.settings = merged;
-                    }
-                    self.groups = payload["groups"].as_array().cloned().unwrap_or_default();
-                    self.routes = payload["routes"].as_array().cloned().unwrap_or_default();
-                    self.save();
+                    self.restore_payload(&item["payload"]);
                 }
                 Ok(self.state())
             }
@@ -1515,6 +1634,22 @@ impl Core {
 
     fn import_text(&mut self, text: &str, group_id: Option<&str>) -> Result<(), String> {
         let trimmed = text.trim();
+        if let Some((payload, name)) = crate::parser::parse_hiddify_deeplink(trimmed) {
+            return self.import_hiddify_payload(&payload, &name, group_id);
+        }
+        if let Some((url, name)) = crate::parser::parse_clash_deeplink(trimmed) {
+            if let Some(gid) = group_id {
+                return self.set_group_url(gid, &url).map(|_| ());
+            }
+            return self.subscribe(&name, &url);
+        }
+        if let Some(url) = crate::parser::parse_sub_scheme(trimmed) {
+            if let Some(gid) = group_id {
+                return self.set_group_url(gid, &url).map(|_| ());
+            }
+            let name = crate::parser::subscribe_name_from_url(&url);
+            return self.subscribe(&name, &url);
+        }
         if trimmed.starts_with("v2box://") || trimmed.starts_with("v2open://") {
             if let Ok(node) = parse_link(trimmed) {
                 if node["protocol"].as_str() == Some("subscription") {
@@ -1550,6 +1685,32 @@ impl Core {
             }
         }
         self.import_nodes(trimmed, group_id)
+    }
+
+    fn import_hiddify_payload(&mut self, payload: &str, name: &str, group_id: Option<&str>) -> Result<(), String> {
+        let payload = payload.trim();
+        if payload.starts_with("http://") || payload.starts_with("https://") {
+            if let Some(gid) = group_id {
+                return self.set_group_url(gid, payload).map(|_| ());
+            }
+            let title = if name.trim().is_empty() {
+                crate::parser::subscribe_name_from_url(payload)
+            } else {
+                name.trim().to_string()
+            };
+            return self.subscribe(&title, payload);
+        }
+        if let Ok(node) = parse_link(payload) {
+            if node["protocol"].as_str() == Some("subscription") {
+                let url = node["address"].as_str().unwrap_or("");
+                if !url.is_empty() {
+                    return self.subscribe(name, url);
+                }
+            }
+            self.store_nodes(vec![node], group_id)?;
+            return Ok(());
+        }
+        self.import_nodes(payload, group_id)
     }
 
     fn import_nodes(&mut self, text: &str, group_id: Option<&str>) -> Result<(), String> {
@@ -1607,7 +1768,7 @@ impl Core {
         self.save();
     }
 
-    fn fetch_group_body(&self, url: &str) -> Result<(String, String, String, String), String> {
+    fn fetch_group_body(&self, url: &str) -> Result<GroupFetch, String> {
         if !url.starts_with("http://") && !url.starts_with("https://") {
             return Err("group url must be http or https".into());
         }
@@ -1619,15 +1780,38 @@ impl Core {
         }
         let response = req.call().map_err(|e| e.to_string())?;
         let info = response.header("subscription-userinfo").unwrap_or("").to_string();
-        let title = response.header("profile-title").unwrap_or("").to_string();
+        let title_hdr = response.header("profile-title").unwrap_or("").to_string();
+        let disposition = response.header("content-disposition").unwrap_or("").to_string();
+        let title = crate::parser::profile_title_from_headers(&title_hdr, &disposition, url);
         let announce = response.header("announce").unwrap_or("").to_string();
+        let mut moved_to = response.header("moved-permanently-to").unwrap_or("").to_string();
+        if moved_to.is_empty() {
+            moved_to = response.header("Moved-Permanently-To").unwrap_or("").to_string();
+        }
+        let refresh_hours = response
+            .header("profile-update-interval")
+            .unwrap_or("")
+            .trim()
+            .parse::<u64>()
+            .unwrap_or(0);
+        let web_page = response.header("profile-web-page-url").unwrap_or("").to_string();
+        let support_url = response.header("support-url").unwrap_or("").to_string();
         let body = response.into_string().map_err(|e| e.to_string())?;
-        Ok((body, info, title, announce))
+        Ok(GroupFetch {
+            body,
+            info,
+            title,
+            announce,
+            moved_to,
+            refresh_hours,
+            web_page,
+            support_url,
+        })
     }
 
-    fn apply_group_fetch(&mut self, group_id: &str, body: &str, info_header: &str, title: &str, announce: &str) -> Result<(), String> {
-        let info = parse_userinfo(info_header);
-        let nodes = parse_text(body);
+    fn apply_group_fetch(&mut self, group_id: &str, fetch: &GroupFetch) -> Result<(), String> {
+        let info = parse_userinfo(&fetch.info);
+        let nodes = parse_text(&fetch.body);
         let nodes: Vec<Value> = nodes.into_iter().filter(|n| n["protocol"].as_str() != Some("subscription")).collect();
         if nodes.is_empty() {
             return Err("the group url did not include any configs".into());
@@ -1636,17 +1820,34 @@ impl Core {
             group["profiles"] = json!([]);
             group["updated_at"] = json!(now());
             group["kind"] = json!("remote");
-            if !title.is_empty() {
-                group["name"] = json!(title);
+            if !fetch.title.is_empty() {
+                group["name"] = json!(fetch.title.clone());
             }
-            if !announce.is_empty() {
-                group["announcement"] = json!(announce);
+            if !fetch.announce.is_empty() {
+                group["announcement"] = json!(fetch.announce.clone());
             }
-            if !info_header.is_empty() {
+            if !fetch.info.is_empty() {
                 group["expire"] = json!(info.3);
                 group["upload"] = json!(info.0);
                 group["download"] = json!(info.1);
                 group["total"] = json!(info.2);
+            }
+            if !fetch.moved_to.trim().is_empty() {
+                group["url"] = json!(fetch.moved_to.trim());
+            }
+            if fetch.refresh_hours > 0 {
+                group["refresh_hours"] = json!(fetch.refresh_hours);
+                self.settings["sub_auto_update"] = json!(true);
+                let global = self.settings["sub_auto_interval_hours"].as_u64().unwrap_or(24);
+                if fetch.refresh_hours < global || global == 24 {
+                    self.settings["sub_auto_interval_hours"] = json!(fetch.refresh_hours);
+                }
+            }
+            if !fetch.web_page.is_empty() {
+                group["web_page"] = json!(fetch.web_page.clone());
+            }
+            if !fetch.support_url.is_empty() {
+                group["support_url"] = json!(fetch.support_url.clone());
             }
         }
         self.save();
@@ -1666,21 +1867,26 @@ impl Core {
         {
             return self.update_group(&gid);
         }
-        let (body, info, title, announce) = self.fetch_group_body(url)?;
-        let preview = parse_text(&body);
+        let fetch = self.fetch_group_body(url)?;
+        let preview = parse_text(&fetch.body);
         if preview.iter().all(|n| n["protocol"].as_str() == Some("subscription")) {
             return Err("the group url did not include any configs".into());
         }
         let gid = id();
+        let sub_url = if fetch.moved_to.trim().is_empty() {
+            url.to_string()
+        } else {
+            fetch.moved_to.trim().to_string()
+        };
         self.groups.push(json!({
             "id": gid,
-            "name": if title.is_empty() { name.to_string() } else { title.clone() },
+            "name": if fetch.title.is_empty() { name.to_string() } else { fetch.title.clone() },
             "kind": "remote",
-            "url": url,
+            "url": sub_url,
             "pinned": false,
             "expanded": true,
             "locked": false,
-            "announcement": announce,
+            "announcement": fetch.announce,
             "expire": 0,
             "upload": 0,
             "download": 0,
@@ -1688,7 +1894,7 @@ impl Core {
             "updated_at": now(),
             "profiles": []
         }));
-        self.apply_group_fetch(&gid, &body, &info, &title, &announce)
+        self.apply_group_fetch(&gid, &fetch)
     }
 
     fn update_group(&mut self, group_id: &str) -> Result<(), String> {
@@ -1715,8 +1921,8 @@ impl Core {
         if url.is_empty() {
             return Err("this group has no update url".into());
         }
-        let (body, info, title, announce) = self.fetch_group_body(&url)?;
-        self.apply_group_fetch(group_id, &body, &info, &title, &announce)
+        let fetch = self.fetch_group_body(&url)?;
+        self.apply_group_fetch(group_id, &fetch)
     }
 
     fn infer_group_update_url(&self, group: &Value) -> Option<String> {
@@ -1818,6 +2024,7 @@ impl Core {
         if let Some(lan) = bundle.get("bypass_lan") {
             self.settings["bypass_lan"] = lan.clone();
         }
+        self.persist_active_routes();
         self.save();
     }
 
@@ -1834,6 +2041,7 @@ impl Core {
         } else {
             self.routes.push(rule);
         }
+        self.persist_active_routes();
         self.save();
         Ok(())
     }
@@ -1858,8 +2066,175 @@ impl Core {
             }
         }
         self.routes = next;
+        self.persist_active_routes();
         self.save();
         Ok(())
+    }
+
+    fn singbox_engine_mode(&self) -> String {
+        match self.settings["singbox_engine"].as_str().unwrap_or("bundled") {
+            "upstream" => "upstream".into(),
+            _ => "bundled".into(),
+        }
+    }
+
+    fn refresh_singbox_binary(&mut self) {
+        let mode = self.singbox_engine_mode();
+        self.singbox = crate::engines::resolve_singbox(&self.bundled_singbox, &self.data_dir(), &mode);
+    }
+
+    fn ensure_route_sets(&mut self) {
+        if self.route_sets.is_empty() {
+            let sid = id();
+            self.route_sets.push(json!({
+                "id": sid,
+                "name": "Default",
+                "routes": self.routes,
+                "updated_at": now()
+            }));
+            if self.settings["active_route_set_id"].as_str().unwrap_or("").is_empty() {
+                self.settings["active_route_set_id"] = json!(sid);
+            }
+            return;
+        }
+        if self.settings["active_route_set_id"].as_str().unwrap_or("").is_empty() {
+            if let Some(first) = self.route_sets.first() {
+                if let Some(sid) = first["id"].as_str() {
+                    self.settings["active_route_set_id"] = json!(sid);
+                }
+            }
+        }
+        if !self
+            .route_sets
+            .iter()
+            .any(|s| s["id"].as_str() == self.settings["active_route_set_id"].as_str())
+        {
+            if let Some(first) = self.route_sets.first() {
+                if let Some(sid) = first["id"].as_str() {
+                    self.settings["active_route_set_id"] = json!(sid);
+                }
+            }
+        }
+    }
+
+    fn load_routes_from_active_set(&mut self) {
+        let active = self.settings["active_route_set_id"].as_str().unwrap_or("");
+        if let Some(set) = self.route_sets.iter().find(|s| s["id"].as_str() == Some(active)) {
+            self.routes = set["routes"].as_array().cloned().unwrap_or_default();
+        }
+    }
+
+    fn active_route_set_index(&self) -> Option<usize> {
+        let active = self.settings["active_route_set_id"].as_str().unwrap_or("");
+        self.route_sets.iter().position(|s| s["id"].as_str() == Some(active))
+    }
+
+    fn persist_active_routes(&mut self) {
+        let routes = self.routes.clone();
+        if let Some(idx) = self.active_route_set_index() {
+            self.route_sets[idx]["routes"] = json!(routes);
+            self.route_sets[idx]["updated_at"] = json!(now());
+        }
+        self.routes = routes;
+    }
+
+    fn select_route_set(&mut self, set_id: &str) -> Result<(), String> {
+        if set_id.is_empty() {
+            return Err("missing route set id".into());
+        }
+        let routes = self
+            .route_sets
+            .iter()
+            .find(|s| s["id"].as_str() == Some(set_id))
+            .ok_or_else(|| "route set not found".to_string())?["routes"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        self.settings["active_route_set_id"] = json!(set_id);
+        self.routes = routes;
+        self.save();
+        Ok(())
+    }
+
+    fn create_route_set(&mut self, name: &str) -> Result<Value, String> {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err("name required".into());
+        }
+        let sid = id();
+        self.route_sets.push(json!({
+            "id": sid,
+            "name": name,
+            "routes": self.routes,
+            "updated_at": now()
+        }));
+        self.save();
+        Ok(json!({ "id": sid }))
+    }
+
+    fn duplicate_route_set(&mut self, set_id: &str) -> Result<Value, String> {
+        let set = self
+            .route_sets
+            .iter()
+            .find(|s| s["id"].as_str() == Some(set_id))
+            .ok_or_else(|| "route set not found".to_string())?
+            .clone();
+        let sid = id();
+        let mut copy = set;
+        copy["id"] = json!(sid);
+        let base = copy["name"].as_str().unwrap_or("Set");
+        copy["name"] = json!(format!("{base} copy"));
+        copy["updated_at"] = json!(now());
+        self.route_sets.push(copy);
+        self.save();
+        Ok(json!({ "id": sid }))
+    }
+
+    fn delete_route_set(&mut self, set_id: &str) -> Result<(), String> {
+        if self.route_sets.len() <= 1 {
+            return Err("cannot delete the last route set".into());
+        }
+        let active = self.settings["active_route_set_id"].as_str().unwrap_or("");
+        let was_active = active == set_id;
+        self.route_sets.retain(|s| s["id"].as_str() != Some(set_id));
+        if was_active {
+            if let Some(first) = self.route_sets.first() {
+                if let Some(sid) = first["id"].as_str() {
+                    self.settings["active_route_set_id"] = json!(sid);
+                    self.routes = first["routes"].as_array().cloned().unwrap_or_default();
+                }
+            }
+        }
+        self.save();
+        Ok(())
+    }
+
+    fn rename_route_set(&mut self, set_id: &str, name: &str) -> Result<(), String> {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err("name required".into());
+        }
+        let Some(set) = self.route_sets.iter_mut().find(|s| s["id"].as_str() == Some(set_id)) else {
+            return Err("route set not found".into());
+        };
+        set["name"] = json!(name);
+        set["updated_at"] = json!(now());
+        self.save();
+        Ok(())
+    }
+
+    fn public_route_sets(&self) -> Vec<Value> {
+        self.route_sets
+            .iter()
+            .map(|set| {
+                json!({
+                    "id": set["id"],
+                    "name": set["name"],
+                    "updated_at": set["updated_at"],
+                    "rule_count": set["routes"].as_array().map(|a| a.len()).unwrap_or(0)
+                })
+            })
+            .collect()
     }
 
     fn data_dir(&self) -> PathBuf {
@@ -2284,7 +2659,9 @@ impl Core {
             "on_demand": self.settings["on_demand"].as_bool().unwrap_or(false),
             "on_demand_text": self.settings["on_demand_text"].as_str().unwrap_or(""),
             "combiner": self.settings["net_combiner"].as_bool().unwrap_or(false),
-            "persist": self.settings["persist_tunnel"].as_bool().unwrap_or(false)
+            "persist": self.settings["persist_tunnel"].as_bool().unwrap_or(false),
+            "singbox_bin": self.singbox.display().to_string(),
+            "xray_bin": crate::engines::resolve_xray(&self.singbox, &self.data_dir()).display().to_string()
         }))
     }
 
@@ -3281,6 +3658,11 @@ impl Core {
         if data.get("routes").is_some() {
             self.routes = data["routes"].as_array().cloned().unwrap_or_default();
         }
+        if data.get("route_sets").is_some() {
+            self.route_sets = data["route_sets"].as_array().cloned().unwrap_or_default();
+        }
+        self.ensure_route_sets();
+        self.load_routes_from_active_set();
         self.unlocked.clear();
         self.save();
     }
@@ -3455,7 +3837,7 @@ impl Core {
             "developer": "Amirhossein Rezaei",
             "github": "https://github.com/DinonowDev",
             "repo": "https://github.com/DinonowDev/v2open",
-            "url_schemes": ["v2open", "v2box", "vless", "vmess", "trojan", "ss", "ssr", "hy2", "hysteria", "hysteria2", "tuic", "anytls", "naive+https", "naive+quic", "wireguard", "warp", "vpn"]
+            "url_schemes": ["v2open", "v2box", "hiddify", "sub", "vless", "vmess", "trojan", "ss", "ssr", "hy2", "hysteria", "hysteria2", "tuic", "anytls", "naive+https", "naive+quic", "wireguard", "warp", "vpn"]
         }))
     }
 
@@ -4119,7 +4501,8 @@ fn xray_core_version(raw: &str) -> String {
 }
 
 fn xray_binary(singbox: &Path) -> Result<PathBuf, String> {
-    let path = singbox.parent().unwrap_or(Path::new(".")).join("xray");
+    let data = support_dir();
+    let path = crate::engines::resolve_xray(singbox, &data);
     if path.exists() {
         return Ok(path);
     }
@@ -4289,14 +4672,33 @@ fn write_v2box_zip(path: &str, password: &str, catalog: &Value) -> Result<(), St
         "expires_at": catalog["expires_at"],
         "allowed_ids": catalog["allowed_ids"],
         "device_id": catalog["device_id"],
-        "files": ["manifest.json", "groups.json", "configs.json", "uris.txt", "settings.json", "routes.json", "dns.json"]
+        "files": [
+            "manifest.json",
+            "groups.json",
+            "configs.json",
+            "uris.txt",
+            "settings.json",
+            "routes.json",
+            "route_sets.json",
+            "dns.json"
+        ]
     });
+    let route_sets = catalog
+        .get("route_sets")
+        .or_else(|| catalog["catalog"].get("route_sets.json"))
+        .cloned()
+        .unwrap_or_else(|| json!([]));
     fs::write(dir.join("manifest.json"), serde_json::to_vec_pretty(&manifest).unwrap_or_default()).map_err(|e| e.to_string())?;
     fs::write(dir.join("groups.json"), serde_json::to_vec_pretty(&groups).unwrap_or_default()).map_err(|e| e.to_string())?;
     fs::write(dir.join("configs.json"), serde_json::to_vec_pretty(&configs).unwrap_or_default()).map_err(|e| e.to_string())?;
     fs::write(dir.join("uris.txt"), uris.join("\n")).map_err(|e| e.to_string())?;
     fs::write(dir.join("settings.json"), serde_json::to_vec_pretty(&catalog["settings"]).unwrap_or_default()).map_err(|e| e.to_string())?;
     fs::write(dir.join("routes.json"), serde_json::to_vec_pretty(&catalog["routes"]).unwrap_or_default()).map_err(|e| e.to_string())?;
+    fs::write(
+        dir.join("route_sets.json"),
+        serde_json::to_vec_pretty(&route_sets).unwrap_or_default(),
+    )
+    .map_err(|e| e.to_string())?;
     fs::write(dir.join("dns.json"), serde_json::to_vec_pretty(&catalog["dns_items"]).unwrap_or_default()).map_err(|e| e.to_string())?;
     if !note.is_empty() {
         fs::write(dir.join("note.txt"), note).map_err(|e| e.to_string())?;
@@ -4360,6 +4762,7 @@ fn unzip_library(password: &str, bytes: &[u8]) -> Result<ZipPayload, String> {
     let mut groups = Value::Null;
     let mut settings = Value::Null;
     let mut routes = Value::Null;
+    let mut route_sets = Value::Null;
     let mut dns = Value::Null;
     for path in &files {
         let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("").to_ascii_lowercase();
@@ -4371,11 +4774,18 @@ fn unzip_library(password: &str, bytes: &[u8]) -> Result<ZipPayload, String> {
             settings = read_json_file(path).unwrap_or(Value::Null);
         } else if name == "routes.json" {
             routes = read_json_file(path).unwrap_or(Value::Null);
+        } else if name == "route_sets.json" {
+            route_sets = read_json_file(path).unwrap_or(Value::Null);
         } else if name == "dns.json" {
             dns = read_json_file(path).unwrap_or(Value::Null);
         }
     }
     if groups.is_array() || groups.is_object() {
+        let route_sets = if route_sets.is_array() {
+            route_sets
+        } else {
+            json!([])
+        };
         let wrapped = json!({
             "format": "v2box",
             "device_id": manifest["device_id"],
@@ -4387,11 +4797,13 @@ fn unzip_library(password: &str, bytes: &[u8]) -> Result<ZipPayload, String> {
                 "settings.json": settings,
                 "groups.json": groups,
                 "routes.json": routes,
+                "route_sets.json": route_sets,
                 "dns.json": dns
             },
             "settings": settings,
             "groups": groups,
             "routes": routes,
+            "route_sets": route_sets,
             "dns_items": dns
         });
         let _ = fs::remove_dir_all(&dir);

@@ -5,6 +5,13 @@ struct RoutingView: View {
     @EnvironmentObject var model: Model
     @State private var editing = false
     @State private var showPresets = false
+    @State private var showTemplates = false
+    @State private var showClashImport = false
+    @State private var clashPaste = ""
+    @State private var newSetName = ""
+    @State private var showNewSet = false
+    @State private var showRenameSet = false
+    @State private var renameSetName = ""
     @State private var fragmentPackets = ""
     @State private var fragmentLength = ""
     @State private var fragmentInterval = ""
@@ -16,6 +23,7 @@ struct RoutingView: View {
                 ScrollView(.vertical, showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 16) {
                         geoRow
+                        routeSetCard
                         VStack(alignment: .leading, spacing: 8) {
                             SettingsSectionLabel(text: model.t("routes"))
                             SettingsCard {
@@ -64,6 +72,8 @@ struct RoutingView: View {
                 }
                 .scrollIndicators(.hidden)
                 if showPresets { presetOverlay }
+                if showTemplates { templateOverlay }
+                if showClashImport { clashOverlay }
             }
         }
         .onAppear { loadFragment() }
@@ -115,7 +125,10 @@ struct RoutingView: View {
             Spacer(minLength: 8)
             ConfigRowMoreMenu {
                 Button(model.t("importPreset")) { showPresets = true }
-                Button(model.t("importRoutes")) { importClipboard() }
+                Button(model.t("ruleQuickTemplates")) { showTemplates = true }
+                Button(model.t("importClashRules")) { showClashImport = true }
+                Button(model.t("importRoutes")) { importClipboard(merge: false) }
+                Button(model.t("mergeRoutes")) { importClipboard(merge: true) }
                 Button(model.t("exportRoutes")) { exportClipboard() }
             }
         }
@@ -128,6 +141,153 @@ struct RoutingView: View {
     var geoRow: some View {
         SettingsCard {
             SettingsNavRow(icon: "globe.americas.fill", title: model.t("geoAssets"), action: { model.push("geo_assets") })
+        }
+    }
+
+    var activeRouteSetId: String {
+        model.settings["active_route_set_id"] as? String ?? ""
+    }
+
+    var activeRouteSetName: String {
+        model.routeSets.first { ($0["id"] as? String) == activeRouteSetId }?["name"] as? String
+            ?? model.t("routeSet")
+    }
+
+    var routeSetOptions: [(String, String)] {
+        model.routeSets.compactMap { set in
+            guard let id = set["id"] as? String, let name = set["name"] as? String else { return nil }
+            let count = set["rule_count"] as? Int ?? 0
+            return (id, count > 0 ? "\(name) (\(count))" : name)
+        }
+    }
+
+    var routeSetCard: some View {
+        SettingsCard {
+            VStack(alignment: .leading, spacing: 10) {
+                SettingsSelectRow(
+                    title: model.t("routeSet"),
+                    value: activeRouteSetName,
+                    options: routeSetOptions
+                ) { selectRouteSet($0) }
+                HStack(spacing: 8) {
+                    SheetActionButton(title: model.t("newRouteSet"), icon: "plus") { showNewSet = true }
+                    SheetActionButton(title: model.t("duplicateRouteSet"), icon: "doc.on.doc") {
+                        duplicateRouteSet()
+                    }
+                    SheetActionButton(title: model.t("renameRouteSet"), icon: "pencil", quiet: true) {
+                        renameSetName = activeRouteSetName
+                        showRenameSet = true
+                    }
+                    if model.routeSets.count > 1 {
+                        SheetActionButton(title: model.t("deleteRouteSet"), quiet: true, icon: "trash") {
+                            deleteRouteSet()
+                        }
+                    }
+                }
+            }
+            .padding(12)
+        }
+        .sheet(isPresented: $showRenameSet) {
+            SheetBackdrop(onDismiss: { showRenameSet = false }) {
+                SheetCard {
+                    VStack(alignment: .leading, spacing: 10) {
+                        SheetHeader(
+                            title: model.t("renameRouteSet"),
+                            close: { showRenameSet = false },
+                            closeLabel: model.t("cancel")
+                        )
+                        V2Field(
+                            label: model.t("routeSetName"),
+                            placeholder: model.t("routeSet"),
+                            text: $renameSetName,
+                            latin: false,
+                            icon: "square.stack.3d.up"
+                        )
+                        SheetActionButton(title: model.t("save"), primary: true, icon: "checkmark") {
+                            renameRouteSet()
+                        }
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showNewSet) {
+            SheetBackdrop(onDismiss: { showNewSet = false }) {
+                SheetCard {
+                    VStack(alignment: .leading, spacing: 10) {
+                        SheetHeader(
+                            title: model.t("newRouteSet"),
+                            close: { showNewSet = false },
+                            closeLabel: model.t("cancel")
+                        )
+                        V2Field(
+                            label: model.t("routeSetName"),
+                            placeholder: model.t("routeSet"),
+                            text: $newSetName,
+                            latin: false,
+                            icon: "square.stack.3d.up"
+                        )
+                        SheetActionButton(title: model.t("save"), primary: true, icon: "checkmark") {
+                            createRouteSet()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    func selectRouteSet(_ id: String) {
+        guard id != activeRouteSetId else { return }
+        let resp = model.call("select_route_set", ["id": id])
+        if resp["ok"] as? Bool == false {
+            model.showToast(resp["error"] as? String ?? model.t("failed"), tone: .error)
+        } else {
+            model.refresh()
+        }
+    }
+
+    func createRouteSet() {
+        let name = newSetName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        let resp = model.call("create_route_set", ["name": name])
+        if resp["ok"] as? Bool == false {
+            model.showToast(resp["error"] as? String ?? model.t("failed"), tone: .error)
+            return
+        }
+        newSetName = ""
+        showNewSet = false
+        model.refresh()
+        model.showToast(model.t("saved"), tone: .success)
+    }
+
+    func renameRouteSet() {
+        let name = renameSetName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        let resp = model.call("rename_route_set", ["id": activeRouteSetId, "name": name])
+        if resp["ok"] as? Bool == false {
+            model.showToast(resp["error"] as? String ?? model.t("failed"), tone: .error)
+            return
+        }
+        showRenameSet = false
+        model.refresh()
+        model.showToast(model.t("saved"), tone: .success)
+    }
+
+    func duplicateRouteSet() {
+        let resp = model.call("duplicate_route_set", ["id": activeRouteSetId])
+        if resp["ok"] as? Bool == false {
+            model.showToast(resp["error"] as? String ?? model.t("failed"), tone: .error)
+        } else {
+            model.refresh()
+            model.showToast(model.t("saved"), tone: .success)
+        }
+    }
+
+    func deleteRouteSet() {
+        let resp = model.call("delete_route_set", ["id": activeRouteSetId])
+        if resp["ok"] as? Bool == false {
+            model.showToast(resp["error"] as? String ?? model.t("failed"), tone: .error)
+        } else {
+            model.refresh()
         }
     }
 
@@ -171,6 +331,7 @@ struct RoutingView: View {
                             color: C.muted
                         )
                         .lineLimit(1)
+                        RouteMatcherChips(rule: rule)
                     }
                     Spacer(minLength: 6)
                 }
@@ -250,13 +411,71 @@ struct RoutingView: View {
         model.push("route_editor")
     }
 
-    func importClipboard() {
+    var templateOverlay: some View {
+        SheetBackdrop(onDismiss: { showTemplates = false }) {
+            SheetCard {
+                VStack(alignment: .leading, spacing: 8) {
+                    SheetHeader(title: model.t("ruleQuickTemplates"), close: { showTemplates = false }, closeLabel: model.t("cancel"))
+                    SheetActionButton(title: model.t("tplBlockAds"), icon: "xmark.shield") {
+                        RouteRuleTemplates.apply("block_ads", model: model)
+                        showTemplates = false
+                    }
+                    SheetActionButton(title: model.t("tplDirectCn"), icon: "arrow.right") {
+                        RouteRuleTemplates.apply("direct_cn", model: model)
+                        showTemplates = false
+                    }
+                    SheetActionButton(title: model.t("tplProxyGoogle"), icon: "arrow.triangle.swap") {
+                        RouteRuleTemplates.apply("proxy_google", model: model)
+                        showTemplates = false
+                    }
+                    SheetActionButton(title: model.t("cancel"), quiet: true) { showTemplates = false }
+                }
+            }
+        }
+    }
+
+    var clashOverlay: some View {
+        SheetBackdrop(onDismiss: { showClashImport = false }) {
+            SheetCard {
+                VStack(alignment: .leading, spacing: 10) {
+                    SheetHeader(title: model.t("importClashRules"), close: { showClashImport = false }, closeLabel: model.t("cancel"))
+                    Mix(text: model.t("clashRulesHint"), size: 12, color: C.muted)
+                    V2Field(placeholder: "rules:", text: $clashPaste, latin: true, icon: "doc.text", axis: .vertical)
+                    SheetActionButton(title: model.t("import"), primary: true, icon: "square.and.arrow.down") {
+                        importClashRules(clashPaste, merge: true)
+                        showClashImport = false
+                    }
+                }
+            }
+        }
+    }
+
+    func importClashRules(_ text: String, merge: Bool) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            model.showToast(model.t("clipboardEmpty"), tone: .warning)
+            return
+        }
+        var args: [String: Any] = ["text": trimmed]
+        if merge { args["merge"] = true }
+        let response = model.call("import_routes", args)
+        if response["ok"] as? Bool == false {
+            model.showToast(response["error"] as? String ?? model.t("failed"), tone: .error)
+        } else {
+            model.refresh()
+            model.showToast(model.t("imported"), tone: .success)
+        }
+    }
+
+    func importClipboard(merge: Bool) {
         let text = NSPasteboard.general.string(forType: .string) ?? ""
         if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             model.showToast(model.t("clipboardEmpty"), tone: .warning)
             return
         }
-        let response = model.call("import_routes", ["text": text])
+        var args: [String: Any] = ["text": text]
+        if merge { args["merge"] = true }
+        let response = model.call("import_routes", args)
         if response["ok"] as? Bool == false {
             model.showToast(response["error"] as? String ?? model.t("failed"), tone: .error)
         } else {

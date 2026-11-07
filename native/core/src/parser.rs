@@ -342,6 +342,172 @@ pub fn subscribe_name_from_url(url: &str) -> String {
     "Group".into()
 }
 
+/// Hiddify-style deep links: `hiddify://import/<payload>#name` and legacy `install-*?url=`.
+pub fn parse_hiddify_deeplink(text: &str) -> Option<(String, String)> {
+    let text = text.trim();
+    let lower = text.to_ascii_lowercase();
+    if lower.starts_with("hiddify://import/") {
+        let rest = &text["hiddify://import/".len()..];
+        let (payload, name) = split_url_fragment(rest);
+        let payload = decode(&payload);
+        if payload.is_empty() {
+            return None;
+        }
+        let name = if name.trim().is_empty() {
+            subscribe_name_from_url(&payload)
+        } else {
+            name.trim().to_string()
+        };
+        return Some((payload, name));
+    }
+    if lower.starts_with("hiddify://") {
+        for key in ["install-sub", "install-config", "install-proxy"] {
+            if !lower.contains(key) {
+                continue;
+            }
+            let frag_name = text.split('#').nth(1).map(|s| decode(s).trim().to_string()).unwrap_or_default();
+            let query = text.split('?').nth(1).unwrap_or("");
+            let query = query.split('#').next().unwrap_or(query);
+            for part in query.split('&') {
+                let Some((k, v)) = part.split_once('=') else {
+                    continue;
+                };
+                if k.eq_ignore_ascii_case("url") {
+                    let url = decode(v);
+                    if !url.is_empty() {
+                        let name = if frag_name.is_empty() {
+                            subscribe_name_from_url(&url)
+                        } else {
+                            frag_name
+                        };
+                        return Some((url, name));
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Clash / ClashX: `clash://install-config?url=` and `clashx://install-config?url=`.
+pub fn parse_clash_deeplink(text: &str) -> Option<(String, String)> {
+    let text = text.trim();
+    let lower = text.to_ascii_lowercase();
+    if !lower.starts_with("clash://") && !lower.starts_with("clashx://") {
+        return None;
+    }
+    let frag_name = text
+        .split('#')
+        .nth(1)
+        .map(|s| decode(s).trim().to_string())
+        .unwrap_or_default();
+    let query = text.split('?').nth(1).unwrap_or("");
+    let query = query.split('#').next().unwrap_or(query);
+    for part in query.split('&') {
+        let Some((k, v)) = part.split_once('=') else {
+            continue;
+        };
+        if k.eq_ignore_ascii_case("url") {
+            let url = decode(v);
+            if url.starts_with("http://") || url.starts_with("https://") {
+                let name = if frag_name.is_empty() {
+                    subscribe_name_from_url(&url)
+                } else {
+                    frag_name
+                };
+                return Some((url, name));
+            }
+        }
+    }
+    None
+}
+
+/// Marzban / panel style: `sub://https://...` or base64-encoded subscription URL.
+pub fn parse_sub_scheme(text: &str) -> Option<String> {
+    let text = text.trim();
+    let rest = text.strip_prefix("sub://")?;
+    let body = rest.split('#').next().unwrap_or(rest).trim();
+    if body.starts_with("http://") || body.starts_with("https://") {
+        return Some(body.to_string());
+    }
+    if let Some(bytes) = base64_decode(body) {
+        let decoded = String::from_utf8(bytes).unwrap_or_default();
+        let line = decoded.lines().next().unwrap_or(&decoded).trim();
+        if line.starts_with("http://") || line.starts_with("https://") {
+            return Some(line.to_string());
+        }
+    }
+    None
+}
+
+pub fn decode_profile_title(header: &str) -> String {
+    let header = header.trim();
+    if let Some(rest) = header.strip_prefix("base64:") {
+        if let Some(bytes) = base64_decode(rest.trim()) {
+            if let Ok(text) = String::from_utf8(bytes) {
+                let text = text.trim();
+                if !text.is_empty() {
+                    return text.to_string();
+                }
+            }
+        }
+    }
+    header.to_string()
+}
+
+pub fn profile_title_from_headers(title: &str, disposition: &str, url: &str) -> String {
+    let title = decode_profile_title(title);
+    if !title.is_empty() {
+        return title;
+    }
+    let from_disp = filename_from_disposition(disposition);
+    if !from_disp.is_empty() {
+        return from_disp;
+    }
+    subscribe_name_from_url(url)
+}
+
+fn filename_from_disposition(header: &str) -> String {
+    let header = header.trim();
+    if header.is_empty() {
+        return String::new();
+    }
+    for part in header.split(';') {
+        let part = part.trim();
+        let lower = part.to_ascii_lowercase();
+        if lower.starts_with("filename*=") {
+            if let Some(rest) = part.split("''").nth(1) {
+                let name = decode(rest.trim().trim_matches('"'));
+                return strip_config_suffix(&name);
+            }
+        }
+        if lower.starts_with("filename=") {
+            let name = part.split('=').nth(1).unwrap_or("").trim().trim_matches('"');
+            let name = decode(name);
+            return strip_config_suffix(&name);
+        }
+    }
+    String::new()
+}
+
+fn strip_config_suffix(name: &str) -> String {
+    let name = name.trim();
+    for ext in [".txt", ".json", ".yaml", ".yml"] {
+        if let Some(stripped) = name.strip_suffix(ext) {
+            return stripped.to_string();
+        }
+    }
+    name.to_string()
+}
+
+fn split_url_fragment(s: &str) -> (String, String) {
+    if let Some(idx) = s.find('#') {
+        (s[..idx].to_string(), decode(&s[idx + 1..]))
+    } else {
+        (s.to_string(), String::new())
+    }
+}
+
 pub fn extract_subscription_url(text: &str) -> Option<String> {
     for line in text.lines() {
         let line = line.trim();
@@ -2037,6 +2203,52 @@ mod tests {
             Value::String(s) => matches!(s.as_str(), "1" | "true"),
             _ => false,
         }
+    }
+
+    #[test]
+    fn sub_scheme_plain_and_base64() {
+        let url = "https://example.com/sub.txt";
+        assert_eq!(parse_sub_scheme(&format!("sub://{url}")).as_deref(), Some(url));
+        assert_eq!(parse_sub_scheme("sub://https://example.com/a#name").as_deref(), Some("https://example.com/a"));
+        let b64 = b64_encode(url.as_bytes());
+        assert_eq!(
+            parse_sub_scheme(&format!("sub://{b64}")).as_deref(),
+            Some(url)
+        );
+    }
+
+    #[test]
+    fn profile_title_and_disposition() {
+        let title = profile_title_from_headers("Panel Name", "", "https://x/y#frag");
+        assert_eq!(title, "Panel Name");
+        let from_disp = profile_title_from_headers(
+            "",
+            "attachment; filename=\"my-sub.txt\"",
+            "https://x/y",
+        );
+        assert_eq!(from_disp, "my-sub");
+        let ascii_title = decode_profile_title("ascii-only");
+        assert_eq!(ascii_title, "ascii-only");
+    }
+
+    #[test]
+    fn hiddify_and_panel_links() {
+        let sub = "hiddify://import/https://example.com/sub.txt#MySub";
+        let (url, name) = parse_hiddify_deeplink(sub).unwrap();
+        assert_eq!(url, "https://example.com/sub.txt");
+        assert_eq!(name, "MySub");
+        let legacy = "hiddify://install-sub?url=https%3A%2F%2Fexample.com%2Fa#G";
+        let (url, _) = parse_hiddify_deeplink(legacy).unwrap();
+        assert_eq!(url, "https://example.com/a");
+        let clash = "clash://install-config?url=https%3A%2F%2Fpanel.example%2Fsub#ClashG";
+        let (curl, cname) = parse_clash_deeplink(clash).unwrap();
+        assert_eq!(curl, "https://panel.example/sub");
+        assert_eq!(cname, "ClashG");
+        let clashx = "clashx://install-config?url=https://example.com/x";
+        let (xurl, _) = parse_clash_deeplink(clashx).unwrap();
+        assert_eq!(xurl, "https://example.com/x");
+        let title = decode_profile_title("base64:SSDinaTvuI8gSGlkZGlmeQ==");
+        assert!(!title.is_empty());
     }
 
     fn b64url(data: &[u8]) -> String {

@@ -47,6 +47,7 @@ final class Model: ObservableObject {
     var settings: [String: Any] { state["settings"] as? [String: Any] ?? [:] }
     var groups: [[String: Any]] { state["groups"] as? [[String: Any]] ?? [] }
     var routes: [[String: Any]] { state["routes"] as? [[String: Any]] ?? [] }
+    var routeSets: [[String: Any]] { state["route_sets"] as? [[String: Any]] ?? [] }
     var geoAssets: [[String: Any]] { state["geo_assets"] as? [[String: Any]] ?? [] }
     var backups: [[String: Any]] { state["backups"] as? [[String: Any]] ?? [] }
     var runtime: [String: Any] {
@@ -85,7 +86,8 @@ final class Model: ObservableObject {
             .appendingPathComponent("Library/Application Support/V2Open", isDirectory: true)
         try? FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
         let rules = support.appendingPathComponent("rulesets")
-        let bin = Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/sing-box").path
+        let bundled = Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/sing-box")
+        let bin = bundled.path
         let code: Int32 = support.path.withCString { d in
             bin.withCString { b in
                 rules.path.withCString { r in v2_init(d, b, r) }
@@ -376,7 +378,7 @@ final class Model: ObservableObject {
             }
             return
         }
-        var text = url.absoluteString
+        var text = ImportURL.linkText(from: url)
         if url.scheme == "v2open", let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems {
             if let payload = items.first(where: { $0.name == "text" })?.value { text = payload }
         }
@@ -523,7 +525,9 @@ final class Model: ObservableObject {
             engine: data["engine"] as? String ?? "sing-box",
             enforceRoutes: settings["enforce_routes"] as? Bool ?? false,
             includeCellular: data["include_cellular_services"] as? Bool ?? false,
-            useXrayTun: data["use_xray_tun"] as? Bool ?? (data["engine"] as? String == "xray")
+            useXrayTun: data["use_xray_tun"] as? Bool ?? (data["engine"] as? String == "xray"),
+            singboxBin: data["singbox_bin"] as? String ?? "",
+            xrayBin: data["xray_bin"] as? String ?? ""
         )
         let tunnel = TunnelManager.shared
         let finish: (Bool) -> Void = { [weak self] system in

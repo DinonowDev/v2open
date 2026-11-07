@@ -72,6 +72,16 @@ extension ConfigsView {
                 ConfigRowIconButton(systemName: "arrow.triangle.2.circlepath", label: model.t("update")) {
                     updateGroup(gid: gid)
                 }
+                if let web = group["web_page"] as? String, !web.isEmpty, let link = URL(string: web) {
+                    ConfigRowIconButton(systemName: "person.crop.circle", label: model.t("openWebPage")) {
+                        NSWorkspace.shared.open(link)
+                    }
+                }
+                if let support = group["support_url"] as? String, !support.isEmpty, let link = URL(string: support) {
+                    ConfigRowIconButton(systemName: "lifepreserver", label: model.t("openSupport")) {
+                        NSWorkspace.shared.open(link)
+                    }
+                }
                 ConfigRowIconButton(systemName: group["pinned"] as? Bool == true ? "pin.slash" : "pin", label: model.t("pinGroup")) {
                     _ = model.call("pin_group", ["id": gid, "pinned": !(group["pinned"] as? Bool == true)])
                     model.refresh()
@@ -98,6 +108,12 @@ extension ConfigsView {
                 Button(model.t("exportGroup")) { exportGroup(gid: gid, name: name) }
                 Button(model.t("update")) { updateGroup(gid: gid) }
                 Button(model.t("setGroupUrl")) { openGroupUrl(group) }
+                if let web = group["web_page"] as? String, !web.isEmpty, let link = URL(string: web) {
+                    Button(model.t("openWebPage")) { NSWorkspace.shared.open(link) }
+                }
+                if let support = group["support_url"] as? String, !support.isEmpty, let link = URL(string: support) {
+                    Button(model.t("openSupport")) { NSWorkspace.shared.open(link) }
+                }
                 Divider()
                 Button(clearGroupActionTitle(group), role: .destructive) { clearGroup(gid: gid, group: group) }
             }

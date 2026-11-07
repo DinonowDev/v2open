@@ -47,6 +47,120 @@ pub fn export_routes(rules: &[Value]) -> String {
     serde_json::to_string_pretty(&items).unwrap_or_else(|_| "[]".into())
 }
 
+/// Import Clash / Mihomo `rules:` section (visual editor and clipboard import).
+pub fn parse_clash_rules(text: &str) -> Result<Vec<Value>, String> {
+    let trimmed = text.trim();
+    if trimmed.starts_with('[') || trimmed.starts_with('{') {
+        return parse_routes(trimmed);
+    }
+    let mut in_rules = false;
+    let mut rows = Vec::new();
+    for line in text.lines() {
+        let raw = line.trim_end();
+        let t = raw.trim();
+        if t.is_empty() || t.starts_with('#') {
+            continue;
+        }
+        if t.starts_with("rules:") {
+            in_rules = true;
+            continue;
+        }
+        if !in_rules {
+            if t.contains(',') && !t.ends_with(':') {
+                rows.push(t.to_string());
+            }
+            continue;
+        }
+        if !t.starts_with('-') && t.ends_with(':') && !t.contains(',') {
+            break;
+        }
+        let item = t.strip_prefix('-').map(str::trim).unwrap_or(t);
+        if item.is_empty() {
+            continue;
+        }
+        rows.push(item.to_string());
+    }
+    if rows.is_empty() {
+        return Err("no Clash rules found".into());
+    }
+    let mut rules = Vec::new();
+    for (idx, row) in rows.iter().enumerate() {
+        if let Some(rule) = clash_rule_line(row, idx) {
+            rules.push(rule);
+        }
+    }
+    if rules.is_empty() {
+        return Err("no supported Clash rules in text".into());
+    }
+    Ok(rules)
+}
+
+fn clash_rule_line(line: &str, idx: usize) -> Option<Value> {
+    let parts: Vec<&str> = line.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+    if parts.len() < 2 {
+        return None;
+    }
+    let kind = parts[0].to_ascii_uppercase();
+    if kind == "MATCH" || kind == "FINAL" {
+        return None;
+    }
+    let outbound = parts.last().copied().unwrap_or("PROXY");
+    let behavior = clash_outbound(outbound);
+    let value = parts[1];
+    let mut domains = Vec::new();
+    let mut ips = Vec::new();
+    let mut port = String::new();
+    let mut network = String::new();
+    let mut protocol = String::new();
+    let mut sources = Vec::new();
+    match kind.as_str() {
+        "DOMAIN" => domains.push(value.to_string()),
+        "DOMAIN-SUFFIX" => domains.push(format!("suffix:{value}")),
+        "DOMAIN-KEYWORD" => domains.push(format!("keyword:{value}")),
+        "DOMAIN-REGEX" => domains.push(format!("regexp:{value}")),
+        "GEOSITE" => domains.push(if value.contains(':') {
+            value.to_string()
+        } else {
+            format!("geosite:{value}")
+        }),
+        "GEOIP" => ips.push(if value.contains(':') {
+            value.to_string()
+        } else {
+            format!("geoip:{value}")
+        }),
+        "IP-CIDR" | "IP-CIDR6" | "IP-CIDR4" => ips.push(value.to_string()),
+        "SRC-IP-CIDR" => sources.push(value.to_string()),
+        "DST-PORT" | "SRC-PORT" => port = value.to_string(),
+        "NETWORK" => network = value.to_ascii_lowercase(),
+        "PROCESS-NAME" => protocol = value.to_string(),
+        _ => return None,
+    }
+    Some(json!({
+        "id": format!("clash-{idx}"),
+        "enabled": true,
+        "remark": format!("{kind} {value}"),
+        "behavior": behavior,
+        "domains": domains,
+        "ips": ips,
+        "port": port,
+        "network": network,
+        "protocol": protocol,
+        "inbounds": [],
+        "sources": sources,
+        "source_port": "",
+        "users": [],
+        "balancer_tag": ""
+    }))
+}
+
+fn clash_outbound(tag: &str) -> String {
+    match tag.to_ascii_uppercase().as_str() {
+        "DIRECT" => "direct".into(),
+        "REJECT" | "REJECT-DROP" | "BLOCK" | "BLOCKED" => "block".into(),
+        _ => "proxy".into(),
+    }
+}
+
 pub fn matcher_text(rule: &Value) -> String {
     let mut parts = Vec::new();
     parts.extend(list(&rule["domains"]));
@@ -363,5 +477,14 @@ mod tests {
         let exported = export_routes(&rules);
         assert!(exported.contains("balancerTag"));
         assert!(exported.contains("inboundTag"));
+    }
+
+    #[test]
+    fn clash_rules_import() {
+        let text = "rules:\n  - DOMAIN-SUFFIX,google.com,Proxy\n  - GEOIP,ir,DIRECT\n  - GEOSITE,cn,DIRECT";
+        let rules = parse_clash_rules(text).unwrap();
+        assert_eq!(rules.len(), 3);
+        assert_eq!(rules[0]["behavior"], "proxy");
+        assert!(rules[1]["ips"].as_array().unwrap()[0].as_str().unwrap().contains("geoip:ir"));
     }
 }
